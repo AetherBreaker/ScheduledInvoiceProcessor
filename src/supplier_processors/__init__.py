@@ -1,4 +1,3 @@
-import contextlib
 from asyncio import gather, to_thread
 from copy import deepcopy
 from datetime import datetime
@@ -127,6 +126,9 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
     for file, data in backup:
       with file.open("wb") as f:
         f.write(data)
+
+  def __del__(self) -> None:
+    self._save_backups()
 
   def _load_queue_backups(self) -> None:
     # Note: Called during __init__, no need for lock protection

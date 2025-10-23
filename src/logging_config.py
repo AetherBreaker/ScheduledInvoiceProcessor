@@ -91,7 +91,6 @@ class FixedLogRecord(logging.LogRecord):
       max_width = length
       with open("max_width.txt", "w") as f:
         f.write(str(max_width))
-      print(f"New max width: {max_width}")
 
     self.libname = libname
     self.libpath = libpath
@@ -163,7 +162,7 @@ def configure_logging():
 
   root = logging.getLogger()
   # root.setLevel(logging.DEBUG if __debug__ else logging.INFO)
-  root.setLevel(logging.INFO)
+  root.setLevel(logging.DEBUG)
 
   debugging_file_handler = daily_debug_handler if LOGGING_TYPE == "daily" else per_run_debug_handler
   debugging_file_handler.setLevel(logging.DEBUG)
@@ -182,6 +181,8 @@ def configure_logging():
     rich_tracebacks=True,
     log_time_format=logging_timestamp_fmt,
   )
+
+  console_info_handler.setLevel(logging.INFO)
 
   formatter = FixedFormatter(
     fmt=f"[{{asctime}}] {{levelname: >8}} | {{libpath: <{max_width}}} | {{message}}",
