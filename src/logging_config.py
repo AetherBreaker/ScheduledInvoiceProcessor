@@ -91,7 +91,6 @@ class FixedLogRecord(logging.LogRecord):
       max_width = length
       with open("max_width.txt", "w") as f:
         f.write(str(max_width))
-      print(f"New max width: {max_width}")
 
     self.libname = libname
     self.libpath = libpath
