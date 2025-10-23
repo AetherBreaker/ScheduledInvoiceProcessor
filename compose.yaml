@@ -5,32 +5,33 @@ services:
       dockerfile: Dockerfile
     container_name: scheduled-order-middleman
     restart: unless-stopped
+    image: jogdensft/scheduledordermiddleman-scheduler:latest
 
     # Mount secrets as files
     secrets:
-      - db_key
+      - db-key
       - sas_ftp_creds
       - sft_creds
 
     # Persist logs and queue backups
     volumes:
       - ./logs:/app/src/logs
-      - ./queue_backups:/app/src/queue_backups
+      - ./queue backups:/app/src/queue backups
 
     # Environment variables (customize as needed)
     environment:
       - TZ=America/New_York
       # Override secret file paths to use Docker secrets location
-      - GOOGLE_API_KEY_FILE=/run/secrets/db_key
-      - SAS_FTP_CREDS_FILE=/run/secrets/sas_ftp_creds
+      - GOOGLE_API_KEY_FILE=/run/secrets/db-key
       - SFT_WEBSITE_CREDS_FILE=/run/secrets/sft_creds
+      - SAS_FTP_CREDS_FILE=/run/secrets/sas_ftp_creds
       # Database configuration (from production.env - optional overrides)
       # Uncomment and modify these to override production.env values
-      # - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
-      # - DATABASE_BASE_SCHEDULE_ID=184714754
-      # - DATABASE_ORDER_LOG_ID=850759335
-      # - DATABASE_REFRESH_INTERVAL=3600
-      # - DATABASE_WRITE_INTERVAL=30
+      - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
+      - DATABASE_BASE_SCHEDULE_ID=184714754
+      - DATABASE_ORDER_LOG_ID=850759335
+      - DATABASE_REFRESH_INTERVAL=3600
+      - DATABASE_WRITE_INTERVAL=30
 
     # Healthcheck (optional - adjust based on your needs)
     # healthcheck:
@@ -41,7 +42,7 @@ services:
 
 # Define secrets - these reference files on the host
 secrets:
-  db_key:
+  db-key:
     file: ./secrets/db-key.json
   sas_ftp_creds:
     file: ./secrets/sas_ftp_creds.json

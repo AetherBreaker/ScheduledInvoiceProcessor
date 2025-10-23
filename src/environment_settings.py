@@ -7,10 +7,18 @@ import os
 import sys
 from logging import getLogger
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, Self
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import (
+  Field,
+  ModelWrapValidatorHandler,
+  ValidationError,
+  ValidationInfo,
+  ValidatorFunctionWrapHandler,
+  field_validator,
+  model_validator,
+)
+from pydantic_settings import BaseSettings
 
 logger = getLogger(__name__)
 
@@ -23,15 +31,15 @@ testing = False
 
 
 class Settings(BaseSettings):
-  model_config = (
-    SettingsConfigDict(
-      env_file=CWD / ("testing.env" if __debug__ and testing else "production.env"),
-      env_file_encoding="utf-8",
-      env_ignore_empty=True,
-    )
-    if __debug__
-    else SettingsConfigDict()
-  )
+  # model_config = (
+  #   SettingsConfigDict(
+  #     env_file=CWD / ("testing.env" if __debug__ and testing else "production.env"),
+  #     env_file_encoding="utf-8",
+  #     env_ignore_empty=True,
+  #   )
+  #   if __debug__
+  #   else SettingsConfigDict()
+  # )
 
   database_id: Annotated[str, Field(alias="DATABASE_ID")]
   database_base_schedule_id: Annotated[str, Field(alias="DATABASE_BASE_SCHEDULE_ID")]
@@ -40,6 +48,36 @@ class Settings(BaseSettings):
   database_refresh_interval: Annotated[int, Field(alias="DATABASE_REFRESH_INTERVAL")] = 3600
   database_write_interval: Annotated[int, Field(alias="DATABASE_WRITE_INTERVAL")] = 60
 
-  googe_api_key_file: Path
-  sft_website_creds_file: Path
-  sas_ftp_creds_file: Path
+  googe_api_key_file: Annotated[Path, Field(alias="GOOGLE_API_KEY_FILE")]
+  sft_website_creds_file: Annotated[Path, Field(alias="SFT_WEBSITE_CREDS_FILE")]
+  sas_ftp_creds_file: Annotated[Path, Field(alias="SAS_FTP_CREDS_FILE")]
+
+  @field_validator("*", mode="wrap", check_fields=False)
+  @classmethod
+  def log_failed_field_validations(cls, data: str, handler: ValidatorFunctionWrapHandler, info: ValidationInfo) -> Any:
+    results = None
+
+    print(data)
+
+    try:
+      results = handler(data)
+    except ValidationError as e:
+      raise e
+
+    return data if results is None else results
+
+  @model_validator(mode="wrap")
+  @classmethod
+  def log_failed_validation(cls, data: Any, handler: ModelWrapValidatorHandler[Self], info: ValidationInfo) -> Self:
+    results = None
+    print(data)
+    try:
+      results = handler(data)
+    except ValidationError as e:
+      if cls.__name__ != "ScheduledOrderDBEntryModel":
+        raise e
+
+      for err in e.errors():
+        if err["type"] != "missing":
+          raise e
+    return results  # type: ignore
