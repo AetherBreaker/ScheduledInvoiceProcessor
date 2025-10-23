@@ -23,10 +23,14 @@ testing = False
 
 
 class Settings(BaseSettings):
-  model_config = SettingsConfigDict(
-    env_file=CWD / ("testing.env" if __debug__ and testing else "production.env"),
-    env_file_encoding="utf-8",
-    env_ignore_empty=True,
+  model_config = (
+    SettingsConfigDict(
+      env_file=CWD / ("testing.env" if __debug__ and testing else "production.env"),
+      env_file_encoding="utf-8",
+      env_ignore_empty=True,
+    )
+    if __debug__
+    else SettingsConfigDict()
   )
 
   database_id: Annotated[str, Field(alias="DATABASE_ID")]
@@ -35,3 +39,7 @@ class Settings(BaseSettings):
 
   database_refresh_interval: Annotated[int, Field(alias="DATABASE_REFRESH_INTERVAL")] = 3600
   database_write_interval: Annotated[int, Field(alias="DATABASE_WRITE_INTERVAL")] = 60
+
+  googe_api_key_file: Path
+  sft_website_creds_file: Path
+  sas_ftp_creds_file: Path

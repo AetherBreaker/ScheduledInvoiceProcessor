@@ -10,7 +10,7 @@ from typing import Self
 
 from aiologic import Lock
 from database.cache import DatabaseCache
-from environment_init_vars import CWD, SFT_WEBSITE_CREDS_FILE
+from environment_init_vars import CWD, SETTINGS
 from pydantic import ConfigDict, Field, TypeAdapter
 from pydantic.dataclasses import dataclass
 from rich_custom import CustomTaskID, ProgressCustom
@@ -74,7 +74,7 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
   lock: Lock = Lock()
 
   pickup_ftp_creds: dict
-  sft_ftp_creds: dict = loads(SFT_WEBSITE_CREDS_FILE.read_text())
+  sft_ftp_creds: dict = loads(SETTINGS.sft_website_creds_file.read_text())
 
   pickup_ftp_folder: PurePosixPath
   waiting_folder: PurePosixPath
