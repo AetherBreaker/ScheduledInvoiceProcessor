@@ -129,44 +129,31 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
     self._save_backups()
 
   def _load_queue_backups(self) -> None:
-    with self.lock:
-      to_load = (
-        (
-          self.queue_ta.validate_json(
-            self.pickup_queue_backup_file.read_text() if self.pickup_queue_backup_file.exists() else "{}"
-          ),
-          self.file_pickup_queue,
+    # Note: Called during __init__, no need for lock protection
+    to_load = (
+      (
+        self.queue_ta.validate_json(
+          self.pickup_queue_backup_file.read_text() if self.pickup_queue_backup_file.exists() else "{}"
         ),
-        (
-          self.queue_ta.validate_json(
-            self.waiting_queue_backup_file.read_text() if self.waiting_queue_backup_file.exists() else "{}"
-          ),
-          self.file_waiting_queue,
+        self.file_pickup_queue,
+      ),
+      (
+        self.queue_ta.validate_json(
+          self.waiting_queue_backup_file.read_text() if self.waiting_queue_backup_file.exists() else "{}"
         ),
-        (
-          self.queue_ta.validate_json(
-            self.application_queue_backup_file.read_text() if self.application_queue_backup_file.exists() else "{}"
-          ),
-          self.file_application_queue,
+        self.file_waiting_queue,
+      ),
+      (
+        self.queue_ta.validate_json(
+          self.application_queue_backup_file.read_text() if self.application_queue_backup_file.exists() else "{}"
         ),
-      )
+        self.file_application_queue,
+      ),
+    )
 
-      for loaded, target in to_load:
-        target.clear()
-        target.update(deepcopy(loaded))
-        # for k, v in loaded.items():
-        # target[k] = FileRegisterData(
-        #   storenum=v["storenum"],
-        #   customer_id=v["customer_id"],
-        #   pickup_date=datetime.fromisoformat(v["pickup_date"]),
-        #   dropoff_date=datetime.fromisoformat(v["dropoff_date"]),
-        #   file_pattern=compile(v["file_pattern"]),
-        #   current_week=v["current_week"],
-        #   _waiting_folder=self.waiting_folder,
-        #   file_name=v.get("file_name", []),
-        #   pickup_success=v.get("pickup_success", {}),
-        #   application_success=v.get("application_success", {}),
-        # )
+    for loaded, target in to_load:
+      target.clear()
+      target.update(deepcopy(loaded))
 
   async def register_pickup(
     self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime, dropoff_date: datetime, current_week: bool = True

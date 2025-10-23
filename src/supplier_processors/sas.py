@@ -90,7 +90,9 @@ class SASProcessor(SupplierProcessorBase):
       current_week=current_week,
       _waiting_folder=self.waiting_folder,
     )
-    with self.lock:
+
+    # Protect queue modification with lock for consistency
+    async with self.lock:
       self.file_pickup_queue[self.assemble_queue_key(storenum, customer_id, pickup_date)] = register_data
     logger.info(f"{self.__class__.__name__}: Added {storenum} to pickup queue")
 
@@ -116,7 +118,8 @@ class SASProcessor(SupplierProcessorBase):
       )
       return
 
-    with self.lock:
+    # Protect queue operations with lock to prevent race conditions
+    async with self.lock:
       # first check if key is already in application queue
       if key not in self.file_application_queue:
         try:
