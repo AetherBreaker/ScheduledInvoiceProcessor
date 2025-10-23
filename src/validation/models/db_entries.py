@@ -55,7 +55,13 @@ def process_time_pattern(target_time) -> datetime:
   if not weekday:
     raise ValueError(f"Invalid weekday: {match.group('Weekday')}")
 
-  hour = int(match.group("Hour")) + (12 if match.group("Period") == "PM" and match.group("Hour") != "12" else 0)
+  hour = int(match.group("Hour"))
+  period = match.group("Period")
+  # Convert 12-hour format to 24-hour format
+  if period == "PM" and hour != 12:
+    hour += 12
+  elif period == "AM" and hour == 12:
+    hour = 0
   minute = int(match.group("Minute"))
 
   result = now + relativedelta(weekday=weekday(+1), hour=hour, minute=minute)
