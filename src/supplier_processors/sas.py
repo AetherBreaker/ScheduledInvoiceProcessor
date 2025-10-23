@@ -7,7 +7,7 @@ from re import Pattern, compile
 
 from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
-from environment_init_vars import SAS_FTP_CREDS_FILE
+from environment_init_vars import SETTINGS
 from paramiko import AutoAddPolicy, SFTPClient, SSHClient
 from typing_custom import CustomerID, StoreNum
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
@@ -46,7 +46,7 @@ class SASSFTPClient:
 
 class SASProcessor(SupplierProcessorBase):
   vendor_ftp = SASSFTPClient
-  pickup_ftp_creds: dict = loads(SAS_FTP_CREDS_FILE.read_text())
+  pickup_ftp_creds: dict = loads(SETTINGS.sas_ftp_creds_file.read_text())
 
   pickup_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices")
   # pickup_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices/Archive")

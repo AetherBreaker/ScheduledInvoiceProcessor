@@ -12,7 +12,7 @@ from typing import Any, Literal, Optional, overload
 from aiologic import Lock
 from aiorwlock import RWLock
 from dateutil.relativedelta import SA, relativedelta
-from environment_init_vars import GOOGLE_API_KEY_FILE, SETTINGS
+from environment_init_vars import SETTINGS
 from google.oauth2.service_account import Credentials
 from gspread import Client, authorize
 from gspread.http_client import BackOffHTTPClient
@@ -49,7 +49,7 @@ class DatabaseCache(metaclass=SingletonType):
 
   _tab_id_schedule_base_sheet = SETTINGS.database_base_schedule_id
 
-  _creds = Credentials.from_service_account_file(GOOGLE_API_KEY_FILE, scopes=DEFAULT_SCOPES)
+  _creds = Credentials.from_service_account_file(SETTINGS.googe_api_key_file, scopes=DEFAULT_SCOPES)
 
   _schedule_tab_range = f"'Current Week'!R2C1:C{len(DatabaseScheduleColumns.all_columns())}"
   _prev_week_schedule_tab_range = f"'Previous Week'!R2C1:C{len(DatabaseScheduleColumns.all_columns())}"
