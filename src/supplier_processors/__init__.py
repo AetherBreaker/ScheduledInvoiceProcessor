@@ -82,50 +82,49 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
 
   def __init__(self, pbar: ProgressCustom = None) -> None:  # type: ignore
     # Only initialize once per singleton instance to prevent queue resets
-    if not hasattr(self, '_initialized'):
-      self.file_queue_backup_folder.mkdir(exist_ok=True)
+    self.file_queue_backup_folder.mkdir(exist_ok=True)
 
-      self.pickup_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_pickup_queue.json"
-      self.waiting_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_waiting_queue.json"
-      self.application_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_application_queue.json"
+    self.pickup_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_pickup_queue.json"
+    self.waiting_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_waiting_queue.json"
+    self.application_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_application_queue.json"
 
-      self._load_queue_backups()
+    self._load_queue_backups()
 
-      self.cache: DatabaseCache = DatabaseCache()
+    self.cache: DatabaseCache = DatabaseCache()
 
-      # Initialize pbar to None if not provided on first call
-      self.pbar = pbar
-
-      self._initialized = True
-
-    # Allow pbar to be updated on subsequent calls (but not set to None)
-    elif pbar is not None:
-      self.pbar = pbar
+    self.pbar = pbar
 
   async def save_queue_backups_off_thread(self) -> None:
     await to_thread(self._save_backups)
 
   def _save_backups(self) -> None:
-    # Note: Called via to_thread, cannot use async locks
-    # Queue serialization is atomic enough for our purposes
-    backup = (
-      (
-        self.pickup_queue_backup_file,
-        self.queue_ta.dump_json(self.file_pickup_queue, indent=2, round_trip=True),
-      ),
-      (
-        self.waiting_queue_backup_file,
-        self.queue_ta.dump_json(self.file_waiting_queue, indent=2, round_trip=True),
-      ),
-      (
-        self.application_queue_backup_file,
-        self.queue_ta.dump_json(self.file_application_queue, indent=2, round_trip=True),
-      ),
-    )
+    with self.lock:
+      backup = (
+        (
+          self.pickup_queue_backup_file,
+          self.queue_ta.dump_json(self.file_pickup_queue, indent=2, round_trip=True),
+        ),
+        (
+          self.waiting_queue_backup_file,
+          self.queue_ta.dump_json(self.file_waiting_queue, indent=2, round_trip=True),
+        ),
+        (
+          self.application_queue_backup_file,
+          self.queue_ta.dump_json(self.file_application_queue, indent=2, round_trip=True),
+        ),
+      )
+      pass
 
-    for file, data in backup:
-      with file.open("wb") as f:
-        f.write(data)
+      # for _, bak in backup:
+      #   for k, v in bak.items():
+      #     v["file_pattern"] = v["file_pattern"].pattern
+      #     v["_waiting_folder"] = str(v["_waiting_folder"])
+      #     v["pickup_date"] = v["pickup_date"].isoformat()
+      #     v["dropoff_date"] = v["dropoff_date"].isoformat()
+
+      for file, data in backup:
+        with file.open("wb") as f:
+          f.write(data)
 
   def __del__(self) -> None:
     self._save_backups()
@@ -173,7 +172,9 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
     async with self.lock:
       # Use pbar context manager if available, otherwise use a dummy context
       pbar_context = (
-        self.pbar.add_task("Moving files to application folder", total=sum(len(v.file_name) for v in self.file_application_queue.values()))
+        self.pbar.add_task(
+          "Moving files to application folder", total=sum(len(v.file_name) for v in self.file_application_queue.values())
+        )
         if self.pbar
         else contextlib.nullcontext(None)
       )
@@ -208,7 +209,9 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
       file_size = origin_client.stat(send_path.as_posix()).st_size
       with SFTFTPClient(self.sft_ftp_creds) as dest_client:
         dest_client.voidcmd("TYPE I")
-        transfer_pbar_context = self.pbar.add_task(f"Transferring {send_path.name}") if self.pbar else contextlib.nullcontext(None)
+        transfer_pbar_context = (
+          self.pbar.add_task(f"Transferring {send_path.name}") if self.pbar else contextlib.nullcontext(None)
+        )
         with transfer_pbar_context as transfer_task:
           with origin_client.open(send_path.as_posix(), "rb") as read_file:
             read_file.prefetch(file_size)
