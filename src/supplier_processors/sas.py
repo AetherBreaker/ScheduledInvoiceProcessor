@@ -116,21 +116,22 @@ class SASProcessor(SupplierProcessorBase):
       )
       return
 
-    # first check if key is already in application queue
-    if key not in self.file_application_queue:
-      try:
-        matched_item = self.file_waiting_queue.pop(key)
-      except KeyError:
-        logger.error(
-          f"{self.__class__.__name__}: No waiting file found for: {self.supplier_name}, {storenum}, {customer_id}, {pickup_date.isoformat()}\n"
-          f"Invoice may not have been picked up or is missing!"
-        )
-        return
+    with self.lock:
+      # first check if key is already in application queue
+      if key not in self.file_application_queue:
+        try:
+          matched_item = self.file_waiting_queue.pop(key)
+        except KeyError:
+          logger.error(
+            f"{self.__class__.__name__}: No waiting file found for: {self.supplier_name}, {storenum}, {customer_id}, {pickup_date.isoformat()}\n"
+            f"Invoice may not have been picked up or is missing!"
+          )
+          return
 
-      self.file_application_queue[key] = matched_item
-      logger.info(f"{self.__class__.__name__}: Moved {matched_item.storenum} from waiting to application queue")
-    else:
-      logger.warning(f"{self.__class__.__name__}: File already registered for application: {key}")
+        self.file_application_queue[key] = matched_item
+        logger.info(f"{self.__class__.__name__}: Moved {matched_item.storenum} from waiting to application queue")
+      else:
+        logger.warning(f"{self.__class__.__name__}: File already registered for application: {key}")
 
   def assemble_queue_key(self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime) -> str:
     return f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
