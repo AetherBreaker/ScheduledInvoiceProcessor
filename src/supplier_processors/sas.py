@@ -1,5 +1,4 @@
 from asyncio import gather, to_thread
-from contextlib import nullcontext
 from datetime import datetime
 from json import loads
 from logging import getLogger
@@ -217,12 +216,7 @@ class SASProcessor(SupplierProcessorBase):
         else:
           logger.warning(f"{self.__class__.__name__}: No files matched for: {key} with pattern {file_meta.file_pattern.pattern}")
 
-      pbar_context = (
-        self.pbar.add_task("Transferring Files", total=sum(len(v.file_name) for v in items_to_dl.values()))
-        if self.pbar
-        else nullcontext(None)
-      )
-      with pbar_context as move_files_task:
+      with self.pbar.add_task("Transferring Files", total=sum(len(v.file_name) for v in items_to_dl.values())) as move_files_task:
         dl_futures = []
         for file_meta in items_to_dl.values():
           dl_futures.extend(
@@ -251,11 +245,10 @@ class SASProcessor(SupplierProcessorBase):
 
       await gather(*archive_futures)
 
-      # Move items to waiting queue while still holding lock
-      for key, item in items_to_advance.items():
-        self.file_waiting_queue[key] = item
-        self.file_pickup_queue.pop(key)
-        logger.info(f"{self.__class__.__name__}: Moved {item.storenum} to waiting queue")
+    for key, item in items_to_advance.items():
+      self.file_waiting_queue[key] = item
+      self.file_pickup_queue.pop(key)
+      logger.info(f"{self.__class__.__name__}: Moved {item.storenum} to waiting queue")
 
 
 # async def main():

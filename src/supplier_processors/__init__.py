@@ -170,15 +170,9 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
     if not self.file_application_queue:
       return
     async with self.lock:
-      # Use pbar context manager if available, otherwise use a dummy context
-      pbar_context = (
-        self.pbar.add_task(
-          "Moving files to application folder", total=sum(len(v.file_name) for v in self.file_application_queue.values())
-        )
-        if self.pbar
-        else contextlib.nullcontext(None)
-      )
-      with pbar_context as files_move_task:
+      with self.pbar.add_task(
+        "Moving files to application folder", total=sum(len(v.file_name) for v in self.file_application_queue.values())
+      ) as files_move_task:
         futures = []
         for key, file_meta in tuple(self.file_application_queue.items()):
           futures.extend(
@@ -209,17 +203,13 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
       file_size = origin_client.stat(send_path.as_posix()).st_size
       with SFTFTPClient(self.sft_ftp_creds) as dest_client:
         dest_client.voidcmd("TYPE I")
-        transfer_pbar_context = (
-          self.pbar.add_task(f"Transferring {send_path.name}") if self.pbar else contextlib.nullcontext(None)
-        )
-        with transfer_pbar_context as transfer_task:
+        with self.pbar.add_task(f"Transferring {send_path.name}") as transfer_task:
           with origin_client.open(send_path.as_posix(), "rb") as read_file:
             read_file.prefetch(file_size)
             with dest_client.transfercmd(f"STOR {recv_path.as_posix()}") as write_file:
               while buffer := read_file.read(8192):
                 write_file.sendall(buffer)
-                if self.pbar and transfer_task is not None:
-                  self.pbar.update(transfer_task, advance=len(buffer))
+                self.pbar.update(transfer_task, advance=len(buffer))
               if _SSLSocket is not None and isinstance(write_file, _SSLSocket):
                 write_file.unwrap()  # type: ignore
             dest_client.voidresp()
@@ -236,8 +226,7 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
         except (error_perm, error_temp, OSError) as e:
           logger.warning(f"{self.__class__.__name__}: Failed to verify transfer of {send_path.name}: {e}")
         file_meta.pickup_success[idx] = success
-    if self.pbar and move_files_task is not None:
-      self.pbar.update(move_files_task, advance=1)
+    self.pbar.update(move_files_task, advance=1)
     return success
 
   def _transfer_file_main_to_main(
