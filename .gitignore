@@ -468,3 +468,8 @@ sas_ftp_creds.json
 queue backups/
 Testing Files/
 PYCACHE/
+
+# Docker secrets and runtime data
+secrets/
+queue_backups/
+.DS_Store
