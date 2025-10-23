@@ -245,8 +245,7 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
         logger.warning(f"{self.__class__.__name__}: Failed to verify move of {send_path.name}: {e}")
       file_meta.application_success[idx] = success
 
-    if self.pbar and move_files_task is not None:
-      self.pbar.update(move_files_task, advance=1)
+    self.pbar.update(move_files_task, advance=1)
 
 
 class SFTFTPClient(FTP):
