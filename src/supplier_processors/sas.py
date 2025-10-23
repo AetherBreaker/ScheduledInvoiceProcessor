@@ -90,8 +90,8 @@ class SASProcessor(SupplierProcessorBase):
       current_week=current_week,
       _waiting_folder=self.waiting_folder,
     )
-
-    self.file_pickup_queue[self.assemble_queue_key(storenum, customer_id, pickup_date)] = register_data
+    with self.lock:
+      self.file_pickup_queue[self.assemble_queue_key(storenum, customer_id, pickup_date)] = register_data
     logger.info(f"{self.__class__.__name__}: Added {storenum} to pickup queue")
 
   async def register_application(
