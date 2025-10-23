@@ -128,7 +128,7 @@ async def reschedule_all_tasks():
         "customer_id": order.customer,
         "pickup_date": order.invoice_pickup_time,
         "dropoff_date": order.invoice_application_time,
-        "current_week": True,
+        "current_week": False,
       },
       id=f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
       replace_existing=True,
