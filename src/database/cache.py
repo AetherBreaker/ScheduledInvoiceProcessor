@@ -1,3 +1,5 @@
+import contextlib
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -250,16 +252,13 @@ class DatabaseCache(metaclass=SingletonType):
 
       new_sheet_id = max(all_sheet_ids) + 1
 
-      try:
+      with contextlib.suppress(StopIteration):
         finditem(lambda x: x["properties"]["title"] == self.get_week_ending_name, metadat["sheets"])
         logger.warning(
           "Attempted to flip week more than once in the same week."
           "\n Or a sheet exists with the same name as the most recent week ending name."
         )
         return  # already done this week
-      except StopIteration:
-        pass
-
       request_body = {
         "requests": [
           {
