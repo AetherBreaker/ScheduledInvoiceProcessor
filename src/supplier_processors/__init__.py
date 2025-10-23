@@ -1,8 +1,7 @@
-import contextlib
 from asyncio import gather, to_thread
 from copy import deepcopy
 from datetime import datetime
-from ftplib import FTP, _SSLSocket  # type: ignore
+from ftplib import FTP, _SSLSocket, error_perm, error_temp  # type: ignore
 from json import loads
 from logging import getLogger
 from pathlib import Path, PurePosixPath
@@ -231,10 +230,13 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
           extra={"markup": True},
         )
 
+        # Verify file was transferred successfully
         success = False
-        with contextlib.suppress(Exception):
+        try:
           dest_client.size(recv_path.as_posix())
           success = True
+        except (error_perm, error_temp, OSError) as e:
+          logger.warning(f"{self.__class__.__name__}: Failed to verify transfer of {send_path.name}: {e}")
         file_meta.pickup_success[idx] = success
     self.pbar.update(move_files_task, advance=1)
     return success
@@ -246,11 +248,14 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
       origin_client.voidcmd("TYPE I")
       origin_client.rename(send_path.as_posix(), recv_path.as_posix())
 
+      # Verify file was moved successfully
       success = False
-      with contextlib.suppress(Exception):
+      try:
         origin_client.size(recv_path.as_posix())
         success = True
         logger.info(f"{self.__class__.__name__}: Moved [yellow]{send_path}[/] to [yellow]{recv_path}[/]", extra={"markup": True})
+      except (error_perm, error_temp, OSError) as e:
+        logger.warning(f"{self.__class__.__name__}: Failed to verify move of {send_path.name}: {e}")
       file_meta.application_success[idx] = success
 
     self.pbar.update(move_files_task, advance=1)
