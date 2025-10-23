@@ -126,6 +126,9 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
         with file.open("wb") as f:
           f.write(data)
 
+  def __del__(self) -> None:
+    self._save_backups()
+
   def _load_queue_backups(self) -> None:
     with self.lock:
       to_load = (
