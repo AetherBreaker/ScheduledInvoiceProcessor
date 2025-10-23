@@ -87,11 +87,11 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
     self.waiting_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_waiting_queue.json"
     self.application_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_application_queue.json"
 
+    self.pbar = pbar
+
     self._load_queue_backups()
 
     self.cache: DatabaseCache = DatabaseCache()
-
-    self.pbar = pbar
 
   async def save_queue_backups_off_thread(self) -> None:
     await to_thread(self._save_backups)
