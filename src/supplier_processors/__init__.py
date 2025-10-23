@@ -81,7 +81,6 @@ class SupplierProcessorBase[T_VendorFTP](metaclass=SingletonType):
   destination_ftp_folder: PurePosixPath
 
   def __init__(self, pbar: ProgressCustom = None) -> None:  # type: ignore
-    # Only initialize once per singleton instance to prevent queue resets
     self.file_queue_backup_folder.mkdir(exist_ok=True)
 
     self.pickup_queue_backup_file = self.file_queue_backup_folder / f"{self.queue_backup_prefix}_pickup_queue.json"
