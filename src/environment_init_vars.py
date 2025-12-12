@@ -25,12 +25,9 @@ SPEC_CWD = Path(__file__).parent if getattr(sys, "frozen", False) else Path.cwd(
 # Support environment variable overrides for Docker secrets
 # In Docker, these will be set to /run/secrets/<secret_name>
 
-print(SETTINGS.googe_api_key_file)
-print(SETTINGS.googe_api_key_file.name)
-print(SETTINGS.googe_api_key_file.stem)
 
-if SETTINGS.googe_api_key_file.name != "db-key":
-  raise FileNotFoundError(f"Google API key file name must be 'db-key', got: {SETTINGS.googe_api_key_file.name}")
+if SETTINGS.googe_api_key_file.stem != "db-key":
+  raise FileNotFoundError(f"Google API key file name must be 'db-key', got: {SETTINGS.googe_api_key_file.stem}")
 if not SETTINGS.googe_api_key_file.exists():
   raise FileNotFoundError(
     f"Google API key file not found at: {SETTINGS.googe_api_key_file}\n"
@@ -39,8 +36,8 @@ if not SETTINGS.googe_api_key_file.exists():
     "For Docker: ensure secrets are properly mounted in docker-compose.yml"
   )
 
-if SETTINGS.sft_website_creds_file.name != "sft_creds":
-  raise FileNotFoundError(f"SFT website creds file name must be 'sft_creds', got: {SETTINGS.sft_website_creds_file.name}")
+if SETTINGS.sft_website_creds_file.stem != "sft_creds":
+  raise FileNotFoundError(f"SFT website creds file name must be 'sft_creds', got: {SETTINGS.sft_website_creds_file.stem}")
 if not SETTINGS.sft_website_creds_file.exists():
   raise FileNotFoundError(
     f"SFT website creds file not found at: {SETTINGS.sft_website_creds_file}\n"
@@ -48,8 +45,8 @@ if not SETTINGS.sft_website_creds_file.exists():
     "For Docker: ensure secrets are properly mounted in docker-compose.yml"
   )
 
-if SETTINGS.sas_ftp_creds_file.name != "sas_ftp_creds":
-  raise FileNotFoundError(f"SAS FTP creds file name must be 'sas_ftp_creds', got: {SETTINGS.sas_ftp_creds_file.name}")
+if SETTINGS.sas_ftp_creds_file.stem != "sas_ftp_creds":
+  raise FileNotFoundError(f"SAS FTP creds file name must be 'sas_ftp_creds', got: {SETTINGS.sas_ftp_creds_file.stem}")
 if not SETTINGS.sas_ftp_creds_file.exists():
   raise FileNotFoundError(
     f"SAS FTP creds file not found at: {SETTINGS.sas_ftp_creds_file}\n"
