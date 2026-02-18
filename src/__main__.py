@@ -4,9 +4,14 @@ if __name__ == "__main__":
   configure_logging()
 
 from asyncio import Event, run
+from datetime import datetime
 from logging import getLogger
+from pathlib import Path
 
 from apscheduler.triggers.cron import CronTrigger
+
+# Heartbeat file for health checks
+HEARTBEAT_FILE = Path("/app/src/logs/heartbeat")
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
 from logging_config import RICH_CONSOLE
@@ -17,6 +22,14 @@ from supplier_processors.sas import SASProcessor
 from typing_custom.enums import SuppliersEnum
 
 logger = getLogger(__name__)
+
+
+def write_heartbeat():
+    """Write current timestamp to heartbeat file for health monitoring."""
+    try:
+        HEARTBEAT_FILE.write_text(datetime.now().isoformat())
+    except Exception as e:
+        logger.error(f"Failed to write heartbeat: {e}")
 
 
 supplier_register = {
@@ -204,7 +217,18 @@ async def main():  # sourcery skip: remove-empty-nested-block
       replace_existing=True,
     )
 
+    # Heartbeat job - writes timestamp every minute for health monitoring
+    scheduler.add_job(
+      write_heartbeat,
+      CronTrigger(minute="*/1"),
+      id="heartbeat",
+      replace_existing=True,
+    )
+
     scheduler.start()
+
+    # Write initial heartbeat on startup
+    write_heartbeat()
 
     scheduler.print_jobs()
 
