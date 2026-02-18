@@ -8,5 +8,6 @@ pandas-stubs
 paramiko
 python-dateutil
 types-python-dateutil
+python-dotenv
 pydantic
 pydantic-settings
