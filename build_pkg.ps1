@@ -6,6 +6,7 @@ pyinstaller.exe `
   --onefile `
   --add-data="sft_creds.json;." `
   --add-data="sas_ftp_creds.json;." `
+  --add-data="ryo_ftp_creds.json;." `
   --add-data="db-key.json;." `
   --add-data="production.env;." `
   -p ".venv;.venv\Lib\site-packages" `

@@ -54,5 +54,14 @@ if not SETTINGS.sas_ftp_creds_file.exists():
     "For Docker: ensure secrets are properly mounted in docker-compose.yml"
   )
 
+if SETTINGS.ryo_ftp_creds_file.stem != "ryo_ftp_creds":
+  raise FileNotFoundError(f"SAS FTP creds file name must be 'ryo_ftp_creds', got: {SETTINGS.sas_ftp_creds_file.stem}")
+if not SETTINGS.ryo_ftp_creds_file.exists():
+  raise FileNotFoundError(
+    f"SAS FTP creds file not found at: {SETTINGS.ryo_ftp_creds_file}\n"
+    "Please create the creds file and save it as 'ryo_ftp_creds' in the current directory.\n"
+    "For Docker: ensure secrets are properly mounted in docker-compose.yml"
+  )
+
 
 TZ = ZoneInfo("US/Eastern")

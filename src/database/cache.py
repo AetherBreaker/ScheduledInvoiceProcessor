@@ -196,9 +196,9 @@ class DatabaseCache(metaclass=SingletonType):
       )
 
       self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_application_time] = (
-        self.prev_week_schedule._cache.loc[
-          :, DatabaseScheduleColumns.invoice_application_time
-        ].map(lambda x: x - relativedelta(weeks=1) if x else x)
+        self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_application_time].map(
+          lambda x: x - relativedelta(weeks=1) if x else x
+        )
       )  # type: ignore
       self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_pickup_time] = self.prev_week_schedule._cache.loc[
         :, DatabaseScheduleColumns.invoice_pickup_time
@@ -428,7 +428,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
     update_data = ValueRange(
       range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self._columns)}"),
       majorDimension=Dimension.rows,
-      values=[sheets_row.tolist()],
+      values=[sheets_row.tolist()],  # type: ignore
     )
 
     await self._core.queue_db_api_update(update_data)
