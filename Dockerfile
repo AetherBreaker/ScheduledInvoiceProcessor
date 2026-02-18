@@ -25,6 +25,10 @@ RUN adduser \
     --uid "${UID}" \
     appuser
 
+# Install procps for health check (pgrep command)
+RUN apt-get update && apt-get install -y --no-install-recommends procps && \
+    rm -rf /var/lib/apt/lists/*
+
 # Create directories for runtime data with proper permissions
 RUN mkdir -p /app/src/logs /app/src/queue_backups && \
     chown -R appuser:appuser /app
@@ -49,6 +53,13 @@ USER appuser
 
 # Set PYTHONPATH so imports work correctly
 ENV PYTHONPATH=/app/src
+
+# Health check - verifies heartbeat file was updated within last 3 minutes
+# If the scheduler is stuck or crashed, heartbeat won't be updated
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+    CMD python3 -c "from pathlib import Path; from datetime import datetime, timedelta; \
+        hb = Path('/app/src/logs/heartbeat'); \
+        exit(0 if hb.exists() and datetime.fromisoformat(hb.read_text()) > datetime.now() - timedelta(minutes=3) else 1)"
 
 # Run the application.
 WORKDIR /app/src
