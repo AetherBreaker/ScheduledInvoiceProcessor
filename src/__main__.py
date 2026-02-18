@@ -12,6 +12,7 @@ from dateutil.relativedelta import SA, relativedelta
 from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
+from supplier_processors.ryo import RYOProcessor
 from supplier_processors.sas import SASProcessor
 from typing_custom.enums import SuppliersEnum
 
@@ -20,7 +21,7 @@ logger = getLogger(__name__)
 
 supplier_register = {
   SuppliersEnum.SAS: SASProcessor,
-  # SuppliersEnum.RYO: ...,
+  SuppliersEnum.RYO: RYOProcessor,
 }
 
 

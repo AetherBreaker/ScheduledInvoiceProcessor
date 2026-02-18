@@ -43,6 +43,7 @@ class Settings(BaseSettings):
   googe_api_key_file: Annotated[Path, Field(alias="GOOGLE_API_KEY_FILE")]
   sft_website_creds_file: Annotated[Path, Field(alias="SFT_WEBSITE_CREDS_FILE")]
   sas_ftp_creds_file: Annotated[Path, Field(alias="SAS_FTP_CREDS_FILE")]
+  ryo_ftp_creds_file: Annotated[Path, Field(alias="RYO_FTP_CREDS_FILE")]
 
   # @field_validator("*", mode="wrap", check_fields=False)
   # @classmethod

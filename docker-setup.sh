@@ -21,6 +21,11 @@ if [ -f "sas_ftp_creds.json" ]; then
     cp sas_ftp_creds.json secrets/
 fi
 
+if [ -f "ryo_ftp_creds.json" ]; then
+    echo "Found ryo_ftp_creds.json, copying to secrets/"
+    cp ryo_ftp_creds.json secrets/
+fi
+
 if [ -f "sft_creds.json" ]; then
     echo "Found sft_creds.json, copying to secrets/"
     cp sft_creds.json secrets/
@@ -36,6 +41,7 @@ echo ""
 echo "Please ensure the following files exist in the secrets/ directory:"
 echo "  - secrets/db-key.json"
 echo "  - secrets/sas_ftp_creds.json"
+echo "  - secrets/ryo_ftp_creds.json"
 echo "  - secrets/sft_creds.json"
 echo ""
 echo "To start the application:"
