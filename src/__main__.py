@@ -6,33 +6,40 @@ if __name__ == "__main__":
 from asyncio import Event, run
 from datetime import datetime
 from logging import getLogger
-from pathlib import Path
+from pathlib import PosixPath, PurePosixPath
 
 from apscheduler.triggers.cron import CronTrigger
-
-# Heartbeat file for health checks
-HEARTBEAT_FILE = Path("/app/src/logs/heartbeat")
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
 from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
+from supplier_processors import SupplierProcessorBase
 from supplier_processors.ryo import RYOProcessor
 from supplier_processors.sas import SASProcessor
 from typing_custom.enums import SuppliersEnum
 
+# Heartbeat file for health checks
+
 logger = getLogger(__name__)
 
+HEARTBEAT_FILE = PurePosixPath("/app/src/logs/heartbeat") if __debug__ else PosixPath("/app/src/logs/heartbeat")
 
-def write_heartbeat():
+if not __debug__:
+
+  def write_heartbeat():
     """Write current timestamp to heartbeat file for health monitoring."""
     try:
-        HEARTBEAT_FILE.write_text(datetime.now().isoformat())
+      HEARTBEAT_FILE.write_text(datetime.now().isoformat())  # type: ignore
     except Exception as e:
-        logger.error(f"Failed to write heartbeat: {e}")
+      logger.error(f"Failed to write heartbeat: {e}")
+else:
+
+  def write_heartbeat():
+    pass
 
 
-supplier_register = {
+supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
   SuppliersEnum.SAS: SASProcessor,
   SuppliersEnum.RYO: RYOProcessor,
 }
