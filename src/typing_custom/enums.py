@@ -88,3 +88,10 @@ class WeekdayEnum(CustomStrEnum):
   Friday = auto()
   Saturday = auto()
   Sunday = auto()
+
+
+class LogActionEnum(CustomStrEnum):
+  REGISTERED_PICKUP = auto()
+  FILE_PICKED_UP = auto()
+  REGISTERED_APPLICATION = auto()
+  FILE_APPLIED = auto()

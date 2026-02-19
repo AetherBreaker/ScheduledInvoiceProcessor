@@ -5,6 +5,8 @@ from logging import getLogger
 from pathlib import PurePosixPath
 from re import Pattern, compile
 
+from dateutil.relativedelta import SA, SU, relativedelta
+from dateutil.rrule import DAILY, rrule
 from environment_init_vars import SETTINGS
 from paramiko import AutoAddPolicy, SFTPClient, SSHClient
 from typing_custom import CustomerID, StoreNum
@@ -16,7 +18,7 @@ from supplier_processors import FileRegisterData, SupplierProcessorBase
 logger = getLogger(__name__)
 
 
-class RYOSFTPClient:
+class SFTWarehouseSFTPClient:
   policy = AutoAddPolicy()
 
   def __init__(self, creds: dict):
@@ -28,7 +30,7 @@ class RYOSFTPClient:
 
     self.ssh_client.connect(
       hostname=self.creds["HOSTNAME"],
-      port=self.creds.get("PORT", 2222),
+      port=self.creds.get("PORT", 22),
       username=self.creds["USER"],
       password=self.creds["PWD"],
     )
@@ -42,18 +44,19 @@ class RYOSFTPClient:
     self.ssh_client.close()
 
 
-class RYOProcessor(SupplierProcessorBase):
-  vendor_ftp = RYOSFTPClient
-  pickup_ftp_creds: dict = loads(SETTINGS.ryo_ftp_creds_file.read_text())
+class SFTProcessor(SupplierProcessorBase):
+  vendor_ftp = SFTWarehouseSFTPClient
+  pickup_ftp_creds: dict = loads(SETTINGS.sas_ftp_creds_file.read_text())
 
-  pickup_ftp_folder: PurePosixPath = PurePosixPath("/RYOtoSFT")
-  pickup_archive_ftp_folder: PurePosixPath = PurePosixPath("/RYOtoSFT/Archive")
-  waiting_folder = PurePosixPath("/Waiting/RYO")
-  destination_ftp_folder = PurePosixPath("/RYO")
+  pickup_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices")
+  # pickup_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices/Archive")
+  pickup_archive_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices/Archive")
+  waiting_folder = PurePosixPath("/Waiting/SAS")
+  destination_ftp_folder = PurePosixPath("/SAS")
 
-  queue_backup_prefix: str = "ryo"
+  queue_backup_prefix: str = "sas"
 
-  supplier_name: SuppliersEnum = SuppliersEnum.RYO
+  supplier_name: SuppliersEnum = SuppliersEnum.SAS
 
   async def register_pickup(
     self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime, dropoff_date: datetime, current_week: bool = True
@@ -139,17 +142,41 @@ class RYOProcessor(SupplierProcessorBase):
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern:
+    dates = list(
+      rrule(
+        DAILY,
+        dtstart=(start_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0))
+        - relativedelta(weeks=1 if current_week else 0),
+        until=(end_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999))
+        - relativedelta(weeks=0 if current_week else 1),
+      )
+    )
+
+    years = {str(date.year) for date in dates}
+    months = {f"{date.month:02d}" for date in dates}
+    days = {f"{date.day:02d}" for date in dates}
+
+    years_part = "|".join(years)
+    months_part = "|".join(months)
+    days_part = "|".join(days)
 
     pattern = (
-      rf"^{customer_id}_"
-      r"[\d]+"
-      r"\.txt$"
+      rf"^EF{customer_id}_"
+      r"(?P<timestamp>"
+      rf"(?P<year>{years_part})"
+      rf"(?P<month>{months_part})"
+      rf"(?P<day>{days_part})"
+      r"(?P<hour>\d{2})"
+      r"(?P<minute>\d{2})"
+      r"(?P<second>\d{2})"
+      r"(?P<microsecond>\d{6})"
+      r")\.TXT$"
     )
     return compile(pattern)
 
   def _archive_file(self, remote_file: str) -> None:
     archive_loc = (self.pickup_archive_ftp_folder / remote_file).as_posix()
-    with RYOSFTPClient(self.pickup_ftp_creds) as sftp_client:
+    with SFTWarehouseSFTPClient(self.pickup_ftp_creds) as sftp_client:
       try:
         sftp_client.stat(archive_loc)
         logger.warning(
@@ -171,7 +198,7 @@ class RYOProcessor(SupplierProcessorBase):
     if not self.file_pickup_queue:
       return
     async with self.lock:
-      with RYOSFTPClient(self.pickup_ftp_creds) as sftp_client:
+      with SFTWarehouseSFTPClient(self.pickup_ftp_creds) as sftp_client:
         remote_files = [file_attr.filename for file_attr in sftp_client.listdir_attr(self.pickup_ftp_folder.as_posix())]
 
       items_to_dl: dict[str, FileRegisterData] = {}
@@ -228,9 +255,9 @@ class RYOProcessor(SupplierProcessorBase):
 #   with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
 #     file = PurePosixPath("/Fastrax Invoices/Archive/EF45254_20250722040106566837.TXT")
 #     with live.pbar.add_task("Test Transfer", total=1) as task:
-#       RYOProcessor(live.pbar)._transfer_file_vend_to_main(
+#       SASProcessor(live.pbar)._transfer_file_vend_to_main(
 #         send_path=file,
-#         recv_path=RYOProcessor.waiting_folder / file.name,
+#         recv_path=SASProcessor.waiting_folder / file.name,
 #         move_files_task=task,
 #         file_meta=FileRegisterData(
 #           storenum=123,
@@ -240,7 +267,7 @@ class RYOProcessor(SupplierProcessorBase):
 #           file_pattern=compile(r".*"),
 #           current_week=True,
 #           file_name=[file.name],
-#           _waiting_folder=PurePosixPath("/Waiting/RYO"),
+#           _waiting_folder=PurePosixPath("/Waiting/SAS"),
 #         ),
 #         idx=0,
 #       )

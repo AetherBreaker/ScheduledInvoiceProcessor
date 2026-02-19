@@ -1,5 +1,7 @@
 import contextlib
 
+from typing_custom.enums import LogActionEnum, SuppliersEnum
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -8,6 +10,7 @@ if __name__ == "__main__":
 from asyncio import get_running_loop, sleep, to_thread
 from collections.abc import AsyncIterator, Sequence
 from copy import deepcopy
+from datetime import datetime
 from logging import getLogger
 from typing import Any, Literal, Optional, overload
 
@@ -21,7 +24,7 @@ from gspread.http_client import BackOffHTTPClient
 from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption, finditem
 from pandas import DataFrame, Series
 from pydantic import TypeAdapter
-from typing_custom import InvoiceNum, ValueRange, ValuesBatchUpdateBody
+from typing_custom import InvoiceNum, StoreNum, ValueRange, ValuesBatchUpdateBody
 from typing_custom.abc import SingletonType
 from typing_custom.dataframe_column_names import (
   ColNameEnum,
@@ -55,15 +58,15 @@ class DatabaseCache(metaclass=SingletonType):
 
   _schedule_tab_range = f"'Current Week'!R2C1:C{len(DatabaseScheduleColumns.all_columns())}"
   _prev_week_schedule_tab_range = f"'Previous Week'!R2C1:C{len(DatabaseScheduleColumns.all_columns())}"
-  _order_log_tab_range = f"'Processed Orders'!R2C1:C{len(DatabaseOrderLogColumns.all_columns())}"
+  _order_log_tab_range = f"'Processing Log'!R2C1:C{len(DatabaseOrderLogColumns.all_columns())}"
 
   _schedule_range_format_single = "'Current Week'!{cell}"
   _prev_week_schedule_range_format_single = "'Previous Week'!{cell}"
-  _order_log_range_format_single = "'Processed Orders'!{cell}"
+  _order_log_range_format_single = "'Processing Log'!{cell}"
 
   _schedule_range_format = "'Current Week'!{start}:{end}"
   _prev_week_schedule_range_format = "'Previous Week'!{start}:{end}"
-  _order_log_range_format = "'Processed Orders'!{start}:{end}"
+  _order_log_range_format = "'Processing Log'!{start}:{end}"
 
   _db_write_body_base = ValuesBatchUpdateBody(
     valueInputOption=ValueInputOption.raw,
@@ -537,8 +540,8 @@ class CacheViewschedule(CacheViewBase[ScheduledOrderDBEntryModel]):
 
 
 class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
-  _range_format_single = "'Processed Orders'!{cell}"
-  _range_format = "'Processed Orders'!{start}:{end}"
+  _range_format_single = "'Processing Log'!{cell}"
+  _range_format = "'Processing Log'!{start}:{end}"
   _field_type_adapters = ORDER_LOG_TYPE_ADAPTERS
 
   async def read_typed_row(self, index: DatabaseOrderLogIndex, re_validate: bool = False) -> OrderLogDBEntryModel:
@@ -579,3 +582,15 @@ class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
       char_uids = self._cache.index.levels[0]  # type: ignore
 
       return index in char_uids
+
+  async def log_action(
+    self,
+    supplier: SuppliersEnum,
+    store: StoreNum,
+    invoice_num: InvoiceNum,
+    action: LogActionEnum,
+    action_datetime: datetime,
+    week_ending_date: datetime,
+    url: str,
+  ) -> None:
+    pass

@@ -8,7 +8,7 @@ from logging import getLogger
 from typing import Any, Self
 
 from typing_custom import CustomerID, InvoiceNum, StoreNum
-from typing_custom.enums import SuppliersEnum
+from typing_custom.enums import LogActionEnum, SuppliersEnum
 
 logger = getLogger(__name__)
 
@@ -83,19 +83,20 @@ type DatabaseScheduleIndex = tuple[SuppliersEnum, StoreNum]
 
 
 class DatabaseOrderLogColumns(ColNameEnum):
-  __index_items__ = ["supplier", "store", "po_number", "customer"]
+  __index_items__ = ["supplier", "store", "invoice_number", "customer", "action"]
 
   supplier = "supplier"
   store = "store"
-  po_number = "po_number"
+  po_number = "invoice_number"
   customer = "customer"
-  applied_date = "applied_date"
+  action = "action"
+  action_datetime = "action_datetime"
   week_ending_date = "week_ending_date"
   notes = "notes"
 
 
 type DatabaseOrderLogIndex = (
-  tuple[SuppliersEnum, StoreNum, InvoiceNum, CustomerID]
-  | tuple[SuppliersEnum, StoreNum, InvoiceNum, slice]
-  | tuple[SuppliersEnum, slice, InvoiceNum, CustomerID]
+  tuple[SuppliersEnum, StoreNum, InvoiceNum, CustomerID, LogActionEnum]
+  | tuple[SuppliersEnum, StoreNum, InvoiceNum, slice, LogActionEnum]
+  | tuple[SuppliersEnum, slice, InvoiceNum, CustomerID, LogActionEnum]
 )
