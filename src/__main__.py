@@ -242,23 +242,15 @@ async def main():  # sourcery skip: remove-empty-nested-block
 
     scheduler.print_jobs()
 
+    app = Application()
+    app.router.add_static("/", CWD / "logs", show_index=True, follow_symlinks=True, append_version=True)
+    runner = AppRunner(app)
+    await runner.setup()
+    site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
+    await site.start()
+
     if __debug__:
       pass
-
-      app = Application()
-
-      app.router.add_static(
-        "/",
-        CWD / "logs",
-        show_index=True,
-        follow_symlinks=True,
-        append_version=True,
-      )
-
-      runner = AppRunner(app)
-      await runner.setup()
-      site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
-      await site.start()
 
       # scheduler.print_jobs()
 
