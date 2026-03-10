@@ -13,7 +13,7 @@ from dateutil.relativedelta import FR, MO, SA, SU, TH, TU, WE, relativedelta
 from environment_init_vars import TZ
 from pydantic import BeforeValidator, TypeAdapter
 from typing_custom import CustomerID, InvoiceNum, StoreNum
-from typing_custom.enums import LogActionEnum, StateEnum, SuppliersEnum, WeekdayEnum
+from typing_custom.enums import LogActionEnum, StateEnum, StatusCode, SuppliersEnum, WeekdayEnum
 from utils import today
 
 from validation import PYDANTIC_CONFIG, CustomBaseModel, CustomRootModel
@@ -42,7 +42,9 @@ weekday_lookup = {
 TIMESTAMP_PATTERN = compile(r"(?P<Weekday>\w*?) (?P<Hour>\d{1,2}):(?P<Minute>\d{2})(?P<Period>AM|PM)")
 
 
-def process_time_pattern(target_time) -> datetime:
+def process_formatted_time_pattern_str(target_time) -> datetime:
+  if isinstance(target_time, (datetime, int, float)):
+    raise ValueError("Expected a string for time pattern, got datetime")
   match = TIMESTAMP_PATTERN.match(target_time) if target_time else None
 
   if not match:
@@ -77,20 +79,47 @@ class ScheduledOrderDBEntryModel(CustomBaseModel):
   customer: CustomerID
   state: StateEnum
   expected_delivery_day: Annotated[WeekdayEnum, BeforeValidator(str.strip), BeforeValidator(str.title)]
-  invoice_pickup_time: Annotated[datetime, BeforeValidator(process_time_pattern)]
-  invoice_application_time: Annotated[datetime, BeforeValidator(process_time_pattern)]
+  invoice_pickup_time: Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
+  invoice_dropoff_time: Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
   invoice_grabbed: bool = False
   invoice_applied: bool = False
 
 
+def remove_tz_info_if_aware(dt: datetime) -> datetime:
+  if not isinstance(dt, datetime):
+    raise ValueError("Expected a datetime object")
+  if dt.tzinfo is not None:
+    dt = dt.replace(tzinfo=None)
+  return dt
+
+
+def init_generic_datetime_str(dt: str) -> datetime:
+  if not isinstance(dt, str):
+    raise ValueError("Expected a string for datetime initialization")
+  try:
+    return datetime.strptime(dt, "%m/%d/%Y %H:%M:%S")
+  except ValueError as e:
+    raise ValueError(f"Invalid datetime format: {dt}. Expected 'MM/DD/YYYY HH:MM:SS'") from e
+
+
 class OrderLogDBEntryModel(CustomBaseModel):
   supplier: SuppliersEnum
-  store: StoreNum
-  po_number: InvoiceNum
-  customer: CustomerID
+  store: Optional[StoreNum]
+  invoice_number: Optional[InvoiceNum]
+  customer: Optional[CustomerID]
   action: LogActionEnum
-  action_datetime: datetime
-  week_ending_date: datetime
+  status: StatusCode = StatusCode.UNKNOWN
+  action_datetime: (
+    Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
+    | Annotated[datetime, BeforeValidator(remove_tz_info_if_aware)]
+    | Annotated[datetime, BeforeValidator(init_generic_datetime_str)]
+  )
+  week_end_date: (
+    Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
+    | Annotated[datetime, BeforeValidator(remove_tz_info_if_aware)]
+    | Annotated[datetime, BeforeValidator(init_generic_datetime_str)]
+    | None
+  )
   notes: Optional[str] = None
 
 
@@ -100,7 +129,9 @@ for field, fieldinf in get_annotations(ScheduledOrderDBEntryModel).items():
     SCHEDULE_TYPE_ADAPTERS[field] = TypeAdapter(
       fieldinf,
       config=None
-      if issubclass(fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel))
+      if issubclass(
+        fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel)
+      )
       else PYDANTIC_CONFIG,
     )
   except Exception:
@@ -112,7 +143,9 @@ for field, fieldinf in get_annotations(OrderLogDBEntryModel).items():
     ORDER_LOG_TYPE_ADAPTERS[field] = TypeAdapter(
       fieldinf,
       config=None
-      if issubclass(fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel))
+      if issubclass(
+        fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel)
+      )
       else PYDANTIC_CONFIG,
     )
   except Exception:

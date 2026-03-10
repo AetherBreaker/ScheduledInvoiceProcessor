@@ -34,8 +34,8 @@ class Settings(BaseSettings):
   )
 
   database_id: Annotated[str, Field(alias="DATABASE_ID")]
-  database_base_schedule_id: Annotated[str, Field(alias="DATABASE_BASE_SCHEDULE_ID")]
-  database_order_log_id: Annotated[str, Field(alias="DATABASE_ORDER_LOG_ID")]
+  database_base_schedule_id: Annotated[int, Field(alias="DATABASE_BASE_SCHEDULE_ID")]
+  database_order_log_id: Annotated[int, Field(alias="DATABASE_ORDER_LOG_ID")]
 
   database_refresh_interval: Annotated[int, Field(alias="DATABASE_REFRESH_INTERVAL")] = 3600
   database_write_interval: Annotated[int, Field(alias="DATABASE_WRITE_INTERVAL")] = 60
@@ -44,6 +44,9 @@ class Settings(BaseSettings):
   sft_website_creds_file: Annotated[Path, Field(alias="SFT_WEBSITE_CREDS_FILE")]
   sas_ftp_creds_file: Annotated[Path, Field(alias="SAS_FTP_CREDS_FILE")]
   ryo_ftp_creds_file: Annotated[Path, Field(alias="RYO_FTP_CREDS_FILE")]
+
+  file_serve_host: Annotated[str, Field(alias="FILE_SERVE_HOST")] = "localhost"
+  file_serve_port: Annotated[int, Field(alias="FILE_SERVE_PORT")] = 8080
 
   # @field_validator("*", mode="wrap", check_fields=False)
   # @classmethod
