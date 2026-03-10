@@ -1,19 +1,35 @@
+if __name__ == "__main__":
+  from logging_config import configure_logging
+
+  configure_logging()
+
 from asyncio import gather, to_thread
+from contextvars import ContextVar
 from datetime import datetime
 from json import loads
 from logging import getLogger
-from pathlib import PurePosixPath
+from logging.handlers import QueueHandler
+from pathlib import Path, PurePosixPath
+from queue import Queue
 from re import Pattern, compile
+from typing import Optional
 
-from environment_init_vars import SETTINGS
+from dateutil.relativedelta import SA, SU, relativedelta
+from dateutil.rrule import DAILY, rrule
+from environment_init_vars import CWD, SETTINGS
+from logging_config import ContextAdapter, DynamicQueueListener, add_log_context
 from paramiko import AutoAddPolicy, SFTPClient, SSHClient
 from typing_custom import CustomerID, StoreNum
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
-from typing_custom.enums import SuppliersEnum
+from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
 from supplier_processors import FileRegisterData, SupplierProcessorBase
 
 logger = getLogger(__name__)
+contextual_logs_queue = Queue(-1)
+logger.addHandler(QueueHandler(contextual_logs_queue))  # type: ignore
+
+contextual_log_listener = DynamicQueueListener(contextual_logs_queue, respect_handler_level=True)  # type: ignore
 
 
 class RYOSFTPClient:
@@ -55,9 +71,22 @@ class RYOProcessor(SupplierProcessorBase):
 
   supplier_name: SuppliersEnum = SuppliersEnum.RYO
 
-  async def register_pickup(
-    self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime, dropoff_date: datetime, current_week: bool = True
-  ) -> None:
+  _identifier_prefix: str = "RYO"
+  _log_file_loc: Path = CWD / "logs" / "ryo"
+  _ctx_var = ContextVar("ryo_log_context", default=None)
+
+  @add_log_context(identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
+  async def _register_pickup(
+    self,
+    storenum: StoreNum,
+    customer_id: CustomerID,
+    pickup_date: datetime,
+    dropoff_date: datetime,
+    current_week: bool = True,
+    adapted_logger: Optional[ContextAdapter] = None,
+    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+  ):
+    local_logger = adapted_logger if adapted_logger is not None else logger
     picked_up = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
       (self.supplier_name, storenum), DatabaseScheduleColumns.invoice_grabbed
     )
@@ -66,12 +95,12 @@ class RYOProcessor(SupplierProcessorBase):
     )
 
     if picked_up:
-      logger.warning(
+      local_logger.warning(
         f"{self.__class__.__name__}: Attempted to register pickup for already grabbed invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
       return
     if applied:
-      logger.warning(
+      local_logger.warning(
         f"{self.__class__.__name__}: Attempted to register pickup for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
       return
@@ -88,14 +117,31 @@ class RYOProcessor(SupplierProcessorBase):
       _waiting_folder=self.waiting_folder,
     )
 
+    queue_key = self.assemble_queue_key(storenum, customer_id, pickup_date)
+
+    if items_to_log is not None:
+      items_to_log[queue_key] = (StatusCode.UNKNOWN, register_data)
+
     # Protect queue modification with lock for consistency
     async with self.lock:
-      self.file_pickup_queue[self.assemble_queue_key(storenum, customer_id, pickup_date)] = register_data
-    logger.info(f"{self.__class__.__name__}: Added {storenum} to pickup queue")
+      self.file_pickup_queue[queue_key] = register_data
+    local_logger.info(f"{self.__class__.__name__}: Added {storenum} to pickup queue")
 
-  async def register_application(
-    self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime, dropoff_date: datetime, current_week: bool
-  ) -> None:
+    if items_to_log is not None:
+      items_to_log[queue_key] = (StatusCode.SUCCESS, register_data)
+
+  @add_log_context(identifier_prefix=LogActionEnum.REGISTERED_DROPOFF, log_subfolder=LogActionEnum.REGISTERED_DROPOFF)
+  async def _register_dropoff(
+    self,
+    storenum: StoreNum,
+    customer_id: CustomerID,
+    pickup_date: datetime,
+    dropoff_date: datetime,
+    current_week: bool,
+    adapted_logger: Optional[ContextAdapter] = None,
+    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+  ):
+    local_logger = adapted_logger if adapted_logger is not None else logger
     key = f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
 
     picked_up = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
@@ -105,33 +151,37 @@ class RYOProcessor(SupplierProcessorBase):
       (self.supplier_name, storenum), DatabaseScheduleColumns.invoice_applied
     )
     if not picked_up:
-      logger.warning(
-        f"{self.__class__.__name__}: Attempted to register application for not-yet picked up invoice: {self.supplier_name}, {storenum}, {customer_id}"
+      local_logger.warning(
+        f"{self.__class__.__name__}: Attempted to register dropoff for not-yet picked up invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
       return
     if applied:
-      logger.warning(
-        f"{self.__class__.__name__}: Attempted to register application for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
+      local_logger.warning(
+        f"{self.__class__.__name__}: Attempted to register dropoff for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
       return
 
     # Protect queue operations with lock to prevent race conditions
     async with self.lock:
-      # first check if key is already in application queue
-      if key not in self.file_application_queue:
+      # first check if key is already in dropoff queue
+      if key not in self.file_dropoff_queue:
         try:
           matched_item = self.file_waiting_queue.pop(key)
         except KeyError:
-          logger.error(
+          local_logger.error(
             f"{self.__class__.__name__}: No waiting file found for: {self.supplier_name}, {storenum}, {customer_id}, {pickup_date.isoformat()}\n"
             f"Invoice may not have been picked up or is missing!"
           )
           return
 
-        self.file_application_queue[key] = matched_item
-        logger.info(f"{self.__class__.__name__}: Moved {matched_item.storenum} from waiting to application queue")
+        if items_to_log is not None:
+          items_to_log[key] = (StatusCode.SUCCESS, matched_item)
+
+        self.file_dropoff_queue[key] = matched_item
+        local_logger.info(f"{self.__class__.__name__}: Registered dropoff for: {matched_item.storenum}")
+
       else:
-        logger.warning(f"{self.__class__.__name__}: File already registered for application: {key}")
+        local_logger.warning(f"{self.__class__.__name__}: File already registered for dropoff: {key}")
 
   def assemble_queue_key(self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime) -> str:
     return f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
@@ -139,26 +189,51 @@ class RYOProcessor(SupplierProcessorBase):
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern:
+    dates = list(
+      rrule(
+        DAILY,
+        dtstart=(start_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0))
+        - relativedelta(weeks=1 if current_week else 0),
+        until=(end_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999))
+        - relativedelta(weeks=0 if current_week else 1),
+      )
+    )
+
+    years = {str(date.year) for date in dates}
+    months = {f"{date.month:02d}" for date in dates}
+    days = {f"{date.day:02d}" for date in dates}
+
+    years_part = "|".join(years)
+    months_part = "|".join(months)
+    days_part = "|".join(days)
 
     pattern = (
-      rf"^{customer_id}_"
-      r"[\d]+"
-      r"\.txt$"
+      rf"^EF{customer_id}_"
+      r"(?P<timestamp>"
+      rf"(?P<year>{years_part})"
+      rf"(?P<month>{months_part})"
+      rf"(?P<day>{days_part})"
+      r"(?P<hour>\d{2})"
+      r"(?P<minute>\d{2})"
+      r"(?P<second>\d{2})"
+      r"(?P<microsecond>\d{6})"
+      r")\.TXT$"
     )
     return compile(pattern)
 
-  def _archive_file(self, remote_file: str) -> None:
+  def _archive_file(self, remote_file: str, adapted_logger: Optional[ContextAdapter] = None) -> None:
+    local_logger = adapted_logger if adapted_logger is not None else logger
     archive_loc = (self.pickup_archive_ftp_folder / remote_file).as_posix()
-    with RYOSFTPClient(self.pickup_ftp_creds) as sftp_client:
+    with self.vendor_ftp(self.pickup_ftp_creds) as sftp_client:
       try:
         sftp_client.stat(archive_loc)
-        logger.warning(
+        local_logger.info(
           f"{self.__class__.__name__}: Archive file already exists at [yellow]{archive_loc}[/]\nDeleting new file instead of moving."
         )
 
       except IOError:
         sftp_client.rename((self.pickup_ftp_folder / remote_file).as_posix(), archive_loc)
-        logger.info(
+        local_logger.info(
           f"{self.__class__.__name__}: Archived [yellow]{remote_file}[/] to {self.pickup_archive_ftp_folder.as_posix()}",
           extra={"markup": True},
         )
@@ -167,11 +242,17 @@ class RYOProcessor(SupplierProcessorBase):
       sftp_client.remove((self.pickup_ftp_folder / remote_file).as_posix())
     pass
 
-  async def pickup_files(self) -> None:
+  @add_log_context(identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
+  async def _pickup_files(
+    self,
+    adapted_logger: Optional[ContextAdapter] = None,
+    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+  ):
+    local_logger = adapted_logger if adapted_logger is not None else logger
     if not self.file_pickup_queue:
       return
     async with self.lock:
-      with RYOSFTPClient(self.pickup_ftp_creds) as sftp_client:
+      with self.vendor_ftp(self.pickup_ftp_creds) as sftp_client:
         remote_files = [file_attr.filename for file_attr in sftp_client.listdir_attr(self.pickup_ftp_folder.as_posix())]
 
       items_to_dl: dict[str, FileRegisterData] = {}
@@ -185,13 +266,19 @@ class RYOProcessor(SupplierProcessorBase):
         if matched_files:
           file_meta.file_name = [m.string for m in matched_files]
           items_to_dl[key] = file_meta
-          logger.info(f"{self.__class__.__name__}: Matched {len(matched_files)} files for: {file_meta.storenum}")
+          if items_to_log is not None:
+            items_to_log[key] = (StatusCode.UNKNOWN, file_meta)
+          local_logger.info(f"{self.__class__.__name__}: Matched {len(matched_files)} files for: {file_meta.storenum}")
         else:
-          logger.warning(f"{self.__class__.__name__}: No files matched for: {key} with pattern {file_meta.file_pattern.pattern}")
+          local_logger.info(
+            f"{self.__class__.__name__}: No files matched for: {key} with pattern {file_meta.file_pattern.pattern}"
+          )
 
-      with self.pbar.add_task("Transferring Files", total=sum(len(v.file_name) for v in items_to_dl.values())) as move_files_task:
+      with self.pbar.add_task(
+        "Transferring Files", total=sum(len(v.file_name) for v in items_to_dl.values())
+      ) as move_files_task:
         dl_futures = []
-        for file_meta in items_to_dl.values():
+        for key, file_meta in items_to_dl.items():
           dl_futures.extend(
             to_thread(
               self._transfer_file_vend_to_main,
@@ -200,6 +287,9 @@ class RYOProcessor(SupplierProcessorBase):
               move_files_task=move_files_task,
               file_meta=file_meta,
               idx=idx,
+              key=key,
+              adapted_logger=adapted_logger if adapted_logger is not None else None,
+              items_to_log=items_to_log,
             )
             for idx, (filename, local_path) in enumerate(zip(file_meta.file_name, file_meta.file_loc))
           )
@@ -209,11 +299,16 @@ class RYOProcessor(SupplierProcessorBase):
       items_to_advance: dict[str, FileRegisterData] = {}
       for key, file_meta in items_to_dl.items():
         if all(file_meta.pickup_success.values()):
-          archive_futures.extend(to_thread(self._archive_file, filename) for filename in file_meta.file_name)
+          archive_futures.extend(
+            to_thread(self._archive_file, filename, adapted_logger if adapted_logger is not None else None)
+            for filename in file_meta.file_name
+          )
           items_to_advance[key] = file_meta
           schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
 
-          logger.info(f"{self.__class__.__name__}: Checking off {self.supplier_name}_{file_meta.storenum} invoice_grabbed")
+          local_logger.info(
+            f"{self.__class__.__name__}: Checking off {self.supplier_name}_{file_meta.storenum} invoice_grabbed"
+          )
           await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_grabbed)
 
       await gather(*archive_futures)
@@ -221,7 +316,7 @@ class RYOProcessor(SupplierProcessorBase):
     for key, item in items_to_advance.items():
       self.file_waiting_queue[key] = item
       self.file_pickup_queue.pop(key)
-      logger.info(f"{self.__class__.__name__}: Moved {item.storenum} to waiting queue")
+      local_logger.info(f"{self.__class__.__name__}: Moved {item.storenum} to waiting queue")
 
 
 # async def main():

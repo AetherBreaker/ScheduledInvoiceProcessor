@@ -8,21 +8,24 @@ from datetime import datetime
 from logging import getLogger
 from pathlib import PosixPath, PurePosixPath
 
+from aiohttp.web import Application, AppRunner, TCPSite
 from apscheduler.triggers.cron import CronTrigger
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
+from environment_init_vars import CWD, SETTINGS
 from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
 from supplier_processors import SupplierProcessorBase
-from supplier_processors.ryo import RYOProcessor
 from supplier_processors.sas import SASProcessor
 from typing_custom.enums import SuppliersEnum
 
-# Heartbeat file for health checks
+# from supplier_processors.ryo import RYOProcessor
 
 logger = getLogger(__name__)
 
+
+# Heartbeat file for health checks
 HEARTBEAT_FILE = PurePosixPath("/app/src/logs/heartbeat") if __debug__ else PosixPath("/app/src/logs/heartbeat")
 
 if not __debug__:
@@ -41,7 +44,7 @@ else:
 
 supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
   SuppliersEnum.SAS: SASProcessor,
-  SuppliersEnum.RYO: RYOProcessor,
+  # SuppliersEnum.RYO: RYOProcessor,
 }
 
 
@@ -82,13 +85,13 @@ async def reschedule_all_tasks():
       CronTrigger(
         minute="1-59/5",
         start_date=order.invoice_pickup_time,
-        end_date=order.invoice_application_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+        end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
       ),
       kwargs={
         "storenum": order.store,
         "customer_id": order.customer,
         "pickup_date": order.invoice_pickup_time,
-        "dropoff_date": order.invoice_application_time,
+        "dropoff_date": order.invoice_dropoff_time,
         "current_week": True,
       },
       id=f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
@@ -97,17 +100,17 @@ async def reschedule_all_tasks():
     )
 
     scheduler.add_job(
-      supplier_register[order.supplier]().register_application,
+      supplier_register[order.supplier]().register_dropoff,
       CronTrigger(
         minute="3-59/5",
-        start_date=order.invoice_application_time,
-        end_date=order.invoice_application_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+        start_date=order.invoice_dropoff_time,
+        end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
       ),
       kwargs={
         "storenum": order.store,
         "customer_id": order.customer,
         "pickup_date": order.invoice_pickup_time,
-        "dropoff_date": order.invoice_application_time,
+        "dropoff_date": order.invoice_dropoff_time,
         "current_week": True,
       },
       id=f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
@@ -123,13 +126,13 @@ async def reschedule_all_tasks():
       CronTrigger(
         minute="1-59/5",
         start_date=order.invoice_pickup_time,
-        end_date=order.invoice_application_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+        end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
       ),
       kwargs={
         "storenum": order.store,
         "customer_id": order.customer,
         "pickup_date": order.invoice_pickup_time,
-        "dropoff_date": order.invoice_application_time,
+        "dropoff_date": order.invoice_dropoff_time,
         "current_week": False,
       },
       id=f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
@@ -138,17 +141,17 @@ async def reschedule_all_tasks():
     )
 
     scheduler.add_job(
-      supplier_register[order.supplier]().register_application,
+      supplier_register[order.supplier]().register_dropoff,
       CronTrigger(
         minute="3-59/5",
-        start_date=order.invoice_application_time,
-        end_date=order.invoice_application_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+        start_date=order.invoice_dropoff_time,
+        end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
       ),
       kwargs={
         "storenum": order.store,
         "customer_id": order.customer,
         "pickup_date": order.invoice_pickup_time,
-        "dropoff_date": order.invoice_application_time,
+        "dropoff_date": order.invoice_dropoff_time,
         "current_week": False,
       },
       id=f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
@@ -241,6 +244,22 @@ async def main():  # sourcery skip: remove-empty-nested-block
 
     if __debug__:
       pass
+
+      app = Application()
+
+      app.router.add_static(
+        "/",
+        CWD / "logs",
+        show_index=True,
+        follow_symlinks=True,
+        append_version=True,
+      )
+
+      runner = AppRunner(app)
+      await runner.setup()
+      site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
+      await site.start()
+
       # scheduler.print_jobs()
 
       # global TESTING_THIS_WEEK

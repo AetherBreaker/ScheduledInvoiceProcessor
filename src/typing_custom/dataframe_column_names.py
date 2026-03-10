@@ -74,7 +74,7 @@ class DatabaseScheduleColumns(ColNameEnum):
   state = "state"
   expected_delivery_day = "expected_delivery_day"
   invoice_pickup_time = "invoice_pickup_time"
-  invoice_application_time = "invoice_application_time"
+  invoice_dropoff_time = "invoice_dropoff_time"
   invoice_grabbed = "invoice_grabbed"
   invoice_applied = "invoice_applied"
 
@@ -83,15 +83,16 @@ type DatabaseScheduleIndex = tuple[SuppliersEnum, StoreNum]
 
 
 class DatabaseOrderLogColumns(ColNameEnum):
-  __index_items__ = ["supplier", "store", "invoice_number", "customer", "action"]
+  __index_items__ = ["supplier", "store", "invoice_number", "customer", "action", "status", "action_datetime"]
 
   supplier = "supplier"
   store = "store"
-  po_number = "invoice_number"
+  invoice_number = "invoice_number"
   customer = "customer"
   action = "action"
+  status = "status"
   action_datetime = "action_datetime"
-  week_ending_date = "week_ending_date"
+  week_end_date = "week_end_date"
   notes = "notes"
 
 
