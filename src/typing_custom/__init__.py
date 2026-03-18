@@ -11,6 +11,8 @@ from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRend
 
 logger = getLogger(__name__)
 
+type SupplierQueueKey = str
+
 type StoreNum = int
 type CustomerID = str
 type InvoiceNum = str

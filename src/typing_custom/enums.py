@@ -98,10 +98,9 @@ class WeekdayEnum(CustomStrEnum):
 class LogActionEnum(CustomStrEnum):
   REGISTERED_PICKUP = auto()
   FILE_PICKED_UP = auto()
+  FILE_PREPROCESSED = auto()
   REGISTERED_DROPOFF = auto()
   FILE_DROPPED_OFF = auto()
-  FILE_PICKUP_ERROR = auto()
-  FILE_DROPOFF_ERROR = auto()
 
 
 class StatusCode(CustomStrEnum):

@@ -6,10 +6,10 @@ if __name__ == "__main__":
 
 import sys
 from logging import getLogger
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from environment_settings import Settings
+from typing_custom.custom_path import CustomPath
 
 logger = getLogger(__name__)
 
@@ -18,9 +18,9 @@ logger = getLogger(__name__)
 SETTINGS = Settings()  # type: ignore
 
 # Folder paths
-CWD = Path.cwd()
+CWD = CustomPath.cwd()
 
-SPEC_CWD = Path(__file__).parent if getattr(sys, "frozen", False) else Path.cwd()
+SPEC_CWD = CustomPath(__file__).parent if getattr(sys, "frozen", False) else CustomPath.cwd()
 
 # Support environment variable overrides for Docker secrets
 # In Docker, these will be set to /run/secrets/<secret_name>

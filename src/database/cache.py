@@ -200,9 +200,7 @@ class DatabaseCache(metaclass=SingletonType):
     )
     body["data"].append(
       ValueRange(
-        range=self._prev_week_schedule_range_format.format(
-          start="R1C1", end=f"R1C{len(DatabaseScheduleColumns.all_columns())}"
-        ),
+        range=self._prev_week_schedule_range_format.format(start="R1C1", end=f"R1C{len(DatabaseScheduleColumns.all_columns())}"),
         majorDimension=Dimension.rows,
         values=[DatabaseScheduleColumns.all_columns()],  # type: ignore
       )
@@ -263,16 +261,12 @@ class DatabaseCache(metaclass=SingletonType):
         sheet_id=None,
       )
 
-      self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_dropoff_time] = (
-        self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_dropoff_time].map(
-          lambda x: x - relativedelta(weeks=1) if x else x
-        )
-      )  # type: ignore
-      self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_pickup_time] = (
-        self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_pickup_time].map(
-          lambda x: x - relativedelta(weeks=1) if x else x
-        )
-      )  # type: ignore
+      self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_dropoff_time] = self.prev_week_schedule._cache.loc[
+        :, DatabaseScheduleColumns.invoice_dropoff_time
+      ].map(lambda x: x - relativedelta(weeks=1) if x else x)  # type: ignore
+      self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_pickup_time] = self.prev_week_schedule._cache.loc[
+        :, DatabaseScheduleColumns.invoice_pickup_time
+      ].map(lambda x: x - relativedelta(weeks=1) if x else x)  # type: ignore
 
       try:
         order_log_data: list[list[str | int | float]] = result["valueRanges"][2]["values"]
@@ -316,38 +310,43 @@ class DatabaseCache(metaclass=SingletonType):
       await to_thread(self._api_write)
 
   def _api_write(self):
-    with self._api_write_lock, self._db_write_queue_lock:
-      if self.queued_before_write_update_requests:
-        self.client.http_client.batch_update(
-          id=self._database_id,
-          body=self._before_write_update_body,
-        )
+    try:
+      with self._api_write_lock, self._db_write_queue_lock:
+        if self.queued_before_write_update_requests:
+          self.client.http_client.batch_update(
+            id=self._database_id,
+            body=self._before_write_update_body,
+          )
 
-        self._before_write_update_body = None  # Reset the update body after writing
+          self._before_write_update_body = None  # Reset the update body after writing
 
-      if self.queued_values_raw_updates:
-        self.client.http_client.values_batch_update(
-          id=self._database_id,
-          body=self._values_batch_update_raw_body,
-        )
+        if self.queued_values_raw_updates:
+          self.client.http_client.values_batch_update(
+            id=self._database_id,
+            body=self._values_batch_update_raw_body,
+          )
 
-        self._values_batch_update_raw_body = None  # Reset the update body after writing
+          self._values_batch_update_raw_body = None  # Reset the update body after writing
 
-      if self.queued_values_user_entered_updates:
-        self.client.http_client.values_batch_update(
-          id=self._database_id,
-          body=self._values_batch_update_user_entered_body,
-        )
+        if self.queued_values_user_entered_updates:
+          self.client.http_client.values_batch_update(
+            id=self._database_id,
+            body=self._values_batch_update_user_entered_body,
+          )
 
-        self._values_batch_update_user_entered_body = None  # Reset the update body after writing
+          self._values_batch_update_user_entered_body = None  # Reset the update body after writing
 
-      if self.queued_after_write_update_requests:
-        self.client.http_client.batch_update(
-          id=self._database_id,
-          body=self._after_write_update_body,
-        )
+        if self.queued_after_write_update_requests:
+          self.client.http_client.batch_update(
+            id=self._database_id,
+            body=self._after_write_update_body,
+          )
 
-        self._after_write_update_body = None  # Reset the update body after writing
+          self._after_write_update_body = None  # Reset the update body after writing
+    # Ensure that exceptions actually get logged while executing off main thread
+    except Exception as e:
+      logger.error(f"Error during API write: {e}")
+      raise e
 
   async def flip_to_new_week(self):
     await self.submit_queued_writes_to_pool()
@@ -554,9 +553,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
     if self._sheet_id is None:
       raise RuntimeError("This cache view does not support appending rows")
     index = (
-      tuple(getattr(values, col) for col in self._cache_index)
-      if len(self._cache_index) > 1
-      else getattr(values, self._cache_index[0])
+      tuple(getattr(values, col) for col in self._cache_index) if len(self._cache_index) > 1 else getattr(values, self._cache_index[0])
     )
 
     row = Series(values.model_dump(), dtype=object)
@@ -609,9 +606,7 @@ class CacheViewschedule(CacheViewBase[ScheduledOrderDBEntryModel]):
       yield item
 
   @overload
-  async def read_value(
-    self, index: DatabaseScheduleIndex, col: DatabaseScheduleColumns, validate: Literal[False] = False
-  ) -> Any: ...
+  async def read_value(self, index: DatabaseScheduleIndex, col: DatabaseScheduleColumns, validate: Literal[False] = False) -> Any: ...
 
   @overload
   async def read_value(
@@ -629,9 +624,7 @@ class CacheViewschedule(CacheViewBase[ScheduledOrderDBEntryModel]):
   async def get_rownum(self, index: DatabaseScheduleIndex) -> int:
     return await super().get_rownum(index)
 
-  async def write_value(
-    self, index: DatabaseScheduleIndex, column: DatabaseScheduleColumns, value: Any, ta: TypeAdapter
-  ) -> None:
+  async def write_value(self, index: DatabaseScheduleIndex, column: DatabaseScheduleColumns, value: Any, ta: TypeAdapter) -> None:
     return await super().write_value(index, column, value, ta)
 
   async def update_row(
@@ -686,9 +679,7 @@ class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
     return await super().read_typed_row(index, re_validate)
 
   @overload
-  async def read_value(
-    self, index: DatabaseOrderLogIndex, col: DatabaseOrderLogColumns, validate: Literal[False] = False
-  ) -> Any: ...
+  async def read_value(self, index: DatabaseOrderLogIndex, col: DatabaseOrderLogColumns, validate: Literal[False] = False) -> Any: ...
 
   @overload
   async def read_value(
@@ -706,14 +697,10 @@ class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
   async def get_rownum(self, index: DatabaseOrderLogIndex) -> int:
     return await super().get_rownum(index)
 
-  async def write_value(
-    self, index: DatabaseOrderLogIndex, column: DatabaseOrderLogColumns, value: Any, ta: TypeAdapter
-  ) -> None:
+  async def write_value(self, index: DatabaseOrderLogIndex, column: DatabaseOrderLogColumns, value: Any, ta: TypeAdapter) -> None:
     return await super().write_value(index, column, value, ta)
 
-  async def update_row(
-    self, index: DatabaseOrderLogIndex, values: Sequence[Any] | OrderLogDBEntryModel, raw: bool = True
-  ) -> None:
+  async def update_row(self, index: DatabaseOrderLogIndex, values: Sequence[Any] | OrderLogDBEntryModel, raw: bool = True) -> None:
     return await super().update_row(index, values, raw)
 
   async def append_row(self, values: OrderLogDBEntryModel, raw: bool = True) -> None:

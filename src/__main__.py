@@ -17,10 +17,9 @@ from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
 from supplier_processors import SupplierProcessorBase
+from supplier_processors.ryo import RYOProcessor
 from supplier_processors.sas import SASProcessor
 from typing_custom.enums import SuppliersEnum
-
-# from supplier_processors.ryo import RYOProcessor
 
 logger = getLogger(__name__)
 
@@ -44,7 +43,7 @@ else:
 
 supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
   SuppliersEnum.SAS: SASProcessor,
-  # SuppliersEnum.RYO: RYOProcessor,
+  SuppliersEnum.RYO: RYOProcessor,
 }
 
 
@@ -176,99 +175,110 @@ async def flip_week():
 
 
 async def main():  # sourcery skip: remove-empty-nested-block
-  with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
-    cache = DatabaseCache()
+  try:
+    with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
+      cache = DatabaseCache()
 
-    for processor in supplier_register.values():
-      processor(live.pbar)
+      for processor in supplier_register.values():
+        processor(live.pbar)
 
-    await cache.refresh_cache()
-    await reschedule_all_tasks()
+      await cache.refresh_cache()
+      await reschedule_all_tasks()
 
-    scheduler.add_job(
-      cache.refresh_cache,
-      CronTrigger(minute="*/30"),
-      id="refresh_cache",
-      replace_existing=True,
-    )
+      scheduler.add_job(
+        cache.refresh_cache,
+        CronTrigger(minute="*/30"),
+        id="refresh_cache",
+        replace_existing=True,
+      )
 
-    scheduler.add_job(
-      cache.submit_queued_writes_to_pool,
-      CronTrigger(second="*/30"),
-      id="submit_queued_writes_to_pool",
-      replace_existing=True,
-    )
+      scheduler.add_job(
+        cache.submit_queued_writes_to_pool,
+        CronTrigger(second="*/30"),
+        id="submit_queued_writes_to_pool",
+        replace_existing=True,
+      )
 
-    scheduler.add_job(
-      reschedule_all_tasks,
-      CronTrigger(
-        hour=5,
-      ),
-      id="reschedule_all_tasks",
-      replace_existing=True,
-    )
+      scheduler.add_job(
+        reschedule_all_tasks,
+        CronTrigger(
+          hour=5,
+        ),
+        id="reschedule_all_tasks",
+        replace_existing=True,
+      )
 
-    scheduler.add_job(
-      flip_week,
-      CronTrigger(
-        day_of_week="sun",
-        hour=0,
-        minute=0,
-        second=0,
-      ),
-      id="flip_week",
-      replace_existing=True,
-    )
+      scheduler.add_job(
+        flip_week,
+        CronTrigger(
+          day_of_week="sun",
+          hour=0,
+          minute=0,
+          second=0,
+        ),
+        id="flip_week",
+        replace_existing=True,
+      )
 
-    scheduler.add_job(
-      scheduler.print_jobs,
-      CronTrigger(minute="*/1"),
-      id="print_jobs",
-      replace_existing=True,
-    )
+      scheduler.add_job(
+        scheduler.print_jobs,
+        CronTrigger(minute="*/1"),
+        id="print_jobs",
+        replace_existing=True,
+      )
 
-    # Heartbeat job - writes timestamp every minute for health monitoring
-    scheduler.add_job(
-      write_heartbeat,
-      CronTrigger(minute="*/1"),
-      id="heartbeat",
-      replace_existing=True,
-    )
+      # Heartbeat job - writes timestamp every minute for health monitoring
+      scheduler.add_job(
+        write_heartbeat,
+        CronTrigger(minute="*/1"),
+        id="heartbeat",
+        replace_existing=True,
+      )
 
-    scheduler.start()
+      scheduler.start()
 
-    # Write initial heartbeat on startup
-    write_heartbeat()
+      # Write initial heartbeat on startup
+      write_heartbeat()
 
-    scheduler.print_jobs()
+      scheduler.print_jobs()
 
-    app = Application()
-    app.router.add_static("/", CWD / "logs", show_index=True, follow_symlinks=True, append_version=True)
-    runner = AppRunner(app)
-    await runner.setup()
-    site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
-    await site.start()
+      app = Application()
+      app.router.add_static("/", CWD / "logs", show_index=True, follow_symlinks=True, append_version=True)
+      runner = AppRunner(app)
+      await runner.setup()
+      site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
+      await site.start()
 
-    if __debug__:
-      pass
+      if __debug__:
+        pass
 
-      # scheduler.print_jobs()
+        # scheduler.print_jobs()
 
-      # global TESTING_THIS_WEEK
+        # global TESTING_THIS_WEEK
 
-      # TESTING_THIS_WEEK.clear()
-      # TESTING_THIS_WEEK.append(True)
+        # TESTING_THIS_WEEK.clear()
+        # TESTING_THIS_WEEK.append(True)
 
-      # await flip_week()
+        # await flip_week()
 
-      # scheduler.print_jobs()
+        # scheduler.print_jobs()
 
-      # await reschedule_all_tasks()
+        # await reschedule_all_tasks()
 
-      # scheduler.print_jobs()
+        # scheduler.print_jobs()
 
-    await Event().wait()
+      await Event().wait()
+  except Exception as e:
+    logger.exception(f"Fatal error in main: {e}")
+    exit(1)  # Exit with non-zero code to indicate failure to Coolify
 
 
 if __name__ == "__main__":
+  from sys import platform
+
+  if platform in ("win32", "cygwin", "cli"):
+    from winloop import run
+  else:
+    # if we're on apple or linux do this instead
+    from uvloop import run  # type: ignore
   run(main())

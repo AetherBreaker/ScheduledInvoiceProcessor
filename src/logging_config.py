@@ -1,13 +1,11 @@
 import atexit
 import logging
 from collections.abc import Callable
-from contextvars import ContextVar
 from datetime import datetime
 from functools import wraps
 from itertools import zip_longest
 from logging import Handler
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, TimedRotatingFileHandler
-from pathlib import Path
 from queue import Queue
 from secrets import token_urlsafe
 from typing import TYPE_CHECKING, Coroutine, Literal, Optional
@@ -17,6 +15,7 @@ from environment_init_vars import SETTINGS
 from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
 from rich.traceback import Traceback
+from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum, StatusCode
 from utils import get_last_sat, get_next_sat
 
@@ -51,7 +50,7 @@ class FixedRichHandler(RichHandler):
         ConsoleRenderable: Renderable to display log.
     """
 
-    pathpath = Path(record.pathname)
+    pathpath = CustomPath(record.pathname)
 
     if "site-packages" in pathpath.parts:
       libname_index = pathpath.parts.index("site-packages") + 1
@@ -85,7 +84,7 @@ class FixedRichHandler(RichHandler):
 class FixedLogRecord(logging.LogRecord):
   def __init__(self, *args, **kwargs):
     global max_width
-    pathpath = Path(args[2])
+    pathpath = CustomPath(args[2])
 
     if "site-packages" in pathpath.parts:
       libname_index = pathpath.parts.index("site-packages") + 1
@@ -196,37 +195,6 @@ class DynamicQueueListener(QueueListener):
           handler.handle(record)
 
 
-class ContextAdapter(logging.LoggerAdapter):
-  def __init__(self, logger, context_var: ContextVar[str | None]):
-    """
-    Initialize the adapter with a logger and an optional dict-like object
-    which provides contextual information. This constructor signature
-    allows easy stacking of LoggerAdapters, if so desired.
-
-    You can effectively pass keyword arguments as shown in the
-    following example:
-
-    adapter = LoggerAdapter(someLogger, dict(p1=v1, p2="v2"))
-
-    By default, LoggerAdapter objects will drop the "extra" argument
-    passed on the individual log calls to use its own instead.
-
-    Initializing it with merge_extra=True will instead merge both
-    maps when logging, the individual call extra taking precedence
-    over the LoggerAdapter instance extra
-
-    .. versionchanged:: 3.13
-        The *merge_extra* argument was added.
-    """
-    self.context_var = context_var
-    self.logger = logger
-
-  def process(self, msg, kwargs):
-    kwargs["extra"] = kwargs.get("extra", {})
-    kwargs["extra"]["ctx"] = self.context_var.get()
-    return msg, kwargs
-
-
 class ContextFilter(logging.Filter):
   def __init__(self, identifier: str):
     super().__init__()
@@ -259,23 +227,23 @@ def add_log_context[**TP, TR](
     async def add_log_context_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
       self_obj: "SupplierProcessorBase" = args[0]  # type: ignore
 
-      set_ctx_var = self_obj._ctx_var
+      set_ctx_var = self_obj.ctx_var
 
       unique_id = "".join([c for c in token_urlsafe(10) if c.isalnum()])
       now = datetime.now().strftime("%Y%m%d_%H%M%S%f")
 
-      identifier = f"{self_obj._identifier_prefix}_{identifier_prefix}_{now}_{unique_id}"  # type: ignore
+      identifier = f"{self_obj.identifier_prefix}_{identifier_prefix}_{now}_{unique_id}"  # type: ignore
 
-      log_loc_final = self_obj._log_file_loc
+      log_loc_final = self_obj.log_file_loc
       if log_subfolder is not None:
         log_loc_final = log_loc_final / log_subfolder
-      log_loc_final.mkdir(exist_ok=True)
+      log_loc_final.mkdir(exist_ok=True, parents=True)
 
       log_file_loc = log_loc_final / f"{identifier}.txt"
 
       with set_ctx_var.set(identifier):
         logger = logging.getLogger(func.__module__)
-        adapted_logger = ContextAdapter(logging.getLogger(func.__module__), set_ctx_var)
+        adapted_logger = logging.LoggerAdapter(logging.getLogger(func.__module__), extra={"ctx": set_ctx_var}, merge_extra=True)
 
         context_file_handler = logging.FileHandler(log_file_loc)
 
@@ -335,7 +303,7 @@ def add_log_context[**TP, TR](
               else "Nothing logged",
             }
             if file_meta.invoice_nums:
-              for _, invoice_num in zip_longest(file_meta.file_name, file_meta.invoice_nums.values(), fillvalue=""):
+              for _, invoice_num in zip_longest(file_meta.file_names, file_meta.invoice_nums.values(), fillvalue=""):
                 params["invoice_num"] = invoice_num
                 await self_obj.cache.order_log.log_action(**params)
             else:
@@ -346,7 +314,7 @@ def add_log_context[**TP, TR](
   return add_log_context_under
 
 
-CWD = Path.cwd()
+CWD = CustomPath.cwd()
 
 LOGGING_BASE_NAME = "ScheduledOrderMiddleman"
 

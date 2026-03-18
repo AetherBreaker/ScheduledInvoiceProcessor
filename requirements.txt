@@ -1,9 +1,9 @@
 aiorwlock
 aiologic
-APScheduler
+APScheduler = 3.*.*
 gspread
 rich
-pandas
+pandas[performance]
 pandas-stubs
 paramiko
 python-dateutil
