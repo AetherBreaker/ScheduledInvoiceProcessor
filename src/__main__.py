@@ -246,7 +246,7 @@ async def main():  # sourcery skip: remove-empty-nested-block
       app.router.add_static("/", CWD / "logs", show_index=True, follow_symlinks=True, append_version=True)
       runner = AppRunner(app)
       await runner.setup()
-      site = TCPSite(runner, "0.0.0.0", SETTINGS.file_serve_port)
+      site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
       await site.start()
 
       if __debug__:
