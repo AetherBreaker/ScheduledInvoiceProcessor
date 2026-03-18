@@ -6,7 +6,7 @@ if __name__ == "__main__":
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from re import compile
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, BinaryIO, Optional
 
 from dateutil.relativedelta import SA, relativedelta
 from dateutil.utils import today as _today
@@ -20,6 +20,21 @@ if TYPE_CHECKING:
 def paramiko_pbar_callback(pbar: "ProgressCustom", task_id: "CustomTaskID") -> Callable[[int, int], None]:
   def callback_transferred_bytes(transferred: int, total: int):
     pbar.update(task_id, completed=transferred, total=total)
+
+  return callback_transferred_bytes
+
+
+def ftp_writefile_pbar_callback(pbar: "ProgressCustom", task_id: "CustomTaskID", file_stream: BinaryIO) -> Callable[[bytes], None]:
+  def callback_save_bytes(bytes_received: bytes):
+    file_stream.write(bytes_received)
+    pbar.update(task_id, advance=len(bytes_received))
+
+  return callback_save_bytes
+
+
+def ftp_pbar_callback(pbar: "ProgressCustom", task_id: "CustomTaskID") -> Callable[[bytes], None]:
+  def callback_transferred_bytes(bytes_received: bytes):
+    pbar.update(task_id, advance=len(bytes_received))
 
   return callback_transferred_bytes
 
