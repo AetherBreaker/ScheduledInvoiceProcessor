@@ -102,11 +102,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _file_waiting_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_dropoff_queue: dict[SupplierQueueKey, FileRegisterData]
   _queue_ta = TypeAdapter(dict[str, FileRegisterData])
-<<<<<<< HEAD
   _file_queue_backup_folder: CustomPath = CWD / "queue_backups"
-=======
-  _file_queue_backup_folder: CustomPath = CWD / "queue backups"
->>>>>>> 6f164e14535e5a0b199f06de11e016705b323a40
   _lock: Lock = Lock()
 
   vendor_ftp: type
