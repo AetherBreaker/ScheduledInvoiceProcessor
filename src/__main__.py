@@ -25,7 +25,11 @@ logger = getLogger(__name__)
 
 
 # Heartbeat file for health checks
+<<<<<<< HEAD
 HEARTBEAT_FILE = PurePosixPath("/app/src/logs/heartbeat.txt") if __debug__ else PosixPath("/app/src/logs/heartbeat.txt")
+=======
+HEARTBEAT_FILE = PurePosixPath("/app/src/logs/heartbeat") if __debug__ else PosixPath("/app/src/logs/heartbeat")
+>>>>>>> 6f164e14535e5a0b199f06de11e016705b323a40
 
 if not __debug__:
 

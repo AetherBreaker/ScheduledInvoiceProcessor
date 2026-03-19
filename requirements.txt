@@ -1,13 +1,18 @@
 aiorwlock
 aiologic
+<<<<<<< HEAD
 aiohttp
 APScheduler==3.*
+=======
+APScheduler = 3.*.*
+>>>>>>> 6f164e14535e5a0b199f06de11e016705b323a40
 gspread
 rich
 pandas[performance]
 pandas-stubs
 paramiko
 types-python-dateutil
+<<<<<<< HEAD
 python-dateutil
 python-dotenv
 pydantic
@@ -15,3 +20,8 @@ pydantic-settings
 tzdata
 uvloop; sys_platform=="linux"
 winloop; sys_platform=="win32"
+=======
+python-dotenv
+pydantic
+pydantic-settings
+>>>>>>> 6f164e14535e5a0b199f06de11e016705b323a40

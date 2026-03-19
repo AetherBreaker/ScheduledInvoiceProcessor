@@ -26,8 +26,13 @@ RUN adduser \
     appuser
 
 # Install procps for health check (pgrep command)
+<<<<<<< HEAD
 # RUN apt-get update && apt-get install -y --no-install-recommends procps && \
 #     rm -rf /var/lib/apt/lists/*
+=======
+RUN apt-get update && apt-get install -y --no-install-recommends procps && \
+    rm -rf /var/lib/apt/lists/*
+>>>>>>> 6f164e14535e5a0b199f06de11e016705b323a40
 
 # Create directories for runtime data with proper permissions
 RUN mkdir -p /app/src/logs /app/src/queue_backups && \
@@ -58,10 +63,15 @@ ENV PYTHONPATH=/app/src
 # If the scheduler is stuck or crashed, heartbeat won't be updated
 HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
     CMD python3 -c "from pathlib import Path; from datetime import datetime, timedelta; \
+<<<<<<< HEAD
     hb = Path('/app/src/logs/heartbeat.txt'); \
     exit(0 if hb.exists() and datetime.fromisoformat(hb.read_text()) > (datetime.now() - timedelta(minutes=3)) else 1)"
 # HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=120s \
 #     CMD ["healthcheck.sh"]
+=======
+        hb = Path('/app/src/logs/heartbeat'); \
+        exit(0 if hb.exists() and datetime.fromisoformat(hb.read_text()) > datetime.now() - timedelta(minutes=3) else 1)"
+>>>>>>> 6f164e14535e5a0b199f06de11e016705b323a40
 
 # Run the application.
 WORKDIR /app/src
