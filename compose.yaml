@@ -16,7 +16,7 @@ services:
     # Persist logs and queue backups
     volumes:
       - ./logs:/app/src/logs
-      - ./queue backups:/app/src/queue backups
+      - ./queue_backups:/app/src/queue_backups
 
     # Environment variables (customize as needed)
     environment:
