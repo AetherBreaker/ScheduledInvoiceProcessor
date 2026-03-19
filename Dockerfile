@@ -56,12 +56,12 @@ ENV PYTHONPATH=/app/src
 
 # Health check - verifies heartbeat file was updated within last 3 minutes
 # If the scheduler is stuck or crashed, heartbeat won't be updated
-HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
-    CMD python3 -c "from pathlib import Path; from datetime import datetime, timedelta; \
-    hb = Path('/app/src/logs/heartbeat.txt'); \
-    exit(0 if hb.exists() and datetime.fromisoformat(hb.read_text()) > (datetime.now() - timedelta(minutes=3)) else 1)"
-# HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=120s \
-#     CMD ["healthcheck.sh"]
+# HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+#     CMD python3 -c "from pathlib import Path; from datetime import datetime, timedelta; \
+#     hb = Path('/app/src/logs/heartbeat.txt'); \
+#     exit(0 if hb.exists() and datetime.fromisoformat(hb.read_text()) > (datetime.now() - timedelta(minutes=3)) else 1)"
+HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=120s \
+    CMD bash -c "[[ $(date -d "$(cat /app/src/logs/heartbeat.txt)" +"%s") -gt $(($(date +"%s") - 180)) ]] && exit 0 || exit 1"
 
 # Run the application.
 WORKDIR /app/src
