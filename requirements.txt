@@ -13,3 +13,4 @@ pydantic
 pydantic-settings
 uvloop; sys_platform=="linux"
 winloop; sys_platform=="win32"
+tzdata
