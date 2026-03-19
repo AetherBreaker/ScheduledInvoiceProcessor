@@ -45,6 +45,7 @@ class Settings(BaseSettings):
   sas_ftp_creds_file: Annotated[Path, Field(alias="SAS_FTP_CREDS_FILE")]
   ryo_ftp_creds_file: Annotated[Path, Field(alias="RYO_FTP_CREDS_FILE")]
 
+  file_serve_public_domain: Annotated[str, Field(alias="FILE_SERVE_PUBLIC_DOMAIN")] = "som.sweetfiretobacco.com"
   file_serve_host: Annotated[str, Field(alias="FILE_SERVE_HOST")] = "localhost"
   file_serve_port: Annotated[int, Field(alias="FILE_SERVE_PORT")] = 8080
 

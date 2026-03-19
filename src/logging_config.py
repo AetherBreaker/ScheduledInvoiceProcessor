@@ -4,13 +4,11 @@ from collections.abc import Callable
 from datetime import datetime
 from functools import wraps
 from itertools import zip_longest
-from logging import Handler
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, TimedRotatingFileHandler
 from queue import Queue
 from secrets import token_urlsafe
 from typing import TYPE_CHECKING, Coroutine, Literal, Optional
 
-from aiologic import Lock
 from environment_init_vars import SETTINGS
 from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
@@ -29,6 +27,8 @@ PROJECT_NAME = "ScheduledOrderMiddleman"
 max_width = 20
 
 LOGGING_TIMESTAMP_FORMAT = "%b, %d %a %I:%M %p"
+
+
 
 
 class FixedRichHandler(RichHandler):
@@ -149,51 +149,6 @@ class FixedFormatter(logging.Formatter):
     return s
 
 
-class DynamicQueueListener(QueueListener):
-  def __init__(self, queue, *handlers, respect_handler_level=True):
-    """
-    Initialise an instance with the specified queue and
-    handlers.
-    """
-    self.queue = queue
-    self.handlers: list[Handler] = list(handlers)  # type: ignore
-    self._thread = None
-    self.respect_handler_level = respect_handler_level
-    self._handler_lock = Lock()
-
-  def addHandler(self, hdlr):
-    """
-    Add the specified handler to this logger.
-    """
-    with self._handler_lock:
-      if hdlr not in self.handlers:
-        self.handlers.append(hdlr)
-
-  def removeHandler(self, hdlr):
-    """
-    Remove the specified handler from this logger.
-    """
-    with self._handler_lock:
-      if hdlr in self.handlers:
-        self.handlers.remove(hdlr)
-
-  def handle(self, record):
-    """
-    Handle a record.
-
-    This just loops through the handlers offering them the record
-    to handle.
-    """
-    record = self.prepare(record)
-    with self._handler_lock:
-      for handler in self.handlers:
-        if not self.respect_handler_level:
-          process = True
-        else:
-          process = record.levelno >= handler.level
-        if process:
-          handler.handle(record)
-
 
 class ContextFilter(logging.Filter):
   def __init__(self, identifier: str):
@@ -209,6 +164,8 @@ FILE_FORMATTER = FixedFormatter(
   datefmt=LOGGING_TIMESTAMP_FORMAT,
   style="{",
 )
+
+HOST_NAME = f"{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}" if SETTINGS.file_serve_public_domain is None else SETTINGS.file_serve_public_domain
 
 
 def add_log_context[**TP, TR](
@@ -266,7 +223,7 @@ def add_log_context[**TP, TR](
             status=StatusCode.FAILURE,
             action_datetime=datetime.now(),
             week_end_date=None,
-            note=f"http://{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}/{'/'.join(log_file_loc.parts[-3:-1])}"
+            note=f"https://{HOST_NAME}/{'/'.join(log_file_loc.parts[-3:-1])}"
             if log_file_loc.exists()
             else "Nothing logged",
           )
