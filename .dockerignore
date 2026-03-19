@@ -1,8 +1,5 @@
 # Include any files or directories that you don't want to be copied to your
 # container here (e.g., local build artifacts, temporary files, etc.).
-#
-# For more help, visit the .dockerignore file reference guide at
-# https://docs.docker.com/go/build-context-dockerignore/
 
 **/.DS_Store
 **/__pycache__
@@ -31,3 +28,18 @@
 **/values.dev.yaml
 LICENSE
 README.md
+
+# CRITICAL: Exclude ALL secrets from being copied into the image
+secrets/
+*.json
+db-key.json
+sas_ftp_creds.json
+sft_creds.json
+.env
+
+# Exclude runtime data
+logs/
+queue_backups/
+*.log
+*.db
+*.sqlite

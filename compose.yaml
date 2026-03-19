@@ -1,48 +1,55 @@
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Docker Compose reference guide at
-# https://docs.docker.com/go/compose-spec-reference/
-
-# Here the instructions define your application as a service called "server".
-# This service is built from the Dockerfile in the current directory.
-# You can add other services your application may depend on here, such as a
-# database or a cache. For examples, see the Awesome Compose repository:
-# https://github.com/docker/awesome-compose
 services:
-  server:
+  scheduler:
     build:
       context: .
-  # ports:
-  # - 8000:8000
-# The commented out section below is an example of how to define a PostgreSQL
-# database that your application can use. `depends_on` tells Docker Compose to
-# start the database before your application. The `db-data` volume persists the
-# database data between container restarts. The `db-password` secret is used
-# to set the database password. You must create `db/password.txt` and add
-# a password of your choosing to it before running `docker compose up`.
-#     depends_on:
-#       db:
-#         condition: service_healthy
-#   db:
-#     image: postgres
-#     restart: always
-#     user: postgres
-#     secrets:
-#       - db-password
-#     volumes:
-#       - db-data:/var/lib/postgresql/data
-#     environment:
-#       - POSTGRES_DB=example
-#       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
-#     expose:
-#       - 5432
-#     healthcheck:
-#       test: [ "CMD", "pg_isready" ]
-#       interval: 10s
-#       timeout: 5s
-#       retries: 5
-# volumes:
-#   db-data:
-# secrets:
-#   db-password:
-#     file: db/password.txt
+      dockerfile: Dockerfile
+    container_name: scheduled-order-middleman
+    restart: unless-stopped
+    image: jogdensft/scheduledordermiddleman-scheduler:latest
 
+    # Mount secrets as files
+    secrets:
+      - db-key
+      - sas_ftp_creds
+      - sft_creds
+
+    # Persist logs and queue backups
+    volumes:
+      - ./logs:/app/src/logs
+<<<<<<< HEAD
+      - ./queue_backups:/app/src/queue_backups
+=======
+      - ./queue backups:/app/src/queue backups
+>>>>>>> 6f164e14535e5a0b199f06de11e016705b323a40
+
+    # Environment variables (customize as needed)
+    environment:
+      - TZ=America/New_York
+      # Override secret file paths to use Docker secrets location
+      - GOOGLE_API_KEY_FILE=/run/secrets/db-key
+      - SFT_WEBSITE_CREDS_FILE=/run/secrets/sft_creds
+      - SAS_FTP_CREDS_FILE=/run/secrets/sas_ftp_creds
+      - RYO_FTP_CREDS_FILE=/run/secrets/ryo_ftp_creds
+      # Database configuration (from production.env - optional overrides)
+      # Uncomment and modify these to override production.env values
+      - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
+      - DATABASE_BASE_SCHEDULE_ID=184714754
+      - DATABASE_ORDER_LOG_ID=850759335
+      - DATABASE_REFRESH_INTERVAL=3600
+      - DATABASE_WRITE_INTERVAL=30
+
+    # Healthcheck (optional - adjust based on your needs)
+    # healthcheck:
+    #   test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+
+# Define secrets - these reference files on the host
+secrets:
+  db-key:
+    file: ./secrets/db-key.json
+  sas_ftp_creds:
+    file: ./secrets/sas_ftp_creds.json
+  sft_creds:
+    file: ./secrets/sft_creds.json

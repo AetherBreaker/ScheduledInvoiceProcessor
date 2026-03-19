@@ -5,21 +5,32 @@ if __name__ == "__main__":
 
 from asyncio import get_running_loop, sleep, to_thread
 from collections.abc import AsyncIterator, Sequence
+from contextlib import suppress
 from copy import deepcopy
+from datetime import datetime
 from logging import getLogger
 from typing import Any, Literal, Optional, overload
 
 from aiologic import Lock
 from aiorwlock import RWLock
 from dateutil.relativedelta import SA, relativedelta
-from environment_init_vars import GOOGLE_API_KEY_FILE, SETTINGS
+from environment_init_vars import SETTINGS
 from google.oauth2.service_account import Credentials
 from gspread import Client, authorize
 from gspread.http_client import BackOffHTTPClient
 from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption, finditem
 from pandas import DataFrame, Series
 from pydantic import TypeAdapter
-from typing_custom import InvoiceNum, ValueRange, ValuesBatchUpdateBody
+from typing_custom import (
+  AppendDimension,
+  BatchUpdateBody,
+  CustomerID,
+  InvoiceNum,
+  Request,
+  StoreNum,
+  ValueRange,
+  ValuesBatchUpdateBody,
+)
 from typing_custom.abc import SingletonType
 from typing_custom.dataframe_column_names import (
   ColNameEnum,
@@ -28,6 +39,7 @@ from typing_custom.dataframe_column_names import (
   DatabaseScheduleColumns,
   DatabaseScheduleIndex,
 )
+from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 from utils import today
 from validation import CustomBaseModel
 from validation.apply_model import build_typed_dataframe
@@ -49,26 +61,38 @@ class DatabaseCache(metaclass=SingletonType):
 
   _tab_id_schedule_base_sheet = SETTINGS.database_base_schedule_id
 
-  _creds = Credentials.from_service_account_file(GOOGLE_API_KEY_FILE, scopes=DEFAULT_SCOPES)
+  _creds = Credentials.from_service_account_file(SETTINGS.googe_api_key_file, scopes=DEFAULT_SCOPES)
 
   _schedule_tab_range = f"'Current Week'!R2C1:C{len(DatabaseScheduleColumns.all_columns())}"
   _prev_week_schedule_tab_range = f"'Previous Week'!R2C1:C{len(DatabaseScheduleColumns.all_columns())}"
-  _order_log_tab_range = f"'Processed Orders'!R2C1:C{len(DatabaseOrderLogColumns.all_columns())}"
+  _order_log_tab_range = f"'Processing Log'!R2C1:C{len(DatabaseOrderLogColumns.all_columns())}"
 
   _schedule_range_format_single = "'Current Week'!{cell}"
   _prev_week_schedule_range_format_single = "'Previous Week'!{cell}"
-  _order_log_range_format_single = "'Processed Orders'!{cell}"
+  _order_log_range_format_single = "'Processing Log'!{cell}"
 
   _schedule_range_format = "'Current Week'!{start}:{end}"
   _prev_week_schedule_range_format = "'Previous Week'!{start}:{end}"
-  _order_log_range_format = "'Processed Orders'!{start}:{end}"
+  _order_log_range_format = "'Processing Log'!{start}:{end}"
 
-  _db_write_body_base = ValuesBatchUpdateBody(
+  _db_values_batch_update_body_base = ValuesBatchUpdateBody(
     valueInputOption=ValueInputOption.raw,
     includeValuesInResponse=False,
     responseValueRenderOption=ValueRenderOption.unformatted,
     responseDateTimeRenderOption=DateTimeOption.formatted_string,
     data=[],
+  )
+
+  _db_values_batch_update_body_base_userentered = ValuesBatchUpdateBody(
+    valueInputOption=ValueInputOption.user_entered,
+    includeValuesInResponse=False,
+    responseValueRenderOption=ValueRenderOption.unformatted,
+    responseDateTimeRenderOption=DateTimeOption.formatted_string,
+    data=[],
+  )
+
+  _db_batch_update_body_base = BatchUpdateBody(
+    requests=[],
   )
 
   reauth_interval = 2700
@@ -87,14 +111,17 @@ class DatabaseCache(metaclass=SingletonType):
     # self._read_write_lock = RWLock(fast=True)
 
     self._api_write_lock = Lock()
-    self._update_queue_lock = Lock()
+    self._db_write_queue_lock = Lock()
 
     self._client = None
     self._client_last_auth_time = None
 
     self._api_last_call_time = None
 
-    self._update_body: Optional[ValuesBatchUpdateBody] = None
+    self._values_batch_update_raw_body: Optional[ValuesBatchUpdateBody] = None
+    self._values_batch_update_user_entered_body: Optional[ValuesBatchUpdateBody] = None
+    self._before_write_update_body: Optional[BatchUpdateBody] = None
+    self._after_write_update_body: Optional[BatchUpdateBody] = None
 
     self.loop = get_running_loop()
 
@@ -109,24 +136,60 @@ class DatabaseCache(metaclass=SingletonType):
     return self._client  # type: ignore
 
   @property
-  def queued_updates(self) -> list[ValueRange]:
-    if self._update_body is None:
-      self._update_body = deepcopy(self._db_write_body_base)
-    return self._update_body["data"]
+  def queued_values_raw_updates(self) -> list[ValueRange]:
+    if self._values_batch_update_raw_body is None:
+      self._values_batch_update_raw_body = deepcopy(self._db_values_batch_update_body_base)
+    return self._values_batch_update_raw_body["data"]
+
+  @property
+  def queued_values_user_entered_updates(self) -> list[ValueRange]:
+    if self._values_batch_update_user_entered_body is None:
+      self._values_batch_update_user_entered_body = deepcopy(self._db_values_batch_update_body_base_userentered)
+    return self._values_batch_update_user_entered_body["data"]
+
+  @property
+  def queued_before_write_update_requests(self) -> list[Request]:
+    if self._before_write_update_body is None:
+      self._before_write_update_body = deepcopy(self._db_batch_update_body_base)
+    return self._before_write_update_body["requests"]
+
+  @property
+  def queued_after_write_update_requests(self) -> list[Request]:
+    if self._after_write_update_body is None:
+      self._after_write_update_body = deepcopy(self._db_batch_update_body_base)
+    return self._after_write_update_body["requests"]
 
   @property
   def get_week_ending_name(self) -> str:
     last_saturday = today() + relativedelta(weekday=SA(-2))
     return f"Week Ending {last_saturday.year:0>4}/{last_saturday.month:0>2}/{last_saturday.day:0>2}"
 
-  async def queue_db_api_update(self, value: ValueRange) -> None:
-    async with self._update_queue_lock:
-      if self._update_body is None:
-        self._update_body = deepcopy(self._db_write_body_base)
-      self._update_body["data"].append(value)
+  async def queue_db_api_values_raw_update(self, value: ValueRange) -> None:
+    async with self._db_write_queue_lock:
+      if self._values_batch_update_raw_body is None:
+        self._values_batch_update_raw_body = deepcopy(self._db_values_batch_update_body_base)
+      self._values_batch_update_raw_body["data"].append(value)
+
+  async def queue_db_api_values_user_entered_update(self, value: ValueRange) -> None:
+    async with self._db_write_queue_lock:
+      if self._values_batch_update_user_entered_body is None:
+        self._values_batch_update_user_entered_body = deepcopy(self._db_values_batch_update_body_base_userentered)
+      self._values_batch_update_user_entered_body["data"].append(value)
+
+  async def queue_db_api_before_write_update(self, request: Request) -> None:
+    async with self._db_write_queue_lock:
+      if self._before_write_update_body is None:
+        self._before_write_update_body = deepcopy(self._db_batch_update_body_base)
+      self._before_write_update_body["requests"].append(request)
+
+  async def queue_db_api_after_write_update(self, format_request: Request) -> None:
+    async with self._db_write_queue_lock:
+      if self._after_write_update_body is None:
+        self._after_write_update_body = deepcopy(self._db_batch_update_body_base)
+      self._after_write_update_body["requests"].append(format_request)
 
   def update_db_header(self) -> None:
-    body = deepcopy(self._db_write_body_base)
+    body = deepcopy(self._db_values_batch_update_body_base)
 
     body["data"].append(
       ValueRange(
@@ -182,7 +245,11 @@ class DatabaseCache(metaclass=SingletonType):
 
       schedule_data: list[list[str | int | float]] = result["valueRanges"][0]["values"]
       self.schedule = CacheViewschedule(
-        raw_data=schedule_data, columns=DatabaseScheduleColumns, types_model=ScheduledOrderDBEntryModel, cache_core=self
+        raw_data=schedule_data,
+        columns=DatabaseScheduleColumns,
+        types_model=ScheduledOrderDBEntryModel,
+        cache_core=self,
+        sheet_id=None,
       )
 
       prev_week_schedule_data: list[list[str | int | float]] = result["valueRanges"][1]["values"]
@@ -191,13 +258,12 @@ class DatabaseCache(metaclass=SingletonType):
         columns=DatabaseScheduleColumns,
         types_model=ScheduledOrderDBEntryModel,
         cache_core=self,
+        sheet_id=None,
       )
 
-      self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_application_time] = (
-        self.prev_week_schedule._cache.loc[
-          :, DatabaseScheduleColumns.invoice_application_time
-        ].map(lambda x: x - relativedelta(weeks=1) if x else x)
-      )  # type: ignore
+      self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_dropoff_time] = self.prev_week_schedule._cache.loc[
+        :, DatabaseScheduleColumns.invoice_dropoff_time
+      ].map(lambda x: x - relativedelta(weeks=1) if x else x)  # type: ignore
       self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_pickup_time] = self.prev_week_schedule._cache.loc[
         :, DatabaseScheduleColumns.invoice_pickup_time
       ].map(lambda x: x - relativedelta(weeks=1) if x else x)  # type: ignore
@@ -209,11 +275,25 @@ class DatabaseCache(metaclass=SingletonType):
           columns=DatabaseOrderLogColumns,
           types_model=OrderLogDBEntryModel,
           cache_core=self,
+          sheet_id=SETTINGS.database_order_log_id,
         )
       except KeyError:
         self.order_log = CacheViewOrderLog(
-          raw_data=[], columns=DatabaseOrderLogColumns, types_model=OrderLogDBEntryModel, cache_core=self
+          raw_data=[],
+          columns=DatabaseOrderLogColumns,
+          types_model=OrderLogDBEntryModel,
+          cache_core=self,
+          sheet_id=SETTINGS.database_order_log_id,
         )
+
+      self._original_sizes = {
+        self.schedule._range_format: (len(self.schedule._cache), len(self.schedule._columns)),
+        self.prev_week_schedule._range_format: (
+          len(self.prev_week_schedule._cache),
+          len(self.prev_week_schedule._columns),
+        ),
+        self.order_log._range_format: (len(self.order_log._cache), len(self.order_log._columns)),
+      }
 
       # self.schedule._cache.to_csv("debug_schedule.csv")
       # self.prev_week_schedule._cache.to_csv("debug_prev_week_schedule.csv")
@@ -221,100 +301,129 @@ class DatabaseCache(metaclass=SingletonType):
       # pass
 
   async def submit_queued_writes_to_pool(self) -> None:
-    if not self.queued_updates:
-      return
-
-    await to_thread(self._api_write)
+    if (
+      self.queued_values_raw_updates
+      or self.queued_values_user_entered_updates
+      or self.queued_before_write_update_requests
+      or self.queued_after_write_update_requests
+    ):
+      await to_thread(self._api_write)
 
   def _api_write(self):
-    with self._api_write_lock, self._update_queue_lock:
-      self.client.http_client.values_batch_update(
-        id=self._database_id,
-        body=self._update_body,
-      )
+    try:
+      with self._api_write_lock, self._db_write_queue_lock:
+        if self.queued_before_write_update_requests:
+          self.client.http_client.batch_update(
+            id=self._database_id,
+            body=self._before_write_update_body,
+          )
 
-      self._update_body = None  # Reset the update body after writing
+          self._before_write_update_body = None  # Reset the update body after writing
+
+        if self.queued_values_raw_updates:
+          self.client.http_client.values_batch_update(
+            id=self._database_id,
+            body=self._values_batch_update_raw_body,
+          )
+
+          self._values_batch_update_raw_body = None  # Reset the update body after writing
+
+        if self.queued_values_user_entered_updates:
+          self.client.http_client.values_batch_update(
+            id=self._database_id,
+            body=self._values_batch_update_user_entered_body,
+          )
+
+          self._values_batch_update_user_entered_body = None  # Reset the update body after writing
+
+        if self.queued_after_write_update_requests:
+          self.client.http_client.batch_update(
+            id=self._database_id,
+            body=self._after_write_update_body,
+          )
+
+          self._after_write_update_body = None  # Reset the update body after writing
+    # Ensure that exceptions actually get logged while executing off main thread
+    except Exception as e:
+      logger.error(f"Error during API write: {e}")
+      raise e
 
   async def flip_to_new_week(self):
-    async with self._update_queue_lock:
-      await self.submit_queued_writes_to_pool()
+    await self.submit_queued_writes_to_pool()
 
-      async with self._api_write_lock:
-        await self.wait_for_api()
+    async with self._api_write_lock, self._db_write_queue_lock:
+      await self.wait_for_api()
 
-        metadat = self.client.http_client.fetch_sheet_metadata(self._database_id)
+      metadat = self.client.http_client.fetch_sheet_metadata(self._database_id)
 
-        current_week_sheet = finditem(lambda x: x["properties"]["title"] == "Current Week", metadat["sheets"])
-        previous_week_sheet = finditem(lambda x: x["properties"]["title"] == "Previous Week", metadat["sheets"])
+      current_week_sheet = finditem(lambda x: x["properties"]["title"] == "Current Week", metadat["sheets"])
+      previous_week_sheet = finditem(lambda x: x["properties"]["title"] == "Previous Week", metadat["sheets"])
 
-        all_sheet_ids = [int(s["properties"]["sheetId"]) for s in metadat["sheets"]]
+      all_sheet_ids = [int(s["properties"]["sheetId"]) for s in metadat["sheets"]]
 
-        new_sheet_id = max(all_sheet_ids) + 1
+      new_sheet_id = max(all_sheet_ids) + 1
 
-        try:
-          finditem(lambda x: x["properties"]["title"] == self.get_week_ending_name, metadat["sheets"])
-          logger.warning(
-            "Attempted to flip week more than once in the same week."
-            "\n Or a sheet exists with the same name as the most recent week ending name."
-          )
-          return  # already done this week
-        except StopIteration:
-          pass
-
-        request_body = {
-          "requests": [
-            {
-              "updateSheetProperties": {
-                "properties": {
-                  "sheetId": previous_week_sheet["properties"]["sheetId"],
-                  "title": self.get_week_ending_name,
-                  "hidden": True,
+      with suppress(StopIteration):
+        finditem(lambda x: x["properties"]["title"] == self.get_week_ending_name, metadat["sheets"])
+        logger.warning(
+          "Attempted to flip week more than once in the same week."
+          "\n Or a sheet exists with the same name as the most recent week ending name."
+        )
+        return  # already done this week
+      request_body = {
+        "requests": [
+          {
+            "updateSheetProperties": {
+              "properties": {
+                "sheetId": previous_week_sheet["properties"]["sheetId"],
+                "title": self.get_week_ending_name,
+                "hidden": True,
+              },
+              "fields": "title,hidden",
+            }
+          },
+          {
+            "updateSheetProperties": {
+              "properties": {
+                "sheetId": current_week_sheet["properties"]["sheetId"],
+                "title": "Previous Week",
+              },
+              "fields": "title",
+            }
+          },
+          {
+            "duplicateSheet": {
+              "sourceSheetId": self._tab_id_schedule_base_sheet,
+              "insertSheetIndex": len(metadat["sheets"]),
+              "newSheetId": new_sheet_id,
+              "newSheetName": "Current Week",
+            }
+          },
+          {
+            "addProtectedRange": {
+              "protectedRange": {
+                "range": {
+                  "sheetId": new_sheet_id,
+                  "startRowIndex": 0,
+                  "startColumnIndex": 0,
                 },
-                "fields": "title,hidden",
-              }
-            },
-            {
-              "updateSheetProperties": {
-                "properties": {
-                  "sheetId": current_week_sheet["properties"]["sheetId"],
-                  "title": "Previous Week",
+                "description": None,
+                "warningOnly": False,
+                "requestingUserCanEdit": True,
+                "editors": {
+                  "users": [
+                    "aetherbreaker7777@gmail.com",
+                    "scheduling-service@order-scheduling-processor.iam.gserviceaccount.com",
+                  ],
+                  "groups": [],
                 },
-                "fields": "title",
               }
-            },
-            {
-              "duplicateSheet": {
-                "sourceSheetId": self._tab_id_schedule_base_sheet,
-                "insertSheetIndex": len(metadat["sheets"]),
-                "newSheetId": new_sheet_id,
-                "newSheetName": "Current Week",
-              }
-            },
-            {
-              "addProtectedRange": {
-                "protectedRange": {
-                  "range": {
-                    "sheetId": new_sheet_id,
-                    "startRowIndex": 0,
-                    "startColumnIndex": 0,
-                  },
-                  "description": None,
-                  "warningOnly": False,
-                  "requestingUserCanEdit": True,
-                  "editors": {
-                    "users": [
-                      "aetherbreaker7777@gmail.com",
-                      "scheduling-service@order-scheduling-processor.iam.gserviceaccount.com",
-                    ],
-                    "groups": [],
-                  },
-                }
-              }
-            },
-          ]
-        }
+            }
+          },
+        ]
+      }
 
-        self.client.http_client.batch_update(self._database_id, request_body)
+      self.client.http_client.batch_update(self._database_id, request_body)
 
     await self.refresh_cache()
 
@@ -330,12 +439,14 @@ class CacheViewBase[ModelT: CustomBaseModel]:
     columns: type[ColNameEnum],
     types_model: type[ModelT],
     cache_core: DatabaseCache,
+    sheet_id: int | None,
   ) -> None:
     self._cache = build_typed_dataframe(data=raw_data, columns=columns, types_model=types_model)  # type: ignore
     self._cache_index = columns.__index_items__
     self._columns = columns
     self._core = cache_core
     self._model = types_model
+    self._sheet_id = sheet_id
 
   async def __aenter__(self) -> DataFrame:
     await self._core._read_write_lock.reader_lock.acquire()
@@ -400,7 +511,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
 
     # get column index
 
-    await self._core.queue_db_api_update(
+    await self._core.queue_db_api_values_raw_update(
       ValueRange(
         range=self._range_format_single.format(cell=f"R{row_number}C{self._columns.get_enum_index(column) + 1}"),
         majorDimension=Dimension.rows,
@@ -408,7 +519,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
       )
     )
 
-  async def update_row(self, index, values: Sequence[Any] | ModelT) -> None:
+  async def update_row(self, index, values: Sequence[Any] | ModelT, raw: bool = True) -> None:
     row_number = await self.get_rownum(index)
 
     if isinstance(values, self._model):
@@ -430,31 +541,52 @@ class CacheViewBase[ModelT: CustomBaseModel]:
     update_data = ValueRange(
       range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self._columns)}"),
       majorDimension=Dimension.rows,
-      values=[sheets_row.tolist()],
+      values=[sheets_row.tolist()],  # type: ignore
     )
 
-    await self._core.queue_db_api_update(update_data)
+    if raw:
+      await self._core.queue_db_api_values_raw_update(update_data)
+    else:
+      await self._core.queue_db_api_values_user_entered_update(update_data)
 
-  async def append_row(self, values: ModelT) -> None:
+  async def append_row(self, values: ModelT, raw: bool = True) -> None:
+    if self._sheet_id is None:
+      raise RuntimeError("This cache view does not support appending rows")
     index = (
-      tuple(getattr(values, col) for col in self._cache_index)
-      if len(self._cache_index) > 1
-      else getattr(values, self._cache_index[0])
+      tuple(getattr(values, col) for col in self._cache_index) if len(self._cache_index) > 1 else getattr(values, self._cache_index[0])
     )
 
     row = Series(values.model_dump(), dtype=object)
-    sheets_row = Series(values.model_dump(mode="json"), dtype=object).tolist()
+    sheets_row = Series(values.model_dump(mode="json"), dtype=object)
 
     async with self._core._read_write_lock.writer_lock:
       self._cache.loc[index, :] = row
 
-    await self._core.queue_db_api_update(
-      ValueRange(
-        range=self._range_format.format(start=f"R{len(self._cache) + 1}C1", end=f"C{len(self._columns)}"),
-        majorDimension=Dimension.rows,
-        values=[sheets_row],
-      )
+    row_number = await self.get_rownum(index)
+    row_number += 2  # add one to account for gsheets header
+
+    # get column index
+
+    update_data = ValueRange(
+      range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self._columns)}"),
+      majorDimension=Dimension.rows,
+      values=[sheets_row.tolist()],  # type: ignore
     )
+
+    await self._core.queue_db_api_before_write_update(
+      {
+        "appendDimension": AppendDimension(
+          sheetId=self._sheet_id,
+          dimension=Dimension.rows,
+          length=1,
+        )
+      }
+    )
+
+    if raw:
+      await self._core.queue_db_api_values_raw_update(update_data)
+    else:
+      await self._core.queue_db_api_values_user_entered_update(update_data)
 
   async def check_exists(self, index) -> bool:
     async with self._core._read_write_lock.reader_lock:
@@ -474,9 +606,7 @@ class CacheViewschedule(CacheViewBase[ScheduledOrderDBEntryModel]):
       yield item
 
   @overload
-  async def read_value(
-    self, index: DatabaseScheduleIndex, col: DatabaseScheduleColumns, validate: Literal[False] = False
-  ) -> Any: ...
+  async def read_value(self, index: DatabaseScheduleIndex, col: DatabaseScheduleColumns, validate: Literal[False] = False) -> Any: ...
 
   @overload
   async def read_value(
@@ -497,11 +627,13 @@ class CacheViewschedule(CacheViewBase[ScheduledOrderDBEntryModel]):
   async def write_value(self, index: DatabaseScheduleIndex, column: DatabaseScheduleColumns, value: Any, ta: TypeAdapter) -> None:
     return await super().write_value(index, column, value, ta)
 
-  async def update_row(self, index: DatabaseScheduleIndex, values: Sequence[Any] | ScheduledOrderDBEntryModel) -> None:
-    return await super().update_row(index, values)
+  async def update_row(
+    self, index: DatabaseScheduleIndex, values: Sequence[Any] | ScheduledOrderDBEntryModel, raw: bool = True
+  ) -> None:
+    return await super().update_row(index, values, raw)
 
-  async def append_row(self, values: ScheduledOrderDBEntryModel) -> None:
-    return await super().append_row(values)
+  async def append_row(self, values: ScheduledOrderDBEntryModel, raw: bool = True) -> None:
+    return await super().append_row(values, raw)
 
   async def check_exists(self, index: DatabaseScheduleIndex) -> bool:
     return await super().check_exists(index)
@@ -539,17 +671,15 @@ class CacheViewschedule(CacheViewBase[ScheduledOrderDBEntryModel]):
 
 
 class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
-  _range_format_single = "'Processed Orders'!{cell}"
-  _range_format = "'Processed Orders'!{start}:{end}"
+  _range_format_single = "'Processing Log'!{cell}"
+  _range_format = "'Processing Log'!{start}:{end}"
   _field_type_adapters = ORDER_LOG_TYPE_ADAPTERS
 
   async def read_typed_row(self, index: DatabaseOrderLogIndex, re_validate: bool = False) -> OrderLogDBEntryModel:
     return await super().read_typed_row(index, re_validate)
 
   @overload
-  async def read_value(
-    self, index: DatabaseOrderLogIndex, col: DatabaseOrderLogColumns, validate: Literal[False] = False
-  ) -> Any: ...
+  async def read_value(self, index: DatabaseOrderLogIndex, col: DatabaseOrderLogColumns, validate: Literal[False] = False) -> Any: ...
 
   @overload
   async def read_value(
@@ -570,14 +700,95 @@ class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
   async def write_value(self, index: DatabaseOrderLogIndex, column: DatabaseOrderLogColumns, value: Any, ta: TypeAdapter) -> None:
     return await super().write_value(index, column, value, ta)
 
-  async def update_row(self, index: DatabaseOrderLogIndex, values: Sequence[Any] | OrderLogDBEntryModel) -> None:
-    return await super().update_row(index, values)
+  async def update_row(self, index: DatabaseOrderLogIndex, values: Sequence[Any] | OrderLogDBEntryModel, raw: bool = True) -> None:
+    return await super().update_row(index, values, raw)
 
-  async def append_row(self, values: OrderLogDBEntryModel) -> None:
-    return await super().append_row(values)
+  async def append_row(self, values: OrderLogDBEntryModel, raw: bool = True) -> None:
+    return await super().append_row(values, raw)
 
-  async def check_exists(self, index: InvoiceNum) -> bool:
-    async with self._core._read_write_lock.reader_lock:
-      char_uids = self._cache.index.levels[0]  # type: ignore
+  async def check_exists(self, index: DatabaseOrderLogIndex) -> bool:
+    return await super().check_exists(index)
 
-      return index in char_uids
+  async def log_action(
+    self,
+    supplier: SuppliersEnum,
+    store: StoreNum | None,
+    invoice_num: InvoiceNum | None,
+    customer: CustomerID | None,
+    action: LogActionEnum,
+    status: StatusCode,
+    action_datetime: datetime,
+    week_end_date: datetime | None,
+    note: Optional[str] = None,
+  ) -> None:
+    new_entry = {
+      "supplier": supplier,
+      "store": store,
+      "invoice_number": invoice_num,
+      "customer": customer,
+      "action": action,
+      "status": status,
+      "action_datetime": action_datetime,
+      "week_end_date": week_end_date,
+      "notes": note,
+    }
+
+    validated_entry = self._model(**new_entry)
+
+    # assemble new index
+    idx = tuple(getattr(validated_entry, col) for col in self._cache_index)
+
+    # ensure this index doesn't already exist
+    result = await self.check_exists(idx)
+
+    if result:
+      raise IndexError(f"Error appending new log to processing logs: Index already exists! {idx}", idx, validated_entry)
+
+    await self.append_row(validated_entry, raw=False)
+    await self.correct_format()
+
+  async def correct_format(self):
+    if self._sheet_id is None:
+      raise RuntimeError("This cache view does not support format updates")
+    storenum_format = {
+      "repeatCell": {
+        "range": {"sheetId": self._sheet_id, "startRowIndex": 1, "startColumnIndex": 1, "endColumnIndex": 2},
+        "cell": {
+          "userEnteredFormat": {
+            "numberFormat": {
+              "type": "NUMBER",
+              # "pattern": '"SFT"000',
+            }
+          },
+        },
+        "fields": "userEnteredFormat(numberFormat)",
+      }
+    }
+
+    invoice_num_and_customer_format = {
+      "repeatCell": {
+        "range": {"sheetId": self._sheet_id, "startRowIndex": 1, "startColumnIndex": 2, "endColumnIndex": 4},
+        "cell": {
+          "userEnteredFormat": {"numberFormat": {"type": "TEXT"}},
+        },
+        "fields": "userEnteredFormat(numberFormat)",
+      }
+    }
+    datetime_format = {
+      "repeatCell": {
+        "range": {"sheetId": self._sheet_id, "startRowIndex": 1, "startColumnIndex": 6, "endColumnIndex": 8},
+        "cell": {
+          "userEnteredFormat": {"numberFormat": {"type": "DATE_TIME"}},
+        },
+        "fields": "userEnteredFormat(numberFormat)",
+      }
+    }
+
+    filter_update_request = {
+      "setBasicFilter": {"filter": {"range": {"sheetId": self._sheet_id, "startRowIndex": 0, "startColumnIndex": 0}}}
+    }
+
+    await self._core.queue_db_api_after_write_update(storenum_format)
+    await self._core.queue_db_api_after_write_update(invoice_num_and_customer_format)
+    await self._core.queue_db_api_after_write_update(datetime_format)
+    await self._core.queue_db_api_after_write_update(filter_update_request)
