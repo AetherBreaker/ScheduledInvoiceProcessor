@@ -10,9 +10,6 @@ from pathlib import PosixPath, PurePosixPath
 
 from aiohttp.web import Application, AppRunner, TCPSite
 from apscheduler.triggers.cron import CronTrigger
-
-# Heartbeat file for health checks
-HEARTBEAT_FILE = Path("/app/src/logs/heartbeat")
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
 from environment_init_vars import CWD, SETTINGS
