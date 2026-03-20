@@ -459,17 +459,22 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Extra python excludes
+PYCACHE/
 
 
+testing_files/
 
+# Secrets
+secrets/
 db-key.json
 sft_creds.json
 sas_ftp_creds.json
-queue backups/
-Testing Files/
-PYCACHE/
+ryo_ftp_creds.json
 
-# Docker secrets and runtime data
-secrets/
+# runtime data
+logs/
 queue_backups/
+sas_files/
+ryo_files/
 .DS_Store

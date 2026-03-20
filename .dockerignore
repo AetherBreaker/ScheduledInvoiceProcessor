@@ -35,7 +35,8 @@ secrets/
 db-key.json
 sas_ftp_creds.json
 sft_creds.json
-.env
+ryo_ftp_creds.json
+*.env
 
 # Exclude runtime data
 logs/
