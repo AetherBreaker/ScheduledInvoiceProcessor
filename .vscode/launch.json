@@ -15,7 +15,12 @@
             "env": {
                 "GOOGLE_API_KEY_FILE": "${workspaceFolder}\\secrets\\db-key.json",
                 "SFT_WEBSITE_CREDS_FILE": "${workspaceFolder}\\secrets\\sft_creds.json",
+<<<<<<< HEAD
                 "SAS_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\sas_ftp_creds.json"
+=======
+                "SAS_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\sas_ftp_creds.json",
+                "RYO_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\ryo_ftp_creds.json"
+>>>>>>> 24ae9bfa70f04b50faa84a43b25b7c3f67661c6b
             },
             "pythonArgs": [
                 "-X",
@@ -36,7 +41,12 @@
                 "PYTHONPATH": "${workspaceFolder}\\src",
                 "GOOGLE_API_KEY_FILE": "${workspaceFolder}\\secrets\\db-key.json",
                 "SFT_WEBSITE_CREDS_FILE": "${workspaceFolder}\\secrets\\sft_creds.json",
+<<<<<<< HEAD
                 "SAS_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\sas_ftp_creds.json"
+=======
+                "SAS_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\sas_ftp_creds.json",
+                "RYO_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\ryo_ftp_creds.json"
+>>>>>>> 24ae9bfa70f04b50faa84a43b25b7c3f67661c6b
             },
             "pythonArgs": [
                 "-X",

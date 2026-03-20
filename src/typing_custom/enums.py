@@ -1,3 +1,8 @@
+if __name__ == "__main__":
+  from logging_config import configure_logging
+
+  configure_logging()
+
 from enum import StrEnum, auto
 from typing import Any
 
@@ -88,3 +93,17 @@ class WeekdayEnum(CustomStrEnum):
   Friday = auto()
   Saturday = auto()
   Sunday = auto()
+
+
+class LogActionEnum(CustomStrEnum):
+  REGISTERED_PICKUP = auto()
+  FILE_PICKED_UP = auto()
+  FILE_PREPROCESSED = auto()
+  REGISTERED_DROPOFF = auto()
+  FILE_DROPPED_OFF = auto()
+
+
+class StatusCode(CustomStrEnum):
+  UNKNOWN = auto()
+  FAILURE = auto()
+  SUCCESS = auto()
