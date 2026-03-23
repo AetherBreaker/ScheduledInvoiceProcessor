@@ -758,7 +758,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
             items_to_log[key] = (StatusCode.UNKNOWN, file_meta)
           local_logger.info(f"{self.__class__.__name__}: {key}: Matched {len(matched_files)} files for: {file_meta.storenum}")
         else:
-          local_logger.info(f"{self.__class__.__name__}: {key}: No files matched with pattern {file_meta.file_pattern.pattern}")
+          local_logger.warning(f"{self.__class__.__name__}: {key}: No files matched with pattern {file_meta.file_pattern.pattern}")
 
       with self.pbar.add_task("Transferring Files", total=sum(len(v.file_names) for v in items_to_dl.values())) as move_files_task:
         dl_futures = []
