@@ -322,6 +322,7 @@ def configure_logging():
 
   console_info_handler = FixedRichHandler(
     # level=logging.DEBUG if __debug__ else logging.INFO,
+    show_time=platform == "win32",
     console=RICH_CONSOLE,
     rich_tracebacks=True,
     log_time_format=LOGGING_TIMESTAMP_FORMAT,
