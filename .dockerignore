@@ -28,9 +28,18 @@
 **/values.dev.yaml
 LICENSE
 README.md
+
+# Misc Python files
+PYCACHE/
+
+
 # misc project files
 testing_files/
 saved_logs/
+sft.ico
+DOCKER_README.md
+QUICK_REFERENCE.md
+build_pkg.ps1
 
 # CRITICAL: Exclude ALL secrets from being copied into the image
 secrets/
@@ -44,6 +53,8 @@ ryo_ftp_creds.json
 # Exclude runtime data
 logs/
 queue_backups/
+ryo_files/
+sas_files/
 *.log
 *.db
 *.sqlite
