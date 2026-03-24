@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 
 # RICH_CONSOLE = Console()
 RICH_CONSOLE = Console(
-  width=None if platform in ("win32", "cygwin", "cli") else 150,
-  force_terminal=True,
+  width=None if platform == "win32" else 150,
+  # force_terminal=True,
 )
 
 PROJECT_NAME = "ScheduledOrderMiddleman"
