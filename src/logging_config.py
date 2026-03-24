@@ -293,7 +293,10 @@ def configure_logging():
   queue_handler = QueueHandler(log_queue)
 
   queue_listener = QueueListener(
-    log_queue, debugging_file_handler, debugging_file_handler, info_file_handler, respect_handler_level=True
+    log_queue,
+    debugging_file_handler,
+    info_file_handler,
+    respect_handler_level=True,
   )
 
   # root.addHandler(debugging_file_handler)
