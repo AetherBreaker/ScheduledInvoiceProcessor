@@ -1,24 +1,21 @@
 import atexit
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from functools import wraps
-from itertools import zip_longest
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, TimedRotatingFileHandler
 from queue import Queue
 from secrets import token_urlsafe
-from typing import TYPE_CHECKING, Coroutine, Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
-from environment_init_vars import SETTINGS
 from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
 from rich.traceback import Traceback
 from typing_custom.custom_path import CustomPath
-from typing_custom.enums import LogActionEnum, StatusCode
-from utils import get_last_sat, get_next_sat
+from typing_custom.enums import LogActionEnum
 
 if TYPE_CHECKING:
-  from supplier_processors import FileRegisterData, SupplierProcessorBase
+  from supplier_processors import SupplierProcessorBase
 
 RICH_CONSOLE = Console()
 
@@ -164,27 +161,28 @@ FILE_FORMATTER = FixedFormatter(
 
 
 def add_log_context[**TP, TR](
-  identifier_prefix: LogActionEnum,
+  action_identifier_prefix: LogActionEnum,
   log_subfolder: Optional[str] = None,
 ) -> Callable[
-  [Callable[TP, Coroutine[None, None, None]]],
-  Callable[TP, Coroutine[None, None, None]],
+  [Callable[TP, Awaitable[TR]]],
+  Callable[TP, Awaitable[TR]],
 ]:
 
-  def add_log_context_under[**P, R](
-    func: Callable[P, Coroutine[None, None, None]],
-  ) -> Callable[P, Coroutine[None, None, None]]:
+  def add_log_context_under(
+    func: Callable[TP, Awaitable[TR]],
+  ) -> Callable[TP, Awaitable[TR]]:
 
     @wraps(func)
-    async def add_log_context_wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
+    async def add_log_context_wrapper(*args: TP.args, **kwargs: TP.kwargs) -> TR:
       self_obj: "SupplierProcessorBase" = args[0]  # type: ignore
 
-      set_ctx_var = self_obj.ctx_var
+      set_ctx_var_identifier = self_obj.ctx_var_identifier
+      set_ctx_var_log_loc = self_obj.ctx_var_log_loc
 
       unique_id = "".join([c for c in token_urlsafe(10) if c.isalnum()])
       now = datetime.now().strftime("%Y%m%d_%H%M%S%f")
 
-      identifier = f"{self_obj.identifier_prefix}_{identifier_prefix}_{now}_{unique_id}"  # type: ignore
+      identifier = f"{self_obj.identifier_prefix}_{action_identifier_prefix}_{now}_{unique_id}"
 
       log_loc_final = self_obj.log_file_loc
       if log_subfolder is not None:
@@ -193,9 +191,11 @@ def add_log_context[**TP, TR](
 
       log_file_loc = log_loc_final / f"{identifier}.txt"
 
-      with set_ctx_var.set(identifier):
+      with set_ctx_var_identifier.set(identifier), set_ctx_var_log_loc.set(log_file_loc):
         logger = logging.getLogger(func.__module__)
-        adapted_logger = logging.LoggerAdapter(logging.getLogger(func.__module__), extra={"ctx": set_ctx_var}, merge_extra=True)
+        adapted_logger = logging.LoggerAdapter(
+          logging.getLogger(func.__module__), extra={"ctx": set_ctx_var_identifier}, merge_extra=True
+        )
 
         context_file_handler = logging.FileHandler(log_file_loc)
 
@@ -203,24 +203,10 @@ def add_log_context[**TP, TR](
         context_file_handler.setFormatter(FILE_FORMATTER)
         logger.addHandler(context_file_handler)
 
-        items_to_log: dict[str, tuple[StatusCode, FileRegisterData]] = {}
+        kwargs["adapted_logger"] = adapted_logger
 
         try:
-          await func(*args, **kwargs, adapted_logger=adapted_logger, items_to_log=items_to_log)  # type: ignore
-        except Exception as e:
-          adapted_logger.exception(f"Exception in {func.__name__}: {e}")
-          await self_obj.cache.order_log.log_action(
-            supplier=self_obj.supplier_name,
-            store=None,
-            invoice_num=None,
-            customer=None,
-            action=identifier_prefix,
-            status=StatusCode.FAILURE,
-            action_datetime=datetime.now(),
-            week_end_date=None,
-            note=f"https://{HOST_NAME}/{'/'.join(log_file_loc.parts[-3:-1])}" if log_file_loc.exists() else "Nothing logged",
-          )
-          raise
+          result = await func(*args, **kwargs)
         finally:
           context_file_handler.close()
           logger.removeHandler(context_file_handler)
@@ -236,28 +222,7 @@ def add_log_context[**TP, TR](
             if "error" not in contents and "warning" not in contents:
               log_file_loc.unlink()
 
-          for result, file_meta in items_to_log.values():
-            params = {
-              "supplier": self_obj.supplier_name,
-              "store": file_meta.storenum,
-              "invoice_num": "Not yet known",
-              "customer": file_meta.customer_id,
-              "action": identifier_prefix,
-              "status": result,
-              "action_datetime": datetime.now(),
-              "week_end_date": (
-                get_next_sat(file_meta.pickup_date) if file_meta.current_week else get_last_sat(file_meta.pickup_date)
-              ),
-              "note": f"http://{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}/{'/'.join(log_file_loc.parts[4:])}"
-              if log_file_loc.exists()
-              else "Nothing logged",
-            }
-            if file_meta.invoice_nums:
-              for _, invoice_num in zip_longest(file_meta.file_names, file_meta.invoice_nums.values(), fillvalue=""):
-                params["invoice_num"] = invoice_num
-                await self_obj.cache.order_log.log_action(**params)
-            else:
-              await self_obj.cache.order_log.log_action(**params)
+      return result
 
     return add_log_context_wrapper
 

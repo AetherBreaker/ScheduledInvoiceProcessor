@@ -22,6 +22,7 @@ from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 from utils import ftp_pbar_callback, ftp_writefile_pbar_callback
 
 from supplier_processors import FileRegisterData, SFTPProtocol, SupplierProcessorSFTPIntermediate, SupplierQueueKey
+from supplier_processors.log_action import LogActionHandlerType, log_actions
 
 # from logging.handlers import QueueHandler
 # from queue import Queue
@@ -91,7 +92,8 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
 
   identifier_prefix = "RYO"
   log_file_loc = CWD / "logs" / "ryo"
-  ctx_var = ContextVar("ryo_log_context", default=None)
+  ctx_var_identifier = ContextVar("ryo_log_identifier", default=None)
+  ctx_var_log_loc = ContextVar("ryo_log_loc", default=log_file_loc)
 
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
@@ -103,11 +105,12 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
     )
     return compile(pattern)
 
-  @add_log_context(identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
+  @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
+  @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
   async def _preprocess_files(
     self,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ):
     local_logger = adapted_logger or logger
     if not self._file_preprocess_queue:
@@ -133,8 +136,8 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
           future = to_thread(self._preprocess_off_thread, key=key, old_file_meta=file_meta, adapted_logger=adapted_logger)
           futures[key] = future
 
-          if items_to_log is not None:
-            items_to_log[key] = StatusCode.UNKNOWN, file_meta
+          if log_action_handler is not None:
+            log_action_handler(key, StatusCode.UNKNOWN, file_meta)
 
         async for result in as_completed(futures.values()):
           try:
@@ -142,8 +145,8 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
 
             local_logger.info(f"{self.__class__.__name__}: {key}: Successfully preprocessed files")
 
-            if items_to_log is not None:
-              items_to_log[key] = StatusCode.SUCCESS, file_meta
+            if log_action_handler is not None:
+              log_action_handler(key, StatusCode.SUCCESS, file_meta)
             self.pbar.update(files_preprocessing_task, advance=1)
 
           except Exception as e:
@@ -151,8 +154,8 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
             local_logger.error(f"{self.__class__.__name__}: {key}: Error preprocessing files {e}")
             errors.append((key, e))
 
-            if items_to_log is not None:
-              items_to_log[key] = StatusCode.FAILURE, items_to_advance[key]
+            if log_action_handler is not None:
+              log_action_handler(key, StatusCode.FAILURE, items_to_advance[key])
 
       if errors:
         local_logger.error(f"{self.__class__.__name__}: Completed preprocessing with {len(errors)} errors")

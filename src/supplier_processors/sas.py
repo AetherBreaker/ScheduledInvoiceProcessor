@@ -87,7 +87,8 @@ class SASProcessor(SupplierProcessorSFTPIntermediate):
 
   identifier_prefix: str = "SAS"
   log_file_loc: CustomPath = CWD / "logs" / "sas"
-  ctx_var = ContextVar("sas_log_context", default=None)
+  ctx_var_identifier = ContextVar("sas_log_identifier", default=None)
+  ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
 
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool

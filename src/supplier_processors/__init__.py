@@ -30,6 +30,8 @@ from typing_custom.custom_path import CustomPath
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
+from supplier_processors.log_action import LogActionHandlerType, log_actions
+
 # from logging.handlers import QueueHandler
 # from queue import Queue
 # from logging_config import DynamicQueueListener
@@ -145,7 +147,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   identifier_prefix: str = ""
   log_file_loc: CustomPath = CWD / "logs"
-  ctx_var: ContextVar[str | None]
+  ctx_var_identifier: ContextVar[str | None]
+  ctx_var_log_loc: ContextVar[CustomPath | None]
 
   def __init__(self, pbar: ProgressCustom = None) -> None:  # type: ignore
     self._file_pickup_queue = {}
@@ -307,7 +310,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   async def dropoff_files(self) -> None:
     await self._dropoff_files()
 
-  @add_log_context(identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
+  @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
+  @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
   async def _register_pickup(
     self,
     storenum: StoreNum,
@@ -316,10 +320,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
     dropoff_date: datetime,
     current_week: bool = True,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ): ...
 
-  @add_log_context(identifier_prefix=LogActionEnum.REGISTERED_DROPOFF, log_subfolder=LogActionEnum.REGISTERED_DROPOFF)
+  @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF, log_subfolder=LogActionEnum.REGISTERED_DROPOFF)
+  @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF)
   async def _register_dropoff(
     self,
     storenum: StoreNum,
@@ -328,21 +333,23 @@ class SupplierProcessorBase(metaclass=SingletonType):
     dropoff_date: datetime,
     current_week: bool,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ): ...
 
-  @add_log_context(identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
+  @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
+  @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)
   async def _pickup_files(
     self,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ): ...
 
-  @add_log_context(identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
+  @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
+  @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
   async def _preprocess_files(
     self,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ):
     local_logger = adapted_logger or logger
     if not self._file_preprocess_queue:
@@ -369,15 +376,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
               key=key,
               success_attr="preprocess_success",
               adapted_logger=adapted_logger,
-              items_to_log=items_to_log,
+              log_action_handler=log_action_handler,
             )
             for idx, waiting_path in file_meta.remote_file_locs.items()
           )
 
-          # Now that we are certain there are items to be moved, add them  to items_to_log immediately
+          # Now that we are certain there are items to be moved, add them  to log_action_handler immediately
           # incase an error occurs during transfer, we will still have the context of which files were being processed for logging purposes
-          if items_to_log is not None:
-            items_to_log[key] = StatusCode.UNKNOWN, file_meta
+          if log_action_handler is not None:
+            log_action_handler(key, StatusCode.UNKNOWN, file_meta)
 
         await gather(*futures)
 
@@ -389,11 +396,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
           self._file_preprocess_queue.pop(key)
           self._file_dropoff_queue[key] = file_meta
 
-  @add_log_context(identifier_prefix=LogActionEnum.FILE_DROPPED_OFF, log_subfolder=LogActionEnum.FILE_DROPPED_OFF)
+  @add_log_context(action_identifier_prefix=LogActionEnum.FILE_DROPPED_OFF, log_subfolder=LogActionEnum.FILE_DROPPED_OFF)
+  @log_actions(action_identifier_prefix=LogActionEnum.FILE_DROPPED_OFF)
   async def _dropoff_files(
     self,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ):
     local_logger = adapted_logger or logger
 
@@ -426,15 +434,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
               key=key,
               success_attr="dropoff_success",
               adapted_logger=adapted_logger,
-              items_to_log=items_to_log,
+              log_action_handler=log_action_handler,
             )
             for idx, waiting_path in file_meta.remote_file_locs.items()
           )
 
-          # Now that we are certain there are items to be moved, add them  to items_to_log immediately
+          # Now that we are certain there are items to be moved, add them  to log_action_handler immediately
           # incase an error occurs during transfer, we will still have the context of which files were being processed for logging purposes
-          if items_to_log is not None:
-            items_to_log[key] = StatusCode.UNKNOWN, file_meta
+          if log_action_handler is not None:
+            log_action_handler(key, StatusCode.UNKNOWN, file_meta)
 
         await gather(*futures)
 
@@ -458,7 +466,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     key: str,
     success_attr: str,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ):
     local_logger = adapted_logger or logger
     result = StatusCode.UNKNOWN
@@ -493,8 +501,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
           # update items to log with result of transfer and pickup success status
           getattr(file_meta, success_attr)[idx] = success
-          if items_to_log is not None:
-            items_to_log[key] = result, file_meta
+          if log_action_handler is not None:
+            log_action_handler(key, result, file_meta)
 
       local_logger.info(
         f"{self.__class__.__name__}: Transferred {self.supplier_name} [yellow]{send_path}[/] to SFT FTP [yellow]{recv_path}[/]",
@@ -506,8 +514,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
       local_logger.error(f"{self.__class__.__name__}: Error transferring {send_path.name} to {recv_path.name}: {e}")
-      if items_to_log is not None:
-        items_to_log[key] = StatusCode.FAILURE, file_meta
+      if log_action_handler is not None:
+        log_action_handler(key, StatusCode.FAILURE, file_meta)
       return False
 
   def extract_invoice_num(
@@ -540,7 +548,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     key: str,
     success_attr: str,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ):
     local_logger = adapted_logger or logger
     result = StatusCode.UNKNOWN
@@ -564,15 +572,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
         getattr(file_meta, success_attr)[idx] = success
 
       self.pbar.update(move_files_task, advance=1)
-      if items_to_log is not None:
-        items_to_log[key] = result, file_meta
+      if log_action_handler is not None:
+        log_action_handler(key, result, file_meta)
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
       local_logger.error(
         f"{self.__class__.__name__}: Error moving\n[yellow]{send_path}[/] to\n[yellow]{recv_path}[/]: {e}", extra={"markup": True}
       )
-      if items_to_log is not None:
-        items_to_log[key] = StatusCode.FAILURE, file_meta
+      if log_action_handler is not None:
+        log_action_handler(key, StatusCode.FAILURE, file_meta)
 
 
 class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
@@ -580,7 +588,8 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern: ...
 
-  @add_log_context(identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
+  @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
+  @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
   async def _register_pickup(
     self,
     storenum: StoreNum,
@@ -589,7 +598,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     dropoff_date: datetime,
     current_week: bool = True,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ):
     local_logger = adapted_logger or logger
     picked_up = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
@@ -612,6 +621,19 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
       )
       return
 
+    queue_key = self.assemble_queue_key(storenum, customer_id, pickup_date)
+
+    # check if file already registered for pickup
+    if queue_key in self._file_pickup_queue or (
+      picked_up := any(
+        (queue_key in self._file_waiting_queue, queue_key in self._file_preprocess_queue, queue_key in self._file_dropoff_queue)
+      )
+    ):
+      # program constantly attempts to re-register things for pickup. So no need to emit a warning
+      if picked_up:
+        local_logger.error(f"{self.__class__.__name__}: {queue_key}: File has already been picked up and has not been checked off")
+      return
+
     pattern = self.assemble_filename_pattern(customer_id, pickup_date, dropoff_date, current_week)
 
     register_data = FileRegisterData(
@@ -625,20 +647,19 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
       _local_copy_folder=self.local_pre_processing_folder,
     )
 
-    queue_key = self.assemble_queue_key(storenum, customer_id, pickup_date)
-
-    if items_to_log is not None:
-      items_to_log[queue_key] = (StatusCode.UNKNOWN, register_data)
+    if log_action_handler is not None:
+      log_action_handler(queue_key, StatusCode.UNKNOWN, register_data)
 
     # Protect queue modification with lock for consistency
     async with self._lock:
       self._file_pickup_queue[queue_key] = register_data
     local_logger.info(f"{self.__class__.__name__}: Added {storenum} to pickup queue")
 
-    if items_to_log is not None:
-      items_to_log[queue_key] = (StatusCode.SUCCESS, register_data)
+    if log_action_handler is not None:
+      log_action_handler(queue_key, StatusCode.SUCCESS, register_data)
 
-  @add_log_context(identifier_prefix=LogActionEnum.REGISTERED_DROPOFF, log_subfolder=LogActionEnum.REGISTERED_DROPOFF)
+  @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF, log_subfolder=LogActionEnum.REGISTERED_DROPOFF)
+  @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF)
   async def _register_dropoff(
     self,
     storenum: StoreNum,
@@ -647,7 +668,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     dropoff_date: datetime,
     current_week: bool,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ):
     local_logger = adapted_logger or logger
     key = f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
@@ -687,8 +708,8 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
         )
         return
 
-      if items_to_log is not None:
-        items_to_log[key] = (StatusCode.SUCCESS, matched_item)
+      if log_action_handler is not None:
+        log_action_handler(key, StatusCode.SUCCESS, matched_item)
 
       self._file_preprocess_queue[key] = matched_item
       local_logger.info(f"{self.__class__.__name__}: {key}: Registered dropoff for: {matched_item.storenum}")
@@ -778,11 +799,12 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
       local_logger.error(f"{self.__class__.__name__}: Error archiving file {remote_file}: {e}")
       raise e
 
-  @add_log_context(identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
+  @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
+  @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)
   async def _pickup_files(
     self,
     adapted_logger: Optional[LoggerAdapter] = None,
-    items_to_log: Optional[dict[str, tuple[StatusCode, FileRegisterData]]] = None,
+    log_action_handler: Optional[LogActionHandlerType] = None,
   ):
     local_logger = adapted_logger or logger
     if not self._file_pickup_queue:
@@ -802,8 +824,8 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
         if matched_files:
           file_meta.file_names = {idx: m.string for idx, m in enumerate(matched_files)}
           items_to_dl[key] = file_meta
-          if items_to_log is not None:
-            items_to_log[key] = (StatusCode.UNKNOWN, file_meta)
+          if log_action_handler is not None:
+            log_action_handler(key, StatusCode.UNKNOWN, file_meta)
           local_logger.info(f"{self.__class__.__name__}: {key}: Matched {len(matched_files)} files for: {file_meta.storenum}")
         else:
           local_logger.warning(f"{self.__class__.__name__}: {key}: No files matched with pattern {file_meta.file_pattern.pattern}")
@@ -823,7 +845,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
               key=key,
               success_attr="pickup_success",
               adapted_logger=adapted_logger,
-              items_to_log=items_to_log,
+              log_action_handler=log_action_handler,
             )
             for idx, filename in file_meta.file_names.items()
           )

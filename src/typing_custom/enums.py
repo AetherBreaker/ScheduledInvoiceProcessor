@@ -107,3 +107,4 @@ class StatusCode(CustomStrEnum):
   UNKNOWN = auto()
   FAILURE = auto()
   SUCCESS = auto()
+  SKIPPED = auto()
