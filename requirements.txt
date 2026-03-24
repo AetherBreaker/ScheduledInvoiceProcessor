@@ -1,17 +1,17 @@
-aiorwlock
-aiologic
-aiohttp
+aiohttp==3.*
+aiologic==0.16.*
+aiorwlock==1.*
 APScheduler==3.*
-gspread
-rich
-pandas[performance]
-pandas-stubs
-paramiko
-types-python-dateutil
-python-dateutil
-python-dotenv
-pydantic
-pydantic-settings
+gspread==6.*
+pandas[performance]==3.*
+pandas-stubs==3.*
+paramiko==4.*
+pydantic==2.*
+pydantic-settings==2.*
+python-dateutil==2.9.*
+python-dotenv==1.*
+rich==14.*
+types-python-dateutil==2.9.*
 tzdata
 uvloop; sys_platform=="linux"
 winloop; sys_platform=="win32"
