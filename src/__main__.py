@@ -180,6 +180,7 @@ async def flip_week():
 
 
 async def main():  # sourcery skip: remove-empty-nested-block
+  RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
   try:
     with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
       cache = DatabaseCache()
@@ -272,7 +273,10 @@ async def main():  # sourcery skip: remove-empty-nested-block
 
         # scheduler.print_jobs()
 
-      await Event().wait()
+      RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
+      with RICH_CONSOLE.status("Application is running."):
+        await Event().wait()
+
   except Exception as e:
     logger.exception(f"Fatal error in main: {e}")
     exit(1)  # Exit with non-zero code to indicate failure to Coolify
