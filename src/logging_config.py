@@ -162,12 +162,6 @@ FILE_FORMATTER = FixedFormatter(
   style="{",
 )
 
-HOST_NAME = (
-  f"{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}"
-  if SETTINGS.file_serve_public_domain is None
-  else SETTINGS.file_serve_public_domain
-)
-
 
 def add_log_context[**TP, TR](
   identifier_prefix: LogActionEnum,

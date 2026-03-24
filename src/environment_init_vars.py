@@ -65,3 +65,8 @@ if not SETTINGS.ryo_ftp_creds_file.exists():
 
 
 TZ = ZoneInfo("US/Eastern")
+HOST_NAME = (
+  f"{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}"
+  if SETTINGS.file_serve_public_domain is None
+  else SETTINGS.file_serve_public_domain
+)
