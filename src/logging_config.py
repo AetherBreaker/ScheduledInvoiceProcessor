@@ -6,6 +6,8 @@ from functools import wraps
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, TimedRotatingFileHandler
 from queue import Queue
 from secrets import token_urlsafe
+from sys import platform
+from time import gmtime, localtime, strftime, time
 from typing import TYPE_CHECKING, Literal, Optional
 
 from rich.console import Console, ConsoleRenderable
@@ -17,7 +19,11 @@ from typing_custom.enums import LogActionEnum
 if TYPE_CHECKING:
   from supplier_processors import SupplierProcessorBase
 
-RICH_CONSOLE = Console()
+# RICH_CONSOLE = Console()
+RICH_CONSOLE = Console(
+  width=None if platform in ("win32", "cygwin", "cli") else 150,
+  force_terminal=True,
+)
 
 PROJECT_NAME = "ScheduledOrderMiddleman"
 
@@ -153,8 +159,47 @@ class ContextFilter(logging.Filter):
     return record.ctx == self.identifier  # pyright: ignore[reportAttributeAccessIssue]
 
 
+class CustomTimedRotatingFileHandler(TimedRotatingFileHandler):
+  def doRollover(self):
+    """
+    do a rollover; in this case, a date/time stamp is appended to the filename
+    when the rollover happens.  However, you want the file to be named for the
+    start of the interval, not the current time.  If there is a backup count,
+    then we have to get a list of matching filenames, sort them and remove
+    the one with the oldest suffix.
+    """
+    base_path = CustomPath(self.baseFilename)
+    # get the time that this sequence started at and make it a TimeTuple
+    currentTime = int(time())
+    t = self.rolloverAt - self.interval
+    if self.utc:
+      timeTuple = gmtime(t)
+    else:
+      timeTuple = localtime(t)
+      dstNow = localtime(currentTime)[-1]
+      dstThen = timeTuple[-1]
+      if dstNow != dstThen:
+        addend = 3600 if dstNow else -3600
+        timeTuple = localtime(t + addend)
+    dfn = base_path.with_name(self.rotation_filename(f"{base_path.stem}.{strftime(self.suffix, timeTuple)}{base_path.suffix}"))
+    if dfn.exists():
+      # Already rolled over.
+      return
+
+    if self.stream:
+      self.stream.close()
+      self.stream = None  # type: ignore
+    self.rotate(self.baseFilename, str(dfn))
+    if self.backupCount > 0:
+      for s in self.getFilesToDelete():
+        CustomPath(s).unlink()
+    if not self.delay:
+      self.stream = self._open()
+    self.rolloverAt = self.computeRollover(currentTime)
+
+
 FILE_FORMATTER = FixedFormatter(
-  fmt=f"[{{asctime}}] {{levelname: >8}} | {{libpath: <{max_width}}} | {{message}}",
+  fmt=f"{{libpath: <{max_width}}} | [{{asctime}}] {{levelname: >8}} | {{message}}",
   datefmt=LOGGING_TIMESTAMP_FORMAT,
   style="{",
 )
@@ -242,8 +287,8 @@ INFO_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}.txt"
 LOGGING_TYPE: Literal["daily", "per_run"] = "daily"
 
 
-daily_debug_handler = TimedRotatingFileHandler(DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
-daily_info_handler = TimedRotatingFileHandler(INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
+daily_debug_handler = CustomTimedRotatingFileHandler(DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
+daily_info_handler = CustomTimedRotatingFileHandler(INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
 
 per_run_debug_handler = RotatingFileHandler(DEBUG_LOG_LOC, maxBytes=0, backupCount=30, delay=True)
 per_run_info_handler = RotatingFileHandler(INFO_LOG_LOC, maxBytes=0, backupCount=30, delay=True)
