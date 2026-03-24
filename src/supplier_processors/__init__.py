@@ -13,13 +13,14 @@ from json import loads
 from logging import LoggerAdapter, getLogger
 from pathlib import PurePosixPath
 from re import Match, Pattern
-from typing import Optional, Self
+from typing import Optional, Protocol, Self
 
 from aiologic import Lock
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SU, relativedelta
 from environment_init_vars import CWD, SETTINGS
 from logging_config import add_log_context
+from paramiko import SFTPClient
 from pydantic import ConfigDict, Field, TypeAdapter
 from pydantic.dataclasses import dataclass
 from rich_custom import CustomTaskID, ProgressCustom
@@ -85,7 +86,19 @@ class FileRegisterData:
     return datetime.now() > ((self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)) + timedelta(days=7))
 
 
-class SFTFTPClient(FTP):
+class FTPProtocol(Protocol):
+  def __init__(self, creds: dict) -> None: ...
+  def __enter__(self) -> Self: ...
+  def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
+
+
+class SFTPProtocol(Protocol):
+  def __init__(self, creds: dict) -> None: ...
+  def __enter__(self) -> SFTPClient: ...
+  def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
+
+
+class SFTFTPClient(FTP, FTPProtocol):
   def __init__(self, creds: dict) -> None:
     self.creds = creds
     super().__init__()
@@ -94,6 +107,9 @@ class SFTFTPClient(FTP):
     self.connect(host=self.creds["HOST"], port=self.creds["PORT"])
     self.login(user=self.creds["USER"], passwd=self.creds["PWD"])
     return self
+
+  def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    self.quit()
 
 
 class SupplierProcessorBase(metaclass=SingletonType):
@@ -105,7 +121,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _file_queue_backup_folder: CustomPath = CWD / "queue_backups"
   _lock: Lock = Lock()
 
-  vendor_ftp: type
+  vendor_ftp: type[SFTPProtocol]
   waiting_ftp = SFTFTPClient
 
   queue_backup_prefix: str

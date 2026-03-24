@@ -21,7 +21,7 @@ from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 from utils import ftp_pbar_callback, ftp_writefile_pbar_callback
 
-from supplier_processors import FileRegisterData, SupplierProcessorSFTPIntermediate, SupplierQueueKey
+from supplier_processors import FileRegisterData, SFTPProtocol, SupplierProcessorSFTPIntermediate, SupplierQueueKey
 
 # from logging.handlers import QueueHandler
 # from queue import Queue
@@ -34,7 +34,7 @@ logger = getLogger(__name__)
 # contextual_log_listener = DynamicQueueListener(contextual_logs_queue, respect_handler_level=True)  # type: ignore
 
 
-class RYOSFTPClient:
+class RYOSFTPClient(SFTPProtocol):
   policy = AutoAddPolicy()
 
   def __init__(self, creds: dict):
@@ -61,7 +61,7 @@ class RYOSFTPClient:
 
 
 class RYOProcessor(SupplierProcessorSFTPIntermediate):
-  vendor_ftp: type[RYOSFTPClient] = RYOSFTPClient
+  vendor_ftp = RYOSFTPClient
 
   queue_backup_prefix: str = "ryo"
 

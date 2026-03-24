@@ -18,7 +18,7 @@ from typing_custom import CustomerID
 from typing_custom.custom_path import CustomPath
 from typing_custom.enums import SuppliersEnum
 
-from supplier_processors import SupplierProcessorSFTPIntermediate
+from supplier_processors import SFTPProtocol, SupplierProcessorSFTPIntermediate
 
 # from logging.handlers import QueueHandler
 # from queue import Queue
@@ -31,7 +31,7 @@ logger = getLogger(__name__)
 # contextual_log_listener = DynamicQueueListener(contextual_logs_queue, respect_handler_level=True)  # type: ignore
 
 
-class SASSFTPClient:
+class SASSFTPClient(SFTPProtocol):
   policy = AutoAddPolicy()
 
   def __init__(self, creds: dict):
@@ -58,7 +58,7 @@ class SASSFTPClient:
 
 
 class SASProcessor(SupplierProcessorSFTPIntermediate):
-  vendor_ftp: type[SASSFTPClient] = SASSFTPClient
+  vendor_ftp = SASSFTPClient
 
   queue_backup_prefix: str = "sas"
 
