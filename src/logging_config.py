@@ -21,8 +21,9 @@ if TYPE_CHECKING:
 
 # RICH_CONSOLE = Console()
 RICH_CONSOLE = Console(
-  width=None if platform == "win32" else 150,
+  width=None if platform == "win32" else 175,
   # force_terminal=True,
+  log_time=platform == "win32",
 )
 
 PROJECT_NAME = "ScheduledOrderMiddleman"
