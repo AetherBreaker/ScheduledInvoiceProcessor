@@ -238,6 +238,38 @@ class SupplierProcessorBase(metaclass=SingletonType):
         if item.stale:
           queue.pop(key)
 
+  @classmethod
+  def check_connections(cls) -> bool:
+    waiting_ftp_online = cls._check_waiting_ftp_online()
+    vendor_ftp_online = cls._check_vendor_ftp_online()
+
+    if not waiting_ftp_online:
+      logger.error(f"{cls.__name__}: Waiting FTP server is offline.")
+    if not vendor_ftp_online:
+      logger.error(f"{cls.__name__}: Vendor FTP server is offline.")
+
+    return waiting_ftp_online and vendor_ftp_online
+
+  @classmethod
+  def _check_waiting_ftp_online(cls) -> bool:
+    """Check if the waiting FTP server is online by attempting to connect and send a NOOP command."""
+    try:
+      with cls.waiting_ftp(cls.waiting_ftp_creds) as ftp:
+        ftp.voidcmd("NOOP")
+      return True
+    except Exception:
+      return False
+
+  @classmethod
+  def _check_vendor_ftp_online(cls) -> bool:
+    """Check if the vendor SFTP server is online by attempting to connect"""
+    try:
+      with cls.vendor_ftp(cls.pickup_ftp_creds) as ftp:
+        ftp.listdir(".")
+      return True
+    except Exception:
+      return False
+
   async def register_pickup(
     self,
     storenum: StoreNum,

@@ -41,9 +41,14 @@ else:
     pass
 
 
-supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
+expected_suppliers: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
   SuppliersEnum.SAS: SASProcessor,
   SuppliersEnum.RYO: RYOProcessor,
+}
+
+
+supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
+  supplier: processor for supplier, processor in expected_suppliers.items() if processor.check_connections()
 }
 
 
