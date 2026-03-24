@@ -462,8 +462,9 @@ __marimo__/
 # Extra python excludes
 PYCACHE/
 
-
+# misc project files
 testing_files/
+saved_logs/
 
 # Secrets
 secrets/

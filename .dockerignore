@@ -28,6 +28,9 @@
 **/values.dev.yaml
 LICENSE
 README.md
+# misc project files
+testing_files/
+saved_logs/
 
 # CRITICAL: Exclude ALL secrets from being copied into the image
 secrets/
