@@ -3,27 +3,22 @@ if __name__ == "__main__":
 
   configure_logging()
 
-import sys
-import traceback
 from datetime import timedelta, timezone
 from logging import getLogger
-from traceback import format_tb
 
 import apscheduler.executors.base as exec_base
-from apscheduler.events import (
-  EVENT_JOB_ADDED,
-  EVENT_JOB_ERROR,
-  EVENT_JOB_EXECUTED,
-  EVENT_JOB_MISSED,
-  JobEvent,
-  JobExecutionEvent,
-)
+from apscheduler.events import EVENT_JOB_ADDED, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED, JobEvent, JobExecutionEvent
 from apscheduler.jobstores.base import ConflictingIdError
 from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED
 from environment_init_vars import TZ
 from utils import get_now
+
+# from sys import exc_info
+# from traceback import clear_frames, format_tb
+# from apscheduler.events import EVENT_JOB_ERROR
+
 
 logger = getLogger(__name__)
 
@@ -56,32 +51,33 @@ def run_job(job, jobstore_alias, run_times, logger_name):
       local_logger.info(f'Running job "{job.id}" (scheduled at {run_time})')
     else:
       local_logger.debug(f'Running job "{job.id}" (scheduled at {run_time})')
-    try:
-      retval = job.func(*job.args, **job.kwargs)
-    except BaseException:
-      exc, tb = sys.exc_info()[1:]
-      formatted_tb = "".join(format_tb(tb))
-      events.append(
-        JobExecutionEvent(
-          EVENT_JOB_ERROR,
-          job.id,
-          jobstore_alias,
-          run_time,
-          exception=exc,
-          traceback=formatted_tb,
-        )
-      )
-      local_logger.exception(f'Job "{job.id}" raised an exception')
+    # try:
+    retval = job.func(*job.args, **job.kwargs)
+    # except BaseException as e:
+    #   exc, tb = exc_info()[1:]
+    #   formatted_tb = "".join(format_tb(tb))
+    #   events.append(
+    #     JobExecutionEvent(
+    #       EVENT_JOB_ERROR,
+    #       job.id,
+    #       jobstore_alias,
+    #       run_time,
+    #       exception=exc,
+    #       traceback=formatted_tb,
+    #     )
+    #   )
+    #   local_logger.exception(f'Job "{job.id}" raised an exception')
 
-      # This is to prevent cyclic references that would lead to memory leaks
-      traceback.clear_frames(tb)
-      del tb
+    #   # This is to prevent cyclic references that would lead to memory leaks
+    #   clear_frames(tb)
+    #   del tb
+    #   raise e
+    # else:
+    events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
+    if job.id not in DO_NOT_LOG_JOBS:
+      logger.info(f'Job "{job.id}" executed successfully')
     else:
-      events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
-      if job.id not in DO_NOT_LOG_JOBS:
-        logger.info(f'Job "{job.id}" executed successfully')
-      else:
-        logger.debug(f'Job "{job.id}" executed successfully')
+      logger.debug(f'Job "{job.id}" executed successfully')
 
   return events
 
@@ -106,30 +102,30 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
       logger.info(f'Running job "{job.id}" (scheduled at {run_time})')
     else:
       logger.debug(f'Running job "{job.id}" (scheduled at {run_time})')
-    try:
-      retval = await job.func(*job.args, **job.kwargs)
-    except BaseException as e:
-      logger.error(f'Job "{job.id}" raised an exception: {e}', exc_info=True)
-      exc, tb = sys.exc_info()[1:]
-      formatted_tb = "".join(format_tb(tb))
-      events.append(
-        JobExecutionEvent(
-          EVENT_JOB_ERROR,
-          job.id,
-          jobstore_alias,
-          run_time,
-          exception=exc,
-          traceback=formatted_tb,
-        )
-      )
-      traceback.clear_frames(tb)
-      raise e
+    # try:
+    retval = await job.func(*job.args, **job.kwargs)
+    # except BaseException as e:
+    #   logger.error(f'Job "{job.id}" raised an exception: {e}', exc_info=True)
+    #   exc, tb = exc_info()[1:]
+    #   formatted_tb = "".join(format_tb(tb))
+    #   events.append(
+    #     JobExecutionEvent(
+    #       EVENT_JOB_ERROR,
+    #       job.id,
+    #       jobstore_alias,
+    #       run_time,
+    #       exception=exc,
+    #       traceback=formatted_tb,
+    #     )
+    #   )
+    #   clear_frames(tb)
+    #   raise e
+    # else:
+    events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
+    if job.id not in DO_NOT_LOG_JOBS:
+      logger.info(f'Job "{job.id}" executed successfully')
     else:
-      events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
-      if job.id not in DO_NOT_LOG_JOBS:
-        logger.info(f'Job "{job.id}" executed successfully')
-      else:
-        logger.debug(f'Job "{job.id}" executed successfully')
+      logger.debug(f'Job "{job.id}" executed successfully')
 
   return events
 

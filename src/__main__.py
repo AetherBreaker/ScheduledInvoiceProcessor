@@ -304,7 +304,7 @@ async def main():  # sourcery skip: remove-empty-nested-block
       with RICH_CONSOLE.status("Application is running."):
         await Event().wait()
 
-  except Exception as e:
+  except BaseException as e:
     logger.exception(f"Fatal error in main: {e}")
     exit(1)  # Exit with non-zero code to indicate failure to Coolify
 
