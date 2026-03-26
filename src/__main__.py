@@ -4,7 +4,7 @@ if __name__ == "__main__":
   configure_logging()
 
 from asyncio import Event, run
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import getLogger
 from pathlib import PosixPath, PurePosixPath
 
@@ -179,6 +179,14 @@ async def flip_week():
   scheduler.resume()
 
 
+def test_exception():
+  raise ValueError("This is a test exception for verifying error handling in the scheduler.")
+
+
+async def test_async_exception():
+  raise ValueError("This is a test exception for verifying error handling in the scheduler (async).")
+
+
 async def main():  # sourcery skip: remove-empty-nested-block
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
   try:
@@ -254,6 +262,23 @@ async def main():  # sourcery skip: remove-empty-nested-block
       await runner.setup()
       site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
       await site.start()
+
+      # trigger 2 minutes after startup to allow scheduler to initialize
+      now = datetime.now()
+      first_run_time = now.replace(second=0, microsecond=0) + timedelta(minutes=2)
+      scheduler.add_job(
+        test_exception,
+        next_run_time=first_run_time,
+        id="test_exception",
+        replace_existing=True,
+      )
+
+      scheduler.add_job(
+        test_async_exception,
+        next_run_time=first_run_time + timedelta(minutes=1),
+        id="test_async_exception",
+        replace_existing=True,
+      )
 
       if __debug__:
         pass
