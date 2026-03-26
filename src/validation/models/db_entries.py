@@ -103,23 +103,22 @@ def init_generic_datetime_str(dt: str) -> datetime:
 
 
 class OrderLogDBEntryModel(CustomBaseModel):
-  supplier: SuppliersEnum
+  supplier: Optional[SuppliersEnum]
   store: Optional[StoreNum]
   invoice_number: Optional[InvoiceNum]
   customer: Optional[CustomerID]
-  action: LogActionEnum
-  status: StatusCode = StatusCode.UNKNOWN
-  action_datetime: (
+  action: Optional[LogActionEnum]
+  status: Optional[StatusCode]
+  action_datetime: Optional[
     Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
     | Annotated[datetime, BeforeValidator(remove_tz_info_if_aware)]
     | Annotated[datetime, BeforeValidator(init_generic_datetime_str)]
-  )
-  week_end_date: (
+  ]
+  week_end_date: Optional[
     Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
     | Annotated[datetime, BeforeValidator(remove_tz_info_if_aware)]
     | Annotated[datetime, BeforeValidator(init_generic_datetime_str)]
-    | None
-  )
+  ]
   notes: Optional[str] = None
 
 
@@ -129,9 +128,7 @@ for field, fieldinf in get_annotations(ScheduledOrderDBEntryModel).items():
     SCHEDULE_TYPE_ADAPTERS[field] = TypeAdapter(
       fieldinf,
       config=None
-      if issubclass(
-        fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel)
-      )
+      if issubclass(fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel))
       else PYDANTIC_CONFIG,
     )
   except Exception:
@@ -143,9 +140,7 @@ for field, fieldinf in get_annotations(OrderLogDBEntryModel).items():
     ORDER_LOG_TYPE_ADAPTERS[field] = TypeAdapter(
       fieldinf,
       config=None
-      if issubclass(
-        fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel)
-      )
+      if issubclass(fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel))
       else PYDANTIC_CONFIG,
     )
   except Exception:
