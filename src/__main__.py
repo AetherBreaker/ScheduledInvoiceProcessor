@@ -4,15 +4,17 @@ if __name__ == "__main__":
   configure_logging()
 
 from asyncio import Event, run
-from datetime import datetime, timedelta
+from datetime import datetime
 from logging import getLogger
 from pathlib import PosixPath, PurePosixPath
+from typing import NoReturn
 
 from aiohttp.web import Application, AppRunner, TCPSite
 from apscheduler.triggers.cron import CronTrigger
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
 from environment_init_vars import CWD, SETTINGS
+from err_handling import handle_fatal_exc
 from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
@@ -189,124 +191,122 @@ async def test_async_exception():
   raise ValueError("This is a test exception for verifying error handling in the scheduler (async).")
 
 
-async def main():  # sourcery skip: remove-empty-nested-block
+@handle_fatal_exc
+async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
-  try:
-    with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
-      cache = DatabaseCache()
+  with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
+    cache = DatabaseCache()
 
-      for processor in supplier_register.values():
-        processor(live.pbar)
+    for processor in supplier_register.values():
+      processor(live.pbar)
 
-      await cache.refresh_cache()
-      await reschedule_all_tasks()
+    await cache.refresh_cache()
+    await reschedule_all_tasks()
 
-      scheduler.add_job(
-        cache.refresh_cache,
-        CronTrigger(minute="*/30"),
-        id="refresh_cache",
-        replace_existing=True,
-      )
+    scheduler.add_job(
+      cache.refresh_cache,
+      CronTrigger(minute="*/30"),
+      id="refresh_cache",
+      replace_existing=True,
+    )
 
-      scheduler.add_job(
-        cache.submit_queued_writes_to_pool,
-        CronTrigger(second="*/30"),
-        id="submit_queued_writes_to_pool",
-        replace_existing=True,
-      )
+    scheduler.add_job(
+      cache.submit_queued_writes_to_pool,
+      CronTrigger(second="*/30"),
+      id="submit_queued_writes_to_pool",
+      replace_existing=True,
+    )
 
-      scheduler.add_job(
-        reschedule_all_tasks,
-        CronTrigger(
-          hour=5,
-        ),
-        id="reschedule_all_tasks",
-        replace_existing=True,
-      )
+    scheduler.add_job(
+      reschedule_all_tasks,
+      CronTrigger(
+        hour=5,
+      ),
+      id="reschedule_all_tasks",
+      replace_existing=True,
+    )
 
-      scheduler.add_job(
-        flip_week,
-        CronTrigger(
-          day_of_week="sun",
-          hour=0,
-          minute=0,
-          second=0,
-        ),
-        id="flip_week",
-        replace_existing=True,
-      )
+    scheduler.add_job(
+      flip_week,
+      CronTrigger(
+        day_of_week="sun",
+        hour=0,
+        minute=0,
+        second=0,
+      ),
+      id="flip_week",
+      replace_existing=True,
+    )
 
-      scheduler.add_job(
-        scheduler.print_jobs,
-        CronTrigger(minute="*/1"),
-        id="print_jobs",
-        replace_existing=True,
-      )
+    scheduler.add_job(
+      scheduler.print_jobs,
+      CronTrigger(minute="*/1"),
+      id="print_jobs",
+      replace_existing=True,
+    )
 
-      # Heartbeat job - writes timestamp every minute for health monitoring
-      scheduler.add_job(
-        write_heartbeat,
-        CronTrigger(minute="*/1"),
-        id="heartbeat",
-        replace_existing=True,
-      )
+    # Heartbeat job - writes timestamp every minute for health monitoring
+    scheduler.add_job(
+      write_heartbeat,
+      CronTrigger(minute="*/1"),
+      id="heartbeat",
+      replace_existing=True,
+    )
 
-      scheduler.start()
+    scheduler.start()
 
-      # Write initial heartbeat on startup
-      write_heartbeat()
+    # Write initial heartbeat on startup
+    write_heartbeat()
 
-      scheduler.print_jobs()
+    scheduler.print_jobs()
 
-      app = Application()
-      app.router.add_static("/", CWD / "logs", show_index=True, follow_symlinks=True, append_version=True)
-      runner = AppRunner(app)
-      await runner.setup()
-      site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
-      await site.start()
+    app = Application()
+    app.router.add_static("/", CWD / "logs", show_index=True, follow_symlinks=True, append_version=True)
+    runner = AppRunner(app)
+    await runner.setup()
+    site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
+    await site.start()
 
-      # trigger 2 minutes after startup to allow scheduler to initialize
-      now = datetime.now()
-      first_run_time = now.replace(second=0, microsecond=0) + timedelta(minutes=2)
-      scheduler.add_job(
-        test_exception,
-        next_run_time=first_run_time,
-        id="test_exception",
-        replace_existing=True,
-      )
+    # trigger 2 minutes after startup to allow scheduler to initialize
+    now = datetime.now()
+    first_run_time = now.replace(second=0, microsecond=0)
+    scheduler.add_job(
+      test_exception,
+      next_run_time=first_run_time,
+      id="test_exception",
+      replace_existing=True,
+    )
 
-      scheduler.add_job(
-        test_async_exception,
-        next_run_time=first_run_time + timedelta(minutes=1),
-        id="test_async_exception",
-        replace_existing=True,
-      )
+    scheduler.add_job(
+      test_async_exception,
+      next_run_time=first_run_time,
+      id="test_async_exception",
+      replace_existing=True,
+    )
 
-      if __debug__:
-        pass
+    if __debug__:
+      pass
 
-        # scheduler.print_jobs()
+      # scheduler.print_jobs()
 
-        # global TESTING_THIS_WEEK
+      # global TESTING_THIS_WEEK
 
-        # TESTING_THIS_WEEK.clear()
-        # TESTING_THIS_WEEK.append(True)
+      # TESTING_THIS_WEEK.clear()
+      # TESTING_THIS_WEEK.append(True)
 
-        # await flip_week()
+      # await flip_week()
 
-        # scheduler.print_jobs()
+      # scheduler.print_jobs()
 
-        # await reschedule_all_tasks()
+      # await reschedule_all_tasks()
 
-        # scheduler.print_jobs()
+      # scheduler.print_jobs()
 
-      RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
-      with RICH_CONSOLE.status("Application is running."):
-        await Event().wait()
+    RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
+    with RICH_CONSOLE.status("Application is running."):
+      await Event().wait()
 
-  except BaseException as e:
-    logger.exception(f"Fatal error in main: {e}")
-    exit(1)  # Exit with non-zero code to indicate failure to Coolify
+  raise RuntimeError("How did we get here? The main function should never exit normally.")
 
 
 if __name__ == "__main__":

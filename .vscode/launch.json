@@ -8,7 +8,7 @@
             "name": "Project",
             "type": "debugpy",
             "request": "launch",
-            "justMyCode": true,
+            "justMyCode": false,
             "program": "${workspaceFolder}\\src\\",
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}/testing.env",
@@ -30,7 +30,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true,
+            "justMyCode": false,
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}/testing.env",
             "env": {

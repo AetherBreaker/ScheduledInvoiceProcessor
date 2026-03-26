@@ -8,11 +8,14 @@ from logging import getLogger
 
 import apscheduler.executors.base as exec_base
 from apscheduler.events import EVENT_JOB_ADDED, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED, JobEvent, JobExecutionEvent
+from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.jobstores.base import ConflictingIdError
 from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED
+from apscheduler.util import iscoroutinefunction_partial
 from environment_init_vars import TZ
+from err_handling import handle_fatal_exc
 from utils import get_now
 
 # from sys import exc_info
@@ -134,6 +137,29 @@ exec_base.run_job = run_job
 exec_base.run_coroutine_job = run_coroutine_job
 
 
+class CustomAsyncIOExecutor(AsyncIOExecutor):
+  def _do_submit_job(self, job, run_times):
+    @handle_fatal_exc
+    def callback(f):
+      self._pending_futures.discard(f)
+      # try:
+      events = f.result()
+      # except BaseException as e:
+      #   self._run_job_error(job.id, *exc_info()[1:])
+      #   raise e
+      # else:
+      self._run_job_success(job.id, events)
+
+    if iscoroutinefunction_partial(job.func):
+      coro = run_coroutine_job(job, job._jobstore_alias, run_times, self._logger.name)
+      f = self._eventloop.create_task(coro)
+    else:
+      f = self._eventloop.run_in_executor(None, run_job, job, job._jobstore_alias, run_times, self._logger.name)
+
+    f.add_done_callback(callback)
+    self._pending_futures.add(f)
+
+
 class OrderProcessingScheduler(AsyncIOScheduler):
   @classmethod
   def init_scheduler(cls) -> "OrderProcessingScheduler":
@@ -150,7 +176,12 @@ class OrderProcessingScheduler(AsyncIOScheduler):
       "coalesce": True,
     }
 
+    executors = {
+      "default": CustomAsyncIOExecutor(),
+    }
+
     return cls(
+      executors=executors,
       jobstores=job_stores,
       job_defaults=job_defaults,
       daemon=False,
