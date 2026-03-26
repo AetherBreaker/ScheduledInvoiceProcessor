@@ -180,10 +180,12 @@ async def flip_week():
 
 
 def test_exception():
+  logger.info("Running test_exception to verify error handling in the scheduler.")
   raise ValueError("This is a test exception for verifying error handling in the scheduler.")
 
 
 async def test_async_exception():
+  logger.info("Running test_async_exception to verify error handling in the scheduler (async).")
   raise ValueError("This is a test exception for verifying error handling in the scheduler (async).")
 
 
