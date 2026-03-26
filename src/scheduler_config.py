@@ -108,7 +108,8 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
       logger.debug(f'Running job "{job.id}" (scheduled at {run_time})')
     try:
       retval = await job.func(*job.args, **job.kwargs)
-    except BaseException:
+    except BaseException as e:
+      logger.error(f'Job "{job.id}" raised an exception: {e}', exc_info=True)
       exc, tb = sys.exc_info()[1:]
       formatted_tb = "".join(format_tb(tb))
       events.append(
@@ -121,8 +122,8 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
           traceback=formatted_tb,
         )
       )
-      logger.exception(f'Job "{job.id}" raised an exception')
       traceback.clear_frames(tb)
+      raise e
     else:
       events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
       if job.id not in DO_NOT_LOG_JOBS:
