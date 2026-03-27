@@ -275,12 +275,12 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
       replace_existing=True,
     )
 
-    scheduler.add_job(
-      test_async_exception,
-      next_run_time=first_run_time,
-      id="test_async_exception",
-      replace_existing=True,
-    )
+    # scheduler.add_job(
+    #   test_async_exception,
+    #   next_run_time=first_run_time,
+    #   id="test_async_exception",
+    #   replace_existing=True,
+    # )
 
     if __debug__:
       pass

@@ -26,6 +26,7 @@ RICH_CONSOLE = Console(
   log_time=platform == "win32",
 )
 
+
 PROJECT_NAME = "ScheduledOrderMiddleman"
 
 max_width = 20
