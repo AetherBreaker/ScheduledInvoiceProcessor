@@ -3,7 +3,7 @@ if __name__ == "__main__":
 
   configure_logging()
 
-from asyncio import Event, run
+from asyncio import run
 from datetime import datetime
 from logging import getLogger
 from pathlib import PosixPath, PurePosixPath
@@ -14,7 +14,6 @@ from apscheduler.triggers.cron import CronTrigger
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
 from environment_init_vars import CWD, FATAL_EVENT, SETTINGS
-from err_handling import handle_fatal_exc
 from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
@@ -183,7 +182,7 @@ async def flip_week():
 
 def test_exception():
   logger.info("Running test_exception to verify error handling in the scheduler.")
-  raise ValueError("This is a test exception for verifying error handling in the scheduler.")
+  raise ValueError(f"This is a test exception for verifying error handling in the scheduler. {CWD}")
 
 
 async def test_async_exception():
@@ -268,7 +267,7 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
 
     # trigger 2 minutes after startup to allow scheduler to initialize
     now = datetime.now()
-    first_run_time = now.replace(second=0, microsecond=0)
+    first_run_time = now
     scheduler.add_job(
       test_exception,
       next_run_time=first_run_time,
