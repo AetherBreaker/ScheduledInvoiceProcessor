@@ -11,9 +11,18 @@ services:
 
     # Persist logs and queue backups
     volumes:
-      - /data/coolify/applications/scheduled-order-middleman/secrets:/app/secrets
-      - /data/coolify/applications/scheduled-order-middleman/logs:/app/logs
-      - /data/coolify/applications/scheduled-order-middleman/queue_backups:/app/queue_backups
+      - type: bind
+        source: /data/coolify/applications/scheduled-order-middleman/secrets
+        target: /app/secrets
+        is_directory: true
+      - type: bind
+        source: /data/coolify/applications/scheduled-order-middleman/logs
+        target: /app/logs
+        is_directory: true
+      - type: bind
+        source: /data/coolify/applications/scheduled-order-middleman/queue_backups
+        target: /app/queue_backups
+        is_directory: true
 
     # Environment variables (customize as needed)
     environment:
