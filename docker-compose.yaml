@@ -44,7 +44,7 @@ services:
       - FILE_SERVE_PORT=3000
       # Alerts Emails
       - ALERTS_EMAIL=info@sweetfiretobacco.com
-      - ALERTS_EMAIL_PWD=${API_KEY:?}
+      - ALERTS_EMAIL_PWD=${ALERTS_EMAIL_PWD:?}
       - ALERTS_RECIPIENTS="{'jacob.ogden@sweetfiretobacco.com'}"
       # TZ
       - TZ=America/New_York
