@@ -28,10 +28,10 @@ services:
     environment:
       # - TZ=America/New_York
       # Override secret file paths to use Docker secrets location
-      - GOOGLE_API_KEY_FILE=/run/secrets/db-key
-      - SFT_WEBSITE_CREDS_FILE=/run/secrets/sft_creds
-      - SAS_FTP_CREDS_FILE=/run/secrets/sas_ftp_creds
-      - RYO_FTP_CREDS_FILE=/run/secrets/ryo_ftp_creds
+      - GOOGLE_API_KEY_FILE=/app/secrets/db-key.json
+      - RYO_FTP_CREDS_FILE=/app/secrets/ryo_ftp_creds.json
+      - SAS_FTP_CREDS_FILE=/app/secrets/sas_ftp_creds.json
+      - SFT_WEBSITE_CREDS_FILE=/app/secrets/sft_creds.json
       # Database configuration (from production.env - optional overrides)
       # Uncomment and modify these to override production.env values
       - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
