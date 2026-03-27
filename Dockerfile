@@ -33,10 +33,6 @@ RUN adduser \
 RUN mkdir -p /app/src/logs /app/src/queue_backups && \
     chown -R appuser:appuser /app 
 
-
-RUN chown appuser:appuser /data/scheduler_files/logs 
-RUN chown appuser:appuser /data/scheduler_files/queue_backups
-
 # Download dependencies as a separate step to take advantage of Docker's caching.
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
