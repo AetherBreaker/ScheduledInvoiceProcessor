@@ -14,15 +14,9 @@ services:
       - type: volume
         source: /data/coolify/applications/scheduled-order-middleman/secrets
         target: /app/secrets
-        # is_directory: true
-      - type: volume
-        source: /data/coolify/applications/scheduled-order-middleman/logs
-        target: /app/src/logs
-        # is_directory: true
-      - type: volume
-        source: /data/coolify/applications/scheduled-order-middleman/queue_backups
-        target: /app/src/queue_backups
-        # is_directory: true
+      - /data/coolify/applications/scheduled-order-middleman/secrets:/app/secrets
+      - /data/coolify/applications/scheduled-order-middleman/logs:/app/logs
+      - /data/coolify/applications/scheduled-order-middleman/queue_backups:/app/queue_backups
 
     # Environment variables (customize as needed)
     environment:
