@@ -11,9 +11,6 @@ services:
 
     # Persist logs and queue backups
     volumes:
-      - type: volume
-        source: /data/coolify/applications/scheduled-order-middleman/secrets
-        target: /app/secrets
       - /data/coolify/applications/scheduled-order-middleman/secrets:/app/secrets
       - /data/coolify/applications/scheduled-order-middleman/logs:/app/logs
       - /data/coolify/applications/scheduled-order-middleman/queue_backups:/app/queue_backups
