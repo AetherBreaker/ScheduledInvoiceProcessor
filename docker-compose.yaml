@@ -8,7 +8,7 @@ services:
     # image: jogdensft/scheduledordermiddleman-scheduler:latest
     ports:
       - "3000:3000"
-    user: appuser
+    user: appuser:appuser
     # Persist logs and queue backups
     volumes:
       - type: bind
