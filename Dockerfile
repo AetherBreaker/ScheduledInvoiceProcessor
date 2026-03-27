@@ -31,7 +31,10 @@ RUN adduser \
 
 # Create directories for runtime data with proper permissions
 RUN mkdir -p /app/src/logs /app/src/queue_backups && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app && \
+    chmod 777 /app/src/logs && \
+    chmod 777 /app/src/queue_backups
+
 
 # Download dependencies as a separate step to take advantage of Docker's caching.
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -40,6 +43,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # Copy the source code into the container.
 COPY --chown=appuser:appuser ./src ./src
+
 
 # Copy environment configuration (contains non-secret app config) to src directory
 # COPY --chown=appuser:appuser ./production.env ./src/production.env

@@ -8,7 +8,7 @@ services:
     # image: jogdensft/scheduledordermiddleman-scheduler:latest
     ports:
       - "3000:3000"
-
+    user: "10001:${GID}"
     # Persist logs and queue backups
     volumes:
       - type: bind
@@ -68,3 +68,8 @@ services:
       - traefik.enable=true
       - "traefik.http.routers.<unique_router_name>.rule=Host(`shadowarcanist.com`) && PathPrefix(`/`)"
       - traefik.http.routers.<unique_router_name>.entryPoints=http
+
+volumes:
+  logs:
+  queue_backups:
+  secrets:
