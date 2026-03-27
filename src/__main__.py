@@ -266,14 +266,14 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
     await site.start()
 
     # trigger 2 minutes after startup to allow scheduler to initialize
-    now = datetime.now()
-    first_run_time = now
-    scheduler.add_job(
-      test_exception,
-      next_run_time=first_run_time,
-      id="test_exception",
-      replace_existing=True,
-    )
+    # now = datetime.now()
+    # first_run_time = now
+    # scheduler.add_job(
+    #   test_exception,
+    #   next_run_time=first_run_time,
+    #   id="test_exception",
+    #   replace_existing=True,
+    # )
 
     # scheduler.add_job(
     #   test_async_exception,
