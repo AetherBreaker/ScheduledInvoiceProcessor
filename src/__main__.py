@@ -191,7 +191,7 @@ async def test_async_exception():
   raise ValueError("This is a test exception for verifying error handling in the scheduler (async).")
 
 
-@handle_fatal_exc
+# @handle_fatal_exc
 async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
   with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
@@ -277,12 +277,12 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
       replace_existing=True,
     )
 
-    scheduler.add_job(
-      test_async_exception,
-      next_run_time=first_run_time,
-      id="test_async_exception",
-      replace_existing=True,
-    )
+    # scheduler.add_job(
+    #   test_async_exception,
+    #   next_run_time=first_run_time,
+    #   id="test_async_exception",
+    #   replace_existing=True,
+    # )
 
     if __debug__:
       pass
