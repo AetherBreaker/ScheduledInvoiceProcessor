@@ -11,15 +11,15 @@ services:
 
     # Persist logs and queue backups
     volumes:
-      - type: bind
+      - type: volume
         source: /data/coolify/applications/scheduled-order-middleman/secrets
         target: /app/secrets
         # is_directory: true
-      - type: bind
+      - type: volume
         source: /data/coolify/applications/scheduled-order-middleman/logs
         target: /app/src/logs
         # is_directory: true
-      - type: bind
+      - type: volume
         source: /data/coolify/applications/scheduled-order-middleman/queue_backups
         target: /app/src/queue_backups
         # is_directory: true
