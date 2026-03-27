@@ -6,6 +6,7 @@ if __name__ == "__main__":
 from collections.abc import Callable
 from functools import wraps
 from logging import getLogger
+from os import _exit
 
 # from collections.abc import Awaitable
 
@@ -32,6 +33,6 @@ def handle_fatal_exc[**TP, TR](func: Callable[TP, TR]) -> Callable[TP, TR]:
       return func(*args, **kwargs)
     except BaseException as e:
       logger.critical(f"Fatal exception in {func.__name__}: {e}", exc_info=True)
-      exit(1)  # Exit with non-zero code to indicate failure to Coolify
+      _exit(1)  # Exit with non-zero code to indicate failure to Coolify
 
   return wrapper
