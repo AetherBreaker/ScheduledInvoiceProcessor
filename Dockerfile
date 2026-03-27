@@ -65,4 +65,4 @@ HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=120s \
 
 # Run the application.
 WORKDIR /app/src
-CMD ["python3", "__main__.py"]
+ENTRYPOINT ["python3", "__main__.py"]
