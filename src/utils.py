@@ -5,6 +5,8 @@ if __name__ == "__main__":
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from os import sep, walk
+from os.path import abspath, basename
 from re import compile
 from typing import TYPE_CHECKING, BinaryIO, Optional
 
@@ -153,3 +155,17 @@ def r1c1_range_to_grid_range(name: str, sheet_id: Optional[int] = None) -> dict[
     filtered_grid_range["sheetId"] = sheet_id
 
   return filtered_grid_range
+
+
+def print_directory_tree(root_dir):
+  print(f"Current Working Directory: {abspath(root_dir)}")
+  for each_dir_path, each_dir_name, dir_files in walk(root_dir):
+    base = basename(each_dir_path)
+    if base in {".git", "__pycache__", "venv", "env", ".venv"}:
+      continue
+    level = each_dir_path.replace(root_dir, "").count(sep)
+    indent = " " * 4 * level
+    print(f"{indent}[{basename(each_dir_path)}/]")
+    sub_indent = " " * 4 * (level + 1)
+    for f in dir_files:
+      print(f"{sub_indent}{f}")

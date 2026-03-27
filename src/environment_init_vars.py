@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from environment_settings import Settings
 from typing_custom.custom_path import CustomPath
+from utils import print_directory_tree
 
 logger = getLogger(__name__)
 
@@ -29,6 +30,7 @@ SPEC_CWD = CustomPath(__file__).parent if getattr(sys, "frozen", False) else Cus
 if SETTINGS.googe_api_key_file.stem != "db-key":
   raise FileNotFoundError(f"Google API key file name must be 'db-key', got: {SETTINGS.googe_api_key_file.stem}")
 if not SETTINGS.googe_api_key_file.exists():
+  print_directory_tree(CWD)
   raise FileNotFoundError(
     f"Google API key file not found at: {SETTINGS.googe_api_key_file}\n"
     "Please create a service account key in the Google Cloud Console "
