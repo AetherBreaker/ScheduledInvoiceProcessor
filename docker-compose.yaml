@@ -17,11 +17,11 @@ services:
         is_directory: true
       - type: bind
         source: /data/scheduler_files/logs
-        target: /app/logs
+        target: /app/src/logs
         is_directory: true
       - type: bind
         source: /data/scheduler_files/queue_backups
-        target: /app/queue_backups
+        target: /app/src/queue_backups
         is_directory: true
 
     # Environment variables (customize as needed)
