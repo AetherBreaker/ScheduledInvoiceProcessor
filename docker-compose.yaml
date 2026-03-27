@@ -68,8 +68,3 @@ services:
       - traefik.enable=true
       - "traefik.http.routers.<unique_router_name>.rule=Host(`shadowarcanist.com`) && PathPrefix(`/`)"
       - traefik.http.routers.<unique_router_name>.entryPoints=http
-
-volumes:
-  logs:
-  queue_backups:
-  secrets:
