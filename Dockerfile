@@ -31,11 +31,13 @@ RUN adduser \
 
 # Create directories for runtime data with proper permissions
 RUN mkdir -p /app/src/logs /app/src/queue_backups && \
-    chown -R appuser:appuser /app && \
-    chmod 777 /app/src/logs && \
-    chmod 777 /app/src/queue_backups && \
-    chmod 777 /data/scheduler_files/logs && \
-    chmod 777 /data/scheduler_files/queue_backups
+    chown -R appuser:appuser /app 
+
+
+RUN chmod 777 /app/src/logs 
+RUN chmod 777 /app/src/queue_backups 
+RUN chmod 777 /data/scheduler_files/logs 
+RUN chmod 777 /data/scheduler_files/queue_backups
 
 # Download dependencies as a separate step to take advantage of Docker's caching.
 RUN --mount=type=cache,target=/root/.cache/pip \
