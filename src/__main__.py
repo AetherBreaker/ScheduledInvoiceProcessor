@@ -13,7 +13,7 @@ from aiohttp.web import Application, AppRunner, TCPSite
 from apscheduler.triggers.cron import CronTrigger
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
-from environment_init_vars import CWD, SETTINGS
+from environment_init_vars import CWD, FATAL_EVENT, SETTINGS
 from err_handling import handle_fatal_exc
 from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
@@ -191,7 +191,6 @@ async def test_async_exception():
   raise ValueError("This is a test exception for verifying error handling in the scheduler (async).")
 
 
-# @handle_fatal_exc
 async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
   with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
@@ -277,12 +276,12 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
       replace_existing=True,
     )
 
-    # scheduler.add_job(
-    #   test_async_exception,
-    #   next_run_time=first_run_time,
-    #   id="test_async_exception",
-    #   replace_existing=True,
-    # )
+    scheduler.add_job(
+      test_async_exception,
+      next_run_time=first_run_time,
+      id="test_async_exception",
+      replace_existing=True,
+    )
 
     if __debug__:
       pass
@@ -304,7 +303,8 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
 
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
     with RICH_CONSOLE.status("Application is running."):
-      await Event().wait()
+      await FATAL_EVENT
+      exit(1)
 
   raise RuntimeError("How did we get here? The main function should never exit normally.")
 

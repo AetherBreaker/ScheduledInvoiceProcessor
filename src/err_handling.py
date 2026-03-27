@@ -6,8 +6,11 @@ if __name__ == "__main__":
 from collections.abc import Callable
 from functools import wraps
 from logging import getLogger
-from os import _exit
 
+from environment_init_vars import FATAL_EVENT
+from send_alert_email import send_alert_email
+
+# from os import _exit
 # from collections.abc import Awaitable
 
 
@@ -33,6 +36,9 @@ def handle_fatal_exc[**TP, TR](func: Callable[TP, TR]) -> Callable[TP, TR]:
       return func(*args, **kwargs)
     except BaseException as e:
       logger.critical(f"Fatal exception in {func.__name__}: {e}", exc_info=True)
-      _exit(1)  # Exit with non-zero code to indicate failure to Coolify
+      # _exit(1)  # Exit with non-zero code to indicate failure to Coolify
+      send_alert_email(f"Fatal exception in {func.__name__}", f"A fatal exception occurred in {func.__name__}:\n\n{e}")
+      FATAL_EVENT.set()
+      raise  # raise whatever to make the type checker happy about return values
 
   return wrapper

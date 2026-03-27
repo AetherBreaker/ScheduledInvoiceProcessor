@@ -42,6 +42,10 @@ services:
       # File Serve Configuration
       - FILE_SERVE_HOST=0.0.0.0
       - FILE_SERVE_PORT=3000
+      # Alerts Emails
+      - ALERTS_EMAIL=info@sweetfiretobacco.com
+      - ALERTS_EMAIL_PWD=${API_KEY:?}
+      - ALERTS_RECIPIENTS="{'jacob.ogden@sweetfiretobacco.com'}"
       # TZ
       - TZ=America/New_York
 

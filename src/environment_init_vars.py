@@ -6,8 +6,10 @@ if __name__ == "__main__":
 
 import sys
 from logging import getLogger
+from sched import Event
 from zoneinfo import ZoneInfo
 
+from aiologic import Event
 from environment_settings import Settings
 from typing_custom.custom_path import CustomPath
 from utils import print_directory_tree
@@ -22,6 +24,8 @@ SETTINGS = Settings()  # type: ignore
 CWD = CustomPath.cwd()
 
 SPEC_CWD = CustomPath(__file__).parent if getattr(sys, "frozen", False) else CustomPath.cwd()
+
+FATAL_EVENT = Event()
 
 # Support environment variable overrides for Docker secrets
 # In Docker, these will be set to /run/secrets/<secret_name>

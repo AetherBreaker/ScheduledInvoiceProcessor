@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field
+from pydantic.networks import NameEmail
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = getLogger(__name__)
@@ -48,6 +49,10 @@ class Settings(BaseSettings):
   file_serve_public_domain: Annotated[str, Field(alias="FILE_SERVE_PUBLIC_DOMAIN")] = "som.sweetfiretobacco.com"
   file_serve_host: Annotated[str, Field(alias="FILE_SERVE_HOST")] = "localhost"
   file_serve_port: Annotated[int, Field(alias="FILE_SERVE_PORT")] = 8080
+
+  alerts_email: Annotated[str, Field(alias="ALERTS_EMAIL")] = "info@sweetfiretobacco.com"
+  alerts_email_pwd: Annotated[str, Field(alias="ALERTS_EMAIL_PWD")]
+  alerts_recipients: Annotated[set[NameEmail], Field(alias="ALERTS_RECIPIENTS")] = set()
 
   # @field_validator("*", mode="wrap", check_fields=False)
   # @classmethod

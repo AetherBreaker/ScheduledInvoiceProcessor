@@ -15,3 +15,4 @@ types-python-dateutil==2.9.*
 tzdata
 uvloop; sys_platform=="linux"
 winloop; sys_platform=="win32"
+# email-validator==2.*
