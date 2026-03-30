@@ -14,6 +14,7 @@ from dateutil.relativedelta import SA, relativedelta
 from dateutil.utils import today as _today
 from gspread import IncorrectCellLabel
 from typing_custom import IntOrInf
+from typing_custom.custom_path import CustomPath
 
 if TYPE_CHECKING:
   from rich_custom import CustomTaskID, ProgressCustom
@@ -157,13 +158,13 @@ def r1c1_range_to_grid_range(name: str, sheet_id: int | None = None) -> dict[str
   return filtered_grid_range
 
 
-def print_directory_tree(root_dir):
+def print_directory_tree(root_dir: CustomPath):
   print(f"Current Working Directory: {abspath(root_dir)}")
   for each_dir_path, each_dir_name, dir_files in walk(root_dir):
     base = basename(each_dir_path)
     if base in {".git", "__pycache__", "venv", "env", ".venv"}:
       continue
-    level = each_dir_path.replace(root_dir, "").count(sep)
+    level = each_dir_path.replace(str(root_dir), "").count(sep)
     indent = " " * 4 * level
     print(f"{indent}[{basename(each_dir_path)}/]")
     sub_indent = " " * 4 * (level + 1)
