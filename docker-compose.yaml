@@ -11,19 +11,9 @@ services:
     user: appuser:appuser
     # Persist logs and queue backups
     volumes:
-      - type: bind
-        source: /data/scheduler_files/secrets
-        target: /app/secrets
-        is_directory: true
-      - type: bind
-        source: /data/scheduler_files/logs
-        target: /app/src/logs
-        is_directory: true
-      - type: bind
-        source: /data/scheduler_files/queue_backups
-        target: /app/src/queue_backups
-        is_directory: true
-
+      - secrets:/app/secrets
+      - logs:/app/src/logs
+      - queue_backups:/app/src/queue_backups
     # Environment variables (customize as needed)
     environment:
       # - TZ=America/New_York
@@ -68,3 +58,23 @@ services:
       - traefik.enable=true
       - "traefik.http.routers.<unique_router_name>.rule=Host(`shadowarcanist.com`) && PathPrefix(`/`)"
       - traefik.http.routers.<unique_router_name>.entryPoints=http
+
+volumes:
+  secrets:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/scheduler_files/secrets
+  logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/scheduler_files/logs
+  queue_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/scheduler_files/queue_backups
