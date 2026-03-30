@@ -42,15 +42,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY --chown=appuser:appuser ./src ./src
 
 
-# Copy environment configuration (contains non-secret app config) to src directory
-# COPY --chown=appuser:appuser ./production.env ./src/production.env
-
-# REMOVED: Do NOT copy secrets into the image!
-# Secrets will be mounted at runtime via Docker Compose secrets
-# They will be available at /run/secrets/ in the container
-
-# Switch to the non-privileged user to run the application.
-USER appuser
+USER root
 
 # Set PYTHONPATH so imports work correctly
 ENV PYTHONPATH=/app/src
