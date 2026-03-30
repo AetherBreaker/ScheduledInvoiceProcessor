@@ -177,6 +177,13 @@ class SupplierProcessorBase(metaclass=SingletonType):
   async def save_queue_backups_off_thread(self) -> None:
     await to_thread(self._save_backups)
 
+  async def cleanup_stale_queue_entries(self) -> None:
+    async with self._lock:
+      removed_entries = self._clean_stale_queue_entries()
+
+    if removed_entries:
+      await to_thread(self._save_backups)
+
   def _save_backups(self) -> None:
     try:
       with self._lock:
@@ -222,21 +229,19 @@ class SupplierProcessorBase(metaclass=SingletonType):
     # Note: Called during __init__, no need for lock protection
     to_load = (
       (
-        self._queue_ta.validate_json(self.pickup_queue_backup_file.read_text() if self.pickup_queue_backup_file.exists() else "{}"),
+        self._load_queue_backup_file(self.pickup_queue_backup_file, "pickup"),
         self._file_pickup_queue,
       ),
       (
-        self._queue_ta.validate_json(
-          self.preprocess_queue_backup_file.read_text() if self.preprocess_queue_backup_file.exists() else "{}"
-        ),
+        self._load_queue_backup_file(self.preprocess_queue_backup_file, "preprocess"),
         self._file_preprocess_queue,
       ),
       (
-        self._queue_ta.validate_json(self.waiting_queue_backup_file.read_text() if self.waiting_queue_backup_file.exists() else "{}"),
+        self._load_queue_backup_file(self.waiting_queue_backup_file, "waiting"),
         self._file_waiting_queue,
       ),
       (
-        self._queue_ta.validate_json(self.dropoff_queue_backup_file.read_text() if self.dropoff_queue_backup_file.exists() else "{}"),
+        self._load_queue_backup_file(self.dropoff_queue_backup_file, "dropoff"),
         self._file_dropoff_queue,
       ),
     )
@@ -245,8 +250,43 @@ class SupplierProcessorBase(metaclass=SingletonType):
       target.clear()
       target.update(deepcopy(loaded))
 
-  def _clean_stale_queue_entries(self) -> None:
+    self._clean_stale_queue_entries()
+
+  def _load_queue_backup_file(self, backup_file: CustomPath, queue_name: str) -> dict[str, FileRegisterData]:
+    if not backup_file.exists():
+      return {}
+
+    raw_backup = backup_file.read_text()
+
+    try:
+      return self._queue_ta.validate_json(raw_backup)
+    except Exception as exc:
+      quarantined_file = self._quarantine_corrupted_queue_backup(backup_file, raw_backup)
+      logger.error(
+        f"{self.__class__.__name__}: Failed to load {queue_name} queue backup from {backup_file}. "
+        f"Quarantined corrupted backup to {quarantined_file}: {exc}"
+      )
+      send_alert_email(
+        subject=f"Corrupted {self.queue_backup_prefix} {queue_name} queue backup",
+        content=(
+          f"{self.__class__.__name__} could not load the {queue_name} queue backup.\n\n"
+          f"Original backup: {backup_file}\n"
+          f"Quarantined copy: {quarantined_file}\n"
+          f"Error: {exc}\n\n"
+          "Startup will continue with this queue cleared."
+        ),
+      )
+      return {}
+
+  def _quarantine_corrupted_queue_backup(self, backup_file: CustomPath, raw_backup: str) -> CustomPath:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    quarantined_file = self._corrupted_queue_backup_folder / f"{backup_file.stem}_{timestamp}{backup_file.suffix}"
+    quarantined_file.write_text(raw_backup)
+    return quarantined_file
+
+  def _clean_stale_queue_entries(self) -> int:
     # Note: Called during __init__, no need for lock protection
+    removed_entries = 0
     for queue in (
       self._file_pickup_queue,
       self._file_preprocess_queue,
@@ -256,6 +296,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
       for key, item in tuple(queue.items()):
         if item.stale:
           queue.pop(key)
+          removed_entries += 1
+          logger.warning(f"{self.__class__.__name__}: Removed stale queue entry {key}")
+
+    return removed_entries
 
   @classmethod
   def check_connections(cls) -> bool:

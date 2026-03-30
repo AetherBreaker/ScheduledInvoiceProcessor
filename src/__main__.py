@@ -107,6 +107,13 @@ async def reschedule_all_tasks():
       replace_existing=True,
     )
 
+    scheduler.add_job(
+      processor().cleanup_stale_queue_entries,
+      CronTrigger(hour=3, minute=0),
+      id=f"{supplier}_cleanup_stale_queue_entries",
+      replace_existing=True,
+    )
+
   async for order in current_week.walk_typed_rows():
     if not order.customer or not order.store:
       continue
