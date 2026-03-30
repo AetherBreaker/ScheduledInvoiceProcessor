@@ -14,6 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
 from environment_init_vars import CWD, FATAL_EVENT, SETTINGS
+from err_handling import get_last_fatal_details
 from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
@@ -302,6 +303,30 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
     with RICH_CONSOLE.status("Application is running."):
       await FATAL_EVENT
+
+      try:
+        logger.warning("Fatal shutdown: stopping scheduler to freeze application state")
+        scheduler.pause()
+        scheduler.shutdown(wait=False)
+      except Exception as e:
+        logger.error(f"Fatal shutdown: failed to stop scheduler cleanly: {e}", exc_info=True)
+
+      fatal_details = get_last_fatal_details()
+
+      if fatal_details["is_database_origin"]:
+        logger.warning(
+          "Fatal shutdown: skipping final Google Sheets flush because fatal error originated in database interface"
+          f" (type={fatal_details['exception_type']}, message={fatal_details['exception_message']})"
+        )
+      else:
+        try:
+          if await cache.has_pending_writes():
+            logger.warning("Fatal shutdown: attempting final Google Sheets flush of queued writes")
+            await cache.submit_queued_writes_to_pool()
+            logger.warning("Fatal shutdown: final Google Sheets flush completed")
+        except Exception as e:
+          logger.error(f"Fatal shutdown: final Google Sheets flush failed: {e}", exc_info=True)
+
       exit(1)
 
   raise RuntimeError("How did we get here? The main function should never exit normally.")

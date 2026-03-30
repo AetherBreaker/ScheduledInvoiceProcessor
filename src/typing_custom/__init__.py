@@ -63,3 +63,9 @@ class GridRange(TypedDict):
 class CellFormat(TypedDict):
   range: GridRange
   format: Mapping[str, Any]
+
+
+class FatalDetails(TypedDict):
+  is_database_origin: bool
+  exception_type: str | None
+  exception_message: str | None

@@ -309,6 +309,16 @@ class DatabaseCache(metaclass=SingletonType):
     ):
       await to_thread(self._api_write)
 
+  async def has_pending_writes(self) -> bool:
+    async with self._db_write_queue_lock:
+      has_raw = self._values_batch_update_raw_body is not None and bool(self._values_batch_update_raw_body["data"])
+      has_user_entered = self._values_batch_update_user_entered_body is not None and bool(
+        self._values_batch_update_user_entered_body["data"]
+      )
+      has_before = self._before_write_update_body is not None and bool(self._before_write_update_body["requests"])
+      has_after = self._after_write_update_body is not None and bool(self._after_write_update_body["requests"])
+      return has_raw or has_user_entered or has_before or has_after
+
   def _api_write(self):
     try:
       with self._api_write_lock, self._db_write_queue_lock:
