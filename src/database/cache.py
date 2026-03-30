@@ -1,5 +1,3 @@
-import contextlib
-
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -721,7 +719,7 @@ class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
     status: StatusCode,
     action_datetime: datetime,
     week_end_date: datetime | None,
-    note: Optional[str] = None,
+    note: str | None = None,
   ) -> None:
     new_entry = {
       "supplier": supplier,

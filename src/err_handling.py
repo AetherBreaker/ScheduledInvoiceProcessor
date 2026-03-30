@@ -8,10 +8,8 @@ from collections.abc import Callable
 from functools import wraps
 from io import StringIO
 from logging import getLogger
-from re import sub
 
 from environment_init_vars import FATAL_EVENT
-from logging_config import RICH_CONSOLE
 from rich.console import Console
 from send_alert_email import send_alert_email
 
