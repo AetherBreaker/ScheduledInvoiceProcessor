@@ -180,16 +180,6 @@ async def flip_week():
   scheduler.resume()
 
 
-def test_exception():
-  logger.info("Running test_exception to verify error handling in the scheduler.")
-  raise ValueError(f"This is a test exception for verifying error handling in the scheduler. {CWD}")
-
-
-async def test_async_exception():
-  logger.info("Running test_async_exception to verify error handling in the scheduler (async).")
-  raise ValueError("This is a test exception for verifying error handling in the scheduler (async).")
-
-
 async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
   with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
@@ -264,23 +254,6 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
     await runner.setup()
     site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
     await site.start()
-
-    # trigger 2 minutes after startup to allow scheduler to initialize
-    # now = datetime.now()
-    # first_run_time = now
-    # scheduler.add_job(
-    #   test_exception,
-    #   next_run_time=first_run_time,
-    #   id="test_exception",
-    #   replace_existing=True,
-    # )
-
-    # scheduler.add_job(
-    #   test_async_exception,
-    #   next_run_time=first_run_time,
-    #   id="test_async_exception",
-    #   replace_existing=True,
-    # )
 
     if __debug__:
       pass
