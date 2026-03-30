@@ -42,7 +42,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY --chown=appuser:appuser ./src ./src
 
 
-USER root
+# Switch to the non-privileged user to run the application.
+USER appuser
 
 # Set PYTHONPATH so imports work correctly
 ENV PYTHONPATH=/app/src
