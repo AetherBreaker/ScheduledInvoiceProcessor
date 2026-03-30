@@ -13,6 +13,8 @@ from json import loads
 from logging import LoggerAdapter, getLogger
 from pathlib import PurePosixPath
 from re import Match, Pattern
+from socket import timeout as SocketTimeout
+from time import sleep
 from typing import Protocol, Self, cast
 
 from aiologic import Lock
@@ -20,10 +22,11 @@ from database.cache import DatabaseCache
 from dateutil.relativedelta import SU, relativedelta
 from environment_init_vars import CWD, SETTINGS
 from logging_config import add_log_context
-from paramiko import SFTPClient
+from paramiko import SFTPClient, SSHException
 from pydantic import ConfigDict, Field, TypeAdapter
 from pydantic.dataclasses import dataclass
 from rich_custom import CustomTaskID, ProgressCustom
+from send_alert_email import send_alert_email
 from typing_custom import CustomerID, StoreNum, SupplierQueueKey
 from typing_custom.abc import SingletonType
 from typing_custom.custom_path import CustomPath
@@ -37,6 +40,17 @@ from supplier_processors.log_action import LogActionHandlerType, log_actions
 # from logging_config import DynamicQueueListener
 
 logger = getLogger(__name__)
+TRANSIENT_TRANSFER_ERROR_STRINGS = (
+  "connection reset",
+  "connection aborted",
+  "connection closed",
+  "server disconnected",
+  "timed out",
+  "timeout",
+  "broken pipe",
+  "socket is closed",
+  "eof",
+)
 # contextual_logs_queue = Queue(-1)
 # logger.addHandler(QueueHandler(contextual_logs_queue))  # type: ignore
 
@@ -121,6 +135,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _file_dropoff_queue: dict[SupplierQueueKey, FileRegisterData]
   _queue_ta = TypeAdapter(dict[str, FileRegisterData])
   _file_queue_backup_folder: CustomPath = CWD / "queue_backups"
+  _corrupted_queue_backup_folder: CustomPath = _file_queue_backup_folder / "corrupted"
+  _transient_transfer_retries = 3
   _lock: Lock = Lock()
 
   vendor_ftp: type[SFTPProtocol]
@@ -157,6 +173,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     self._file_dropoff_queue = {}
 
     self._file_queue_backup_folder.mkdir(exist_ok=True, parents=True)
+    self._corrupted_queue_backup_folder.mkdir(exist_ok=True, parents=True)
     self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
     if self.local_post_processing_folder:
       self.local_post_processing_folder.mkdir(exist_ok=True, parents=True)
@@ -514,53 +531,78 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ):
     local_logger = adapted_logger or logger
     result = StatusCode.UNKNOWN
-    try:
-      transient_file = BytesIO()
+    for attempt in range(1, self._transient_transfer_retries + 2):
+      try:
+        transient_file = BytesIO()
 
-      with self.vendor_ftp(self.pickup_ftp_creds) as origin_client:  # type: ignore
-        file_size = origin_client.stat(send_path.as_posix()).st_size
-        with self.waiting_ftp(self.waiting_ftp_creds) as dest_client:
-          dest_client.voidcmd("TYPE I")
-          with self.pbar.add_task(f"Transferring {send_path.name}") as transfer_task:
-            with origin_client.open(send_path.as_posix(), "rb") as read_file:
-              read_file.prefetch(file_size)
-              with dest_client.transfercmd(f"STOR {recv_path.as_posix()}") as write_file:
-                while buffer := read_file.read(8192):
-                  write_file.sendall(buffer)
-                  transient_file.write(buffer)
-                  self.pbar.update(transfer_task, advance=len(buffer))
-                if _SSLSocket is not None and isinstance(write_file, _SSLSocket):
-                  write_file.unwrap()  # type: ignore
-              dest_client.voidresp()
+        with self.vendor_ftp(self.pickup_ftp_creds) as origin_client:  # type: ignore
+          file_size = origin_client.stat(send_path.as_posix()).st_size
+          with self.waiting_ftp(self.waiting_ftp_creds) as dest_client:
+            dest_client.voidcmd("TYPE I")
+            with self.pbar.add_task(f"Transferring {send_path.name}") as transfer_task:
+              with origin_client.open(send_path.as_posix(), "rb") as read_file:
+                read_file.prefetch(file_size)
+                with dest_client.transfercmd(f"STOR {recv_path.as_posix()}") as write_file:
+                  while buffer := read_file.read(8192):
+                    write_file.sendall(buffer)
+                    transient_file.write(buffer)
+                    self.pbar.update(transfer_task, advance=len(buffer))
+                  if _SSLSocket is not None and isinstance(write_file, _SSLSocket):
+                    write_file.unwrap()  # type: ignore
+                dest_client.voidresp()
 
-          # Verify file was transferred successfully
-          success = False
-          try:
-            dest_client.size(recv_path.as_posix())
-            success = True
-            result = StatusCode.SUCCESS
-          except (error_perm, error_temp, OSError) as e:
-            local_logger.warning(f"{self.__class__.__name__}: Failed to verify transfer of {send_path.name}: {e}")
-            result = StatusCode.FAILURE
+            # Verify file was transferred successfully
+            success = False
+            try:
+              dest_client.size(recv_path.as_posix())
+              success = True
+              result = StatusCode.SUCCESS
+            except (error_perm, error_temp, OSError) as e:
+              local_logger.warning(f"{self.__class__.__name__}: Failed to verify transfer of {send_path.name}: {e}")
+              result = StatusCode.FAILURE
 
-          # update items to log with result of transfer and pickup success status
-          getattr(file_meta, success_attr)[idx] = success
-          if log_action_handler is not None:
-            log_action_handler(key, result, file_meta)
+            # update items to log with result of transfer and pickup success status
+            getattr(file_meta, success_attr)[idx] = success
+            if log_action_handler is not None:
+              log_action_handler(key, result, file_meta)
 
-      local_logger.info(
-        f"{self.__class__.__name__}: Transferred {self.supplier_name} [yellow]{send_path}[/] to SFT FTP [yellow]{recv_path}[/]",
-        extra={"markup": True},
-      )
-      self.extract_invoice_num(transient_file, file_meta, idx, adapted_logger=adapted_logger)
-      self.pbar.update(move_files_task, advance=1)
-      return success
-    # Ensure that exceptions actually get logged while executing off main thread
-    except Exception as e:
-      local_logger.error(f"{self.__class__.__name__}: Error transferring {send_path.name} to {recv_path.name}: {e}")
-      if log_action_handler is not None:
-        log_action_handler(key, StatusCode.FAILURE, file_meta)
-      return False
+        local_logger.info(
+          f"{self.__class__.__name__}: Transferred {self.supplier_name} [yellow]{send_path}[/] to SFT FTP [yellow]{recv_path}[/]",
+          extra={"markup": True},
+        )
+        self.extract_invoice_num(transient_file, file_meta, idx, adapted_logger=adapted_logger)
+        self.pbar.update(move_files_task, advance=1)
+        return success
+      except Exception as e:
+        if self._is_transient_transfer_error(e) and attempt <= self._transient_transfer_retries:
+          backoff_seconds = 2 ** (attempt - 1)
+          local_logger.warning(
+            f"{self.__class__.__name__}: Transient transfer failure for {send_path.name} on attempt {attempt} of "
+            f"{self._transient_transfer_retries + 1}. Retrying in {backoff_seconds} seconds: {e}"
+          )
+          sleep(backoff_seconds)
+          continue
+
+        local_logger.error(f"{self.__class__.__name__}: Error transferring {send_path.name} to {recv_path.name}: {e}")
+        getattr(file_meta, success_attr)[idx] = False
+        if log_action_handler is not None:
+          log_action_handler(key, StatusCode.FAILURE, file_meta)
+        raise
+
+  def _is_transient_transfer_error(self, exc: BaseException) -> bool:
+    if isinstance(
+      exc,
+      (TimeoutError, SocketTimeout, ConnectionError, BrokenPipeError, EOFError, SSHException),
+    ):
+      return True
+
+    message = str(exc).lower()
+    if any(fragment in message for fragment in TRANSIENT_TRANSFER_ERROR_STRINGS):
+      return True
+
+    return any(
+      nested_exc is not None and self._is_transient_transfer_error(nested_exc) for nested_exc in (exc.__cause__, exc.__context__)
+    )
 
   def extract_invoice_num(
     self, bytestream: BytesIO, file_meta: FileRegisterData, idx: int, adapted_logger: LoggerAdapter | None = None
