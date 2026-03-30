@@ -56,6 +56,31 @@ supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
 scheduler = OrderProcessingScheduler.init_scheduler()
 
 
+async def bootstrap_runtime(live: LiveCustom) -> DatabaseCache:
+  try:
+    cache = DatabaseCache()
+  except Exception:
+    logger.critical("Failed to initialize database cache during startup.", exc_info=True)
+    raise
+
+  for processor in supplier_register.values():
+    processor(live.pbar)
+
+  try:
+    await cache.refresh_cache()
+  except Exception:
+    logger.critical("Initial cache refresh failed during startup.", exc_info=True)
+    raise
+
+  try:
+    await reschedule_all_tasks()
+  except Exception:
+    logger.critical("Initial task schedule failed during startup.", exc_info=True)
+    raise
+
+  return cache
+
+
 async def reschedule_all_tasks():
   cache = DatabaseCache()
   current_week = cache.schedule
@@ -183,13 +208,7 @@ async def flip_week():
 async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
   with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
-    cache = DatabaseCache()
-
-    for processor in supplier_register.values():
-      processor(live.pbar)
-
-    await cache.refresh_cache()
-    await reschedule_all_tasks()
+    cache = await bootstrap_runtime(live)
 
     scheduler.add_job(
       cache.refresh_cache,
