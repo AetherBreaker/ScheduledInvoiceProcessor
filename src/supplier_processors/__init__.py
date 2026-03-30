@@ -168,7 +168,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self.preprocess_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_preprocess_queue.json"
 
-    self.pbar = pbar
+    self.pbar = cast(ProgressCustom, pbar)
 
     self._load_queue_backups()
 
