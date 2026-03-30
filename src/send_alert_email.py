@@ -6,6 +6,7 @@ if __name__ == "__main__":
 import smtplib
 import ssl
 from email.message import EmailMessage
+from logging import getLogger
 
 from environment_init_vars import SETTINGS
 
@@ -15,8 +16,14 @@ ALERTS_EMAIL_PWD = SETTINGS.alerts_email_pwd
 
 ALERTS_RECIPIENTS = SETTINGS.alerts_recipients
 
+logger = getLogger(__name__)
+
 
 def send_alert_email(subject: str, content: str) -> None:
+  if not ALERTS_RECIPIENTS:
+    logger.warning("Skipping alert email because no recipients are configured.")
+    return
+
   msg = EmailMessage()
   msg.set_content(content)
   msg["Subject"] = subject
@@ -30,6 +37,6 @@ def send_alert_email(subject: str, content: str) -> None:
       server.ehlo()
       server.login(ALERTS_EMAIL, ALERTS_EMAIL_PWD)
       server.send_message(msg)
-    print("Email sent!")
-  except Exception as e:
-    print(e)
+    logger.debug("Alert email sent successfully.")
+  except Exception:
+    logger.error("Failed to send alert email.", exc_info=True)
