@@ -11,7 +11,7 @@ from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime
 from logging import getLogger
-from typing import Any, Literal, Optional, overload
+from typing import Any, Literal, overload
 
 from aiologic import Lock
 from aiorwlock import RWLock
@@ -120,10 +120,10 @@ class DatabaseCache(metaclass=SingletonType):
 
     self._api_last_call_time = None
 
-    self._values_batch_update_raw_body: Optional[ValuesBatchUpdateBody] = None
-    self._values_batch_update_user_entered_body: Optional[ValuesBatchUpdateBody] = None
-    self._before_write_update_body: Optional[BatchUpdateBody] = None
-    self._after_write_update_body: Optional[BatchUpdateBody] = None
+    self._values_batch_update_raw_body: ValuesBatchUpdateBody | None = None
+    self._values_batch_update_user_entered_body: ValuesBatchUpdateBody | None = None
+    self._before_write_update_body: BatchUpdateBody | None = None
+    self._after_write_update_body: BatchUpdateBody | None = None
 
     self.loop = get_running_loop()
 

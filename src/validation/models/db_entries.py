@@ -7,7 +7,7 @@ from datetime import datetime
 from inspect import get_annotations
 from logging import getLogger
 from re import compile
-from typing import Annotated, Optional, TypeAliasType
+from typing import Annotated, TypeAliasType
 
 from dateutil.relativedelta import FR, MO, SA, SU, TH, TU, WE, relativedelta
 from environment_init_vars import TZ
@@ -103,23 +103,23 @@ def init_generic_datetime_str(dt: str) -> datetime:
 
 
 class OrderLogDBEntryModel(CustomBaseModel):
-  supplier: Optional[SuppliersEnum]
-  store: Optional[StoreNum]
-  invoice_number: Optional[InvoiceNum]
-  customer: Optional[CustomerID]
-  action: Optional[LogActionEnum]
-  status: Optional[StatusCode]
-  action_datetime: Optional[
+  supplier: SuppliersEnum | None
+  store: StoreNum | None
+  invoice_number: InvoiceNum | None
+  customer: CustomerID | None
+  action: LogActionEnum | None
+  status: StatusCode | None
+  action_datetime: (
     Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
     | Annotated[datetime, BeforeValidator(remove_tz_info_if_aware)]
     | Annotated[datetime, BeforeValidator(init_generic_datetime_str)]
-  ]
-  week_end_date: Optional[
+  ) | None
+  week_end_date: (
     Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
     | Annotated[datetime, BeforeValidator(remove_tz_info_if_aware)]
     | Annotated[datetime, BeforeValidator(init_generic_datetime_str)]
-  ]
-  notes: Optional[str] = None
+  ) | None
+  notes: str | None = None
 
 
 SCHEDULE_TYPE_ADAPTERS = {}

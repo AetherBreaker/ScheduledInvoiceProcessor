@@ -11,7 +11,7 @@ from json import loads
 from logging import LoggerAdapter, getLogger
 from pathlib import PurePosixPath
 from re import Pattern, compile
-from typing import Any, Optional
+from typing import Any
 
 from environment_init_vars import CWD, SETTINGS
 from logging_config import add_log_context
@@ -109,8 +109,8 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
   @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
   async def _preprocess_files(
     self,
-    adapted_logger: Optional[LoggerAdapter] = None,
-    log_action_handler: Optional[LogActionHandlerType] = None,
+    adapted_logger: LoggerAdapter | None = None,
+    log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
     if not self._file_preprocess_queue:
@@ -164,7 +164,7 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
     self,
     key: SupplierQueueKey,
     old_file_meta: FileRegisterData,
-    adapted_logger: Optional[LoggerAdapter] = None,
+    adapted_logger: LoggerAdapter | None = None,
   ) -> tuple[SupplierQueueKey, FileRegisterData]:
     try:
       local_logger = adapted_logger or logger
@@ -223,7 +223,7 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
       raise e
 
   def _create_new_merged_file(
-    self, key: SupplierQueueKey, old_file_meta: FileRegisterData, adapted_logger: Optional[LoggerAdapter] = None
+    self, key: SupplierQueueKey, old_file_meta: FileRegisterData, adapted_logger: LoggerAdapter | None = None
   ) -> FileRegisterData:
     local_logger = adapted_logger or logger
     original_invoice_files: list[CustomPath] = []

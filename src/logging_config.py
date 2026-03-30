@@ -8,7 +8,7 @@ from queue import Queue
 from secrets import token_urlsafe
 from sys import platform
 from time import gmtime, localtime, strftime, time
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal
 
 from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
@@ -39,14 +39,14 @@ class FixedRichHandler(RichHandler):
     self,
     *,
     record: logging.LogRecord,
-    traceback: Optional[Traceback],
+    traceback: Traceback | None,
     message_renderable: ConsoleRenderable,
   ) -> ConsoleRenderable:
     """Render log for display.
 
     Args:
         record (LogRecord): logging Record.
-        traceback (Optional[Traceback]): Traceback instance or None for no Traceback.
+        traceback (Traceback | None): Traceback instance or None for no Traceback.
         message_renderable (ConsoleRenderable): Renderable (typically Text) containing log message contents.
 
     Returns:
@@ -209,7 +209,7 @@ FILE_FORMATTER = FixedFormatter(
 
 def add_log_context[**TP, TR](
   action_identifier_prefix: LogActionEnum,
-  log_subfolder: Optional[str] = None,
+  log_subfolder: str | None = None,
 ) -> Callable[
   [Callable[TP, Awaitable[TR]]],
   Callable[TP, Awaitable[TR]],

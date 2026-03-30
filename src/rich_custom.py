@@ -9,11 +9,9 @@ from itertools import batched
 from logging import getLogger
 from threading import RLock
 from types import TracebackType
-from typing import IO, Any, Dict, Literal, Optional, Self, TextIO, Union, cast
+from typing import IO, Any, Literal, Self, TextIO, cast
 
 from logging_config import RICH_CONSOLE
-
-from rich import get_console
 from rich.console import Console, RenderableType
 from rich.control import Control
 from rich.live import Live, _RefreshThread
@@ -35,6 +33,8 @@ from rich.prompt import DefaultType, InvalidResponse, PromptBase, PromptType
 from rich.segment import ControlType, Segment
 from rich.table import Table
 from rich.text import Text, TextType
+
+from rich import get_console
 
 logger = getLogger(__name__)
 
@@ -150,7 +150,7 @@ class ChoicePrompt(PromptBase[int]):
     show_choices: bool = True,
     allow_multiple_choices: bool = False,
     default: Any = ...,
-    stream: Optional[TextIO] = None,
+    stream: TextIO | None = None,
   ) -> PromptType:  # type: ignore
     """Shortcut to construct and run a prompt loop and return the result.
 
@@ -177,7 +177,7 @@ class ChoicePrompt(PromptBase[int]):
     )
     return _prompt(default=default, stream=stream)
 
-  def __call__(self, *, default: Any = ..., stream: Optional[TextIO] = None) -> Any:
+  def __call__(self, *, default: Any = ..., stream: TextIO | None = None) -> Any:
     """Run the prompt loop.
 
     Args:
@@ -278,7 +278,7 @@ class LiveCustom(Live):
   def __init__(
     self,
     *,
-    console: Optional[Console] = RICH_CONSOLE,
+    console: Console | None = RICH_CONSOLE,
     screen: bool = False,
     auto_refresh: bool = True,
     refresh_per_second: float = 60,
@@ -286,7 +286,7 @@ class LiveCustom(Live):
     redirect_stdout: bool = True,
     redirect_stderr: bool = True,
     vertical_overflow: VerticalOverflowMethod = "ellipsis",
-    get_renderable: Optional[Callable[[], RenderableType]] = None,
+    get_renderable: Callable[[], RenderableType] | None = None,
   ) -> None:
     assert refresh_per_second > 0, "refresh_per_second must be > 0"
     self.console = console if console is not None else get_console()
@@ -295,16 +295,16 @@ class LiveCustom(Live):
 
     self._redirect_stdout = redirect_stdout
     self._redirect_stderr = redirect_stderr
-    self._restore_stdout: Optional[IO[str]] = None
-    self._restore_stderr: Optional[IO[str]] = None
+    self._restore_stdout: IO[str] | None = None
+    self._restore_stderr: IO[str] | None = None
 
     self._lock = RLock()
-    self.ipy_widget: Optional[Any] = None
+    self.ipy_widget: Any | None = None
     self.auto_refresh = auto_refresh
     self._started: bool = False
     self.transient = True if screen else transient
 
-    self._refresh_thread: Optional[_RefreshThread] = None
+    self._refresh_thread: _RefreshThread | None = None
     self.refresh_per_second = refresh_per_second
 
     self.vertical_overflow = vertical_overflow
@@ -492,18 +492,18 @@ class CustomTaskID(int):
 class ProgressCustom(Progress):
   def __init__(
     self,
-    *columns: Union[str, ProgressColumn],
-    console: Optional[Console] = None,
+    *columns: str | ProgressColumn,
+    console: Console | None = None,
     auto_refresh: bool = True,
     refresh_per_second: float = 4,
     speed_estimate_period: float = 30.0,
     transient: bool = False,
     redirect_stdout: bool = True,
     redirect_stderr: bool = True,
-    get_time: Optional[GetTimeCallable] = None,
+    get_time: GetTimeCallable | None = None,
     disable: bool = False,
     expand: bool = False,
-    live: Optional[LiveCustom] = None,
+    live: LiveCustom | None = None,
   ) -> None:
     assert refresh_per_second > 0, "refresh_per_second must be > 0"
     self._lock = RLock()
@@ -512,7 +512,7 @@ class ProgressCustom(Progress):
 
     self.disable = disable
     self.expand = expand
-    self._tasks: Dict[CustomTaskID, Task] = {}  # type: ignore
+    self._tasks: dict[CustomTaskID, Task] = {}  # type: ignore
     self._task_index: CustomTaskID = CustomTaskID(0, self)
     self.live = live or Live(
       console=console or get_console(),
@@ -531,7 +531,7 @@ class ProgressCustom(Progress):
     self,
     description: str,
     start: bool = True,
-    total: Optional[float] = 100.0,
+    total: float | None = 100.0,
     completed: int = 0,
     visible: bool = True,
     remove_when_finished: bool = True,
@@ -577,11 +577,11 @@ class ProgressCustom(Progress):
     self,
     task_id: CustomTaskID,
     *,
-    total: Optional[float] = None,
-    completed: Optional[float] = None,
-    advance: Optional[float] = None,
-    description: Optional[str] = None,
-    visible: Optional[bool] = None,
+    total: float | None = None,
+    completed: float | None = None,
+    advance: float | None = None,
+    description: str | None = None,
+    visible: bool | None = None,
     refresh: bool = False,
     **fields: Any,
   ) -> None:

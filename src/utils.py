@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from os import sep, walk
 from os.path import abspath, basename
 from re import compile
-from typing import TYPE_CHECKING, BinaryIO, Optional
+from typing import TYPE_CHECKING, BinaryIO
 
 from dateutil.relativedelta import SA, relativedelta
 from dateutil.utils import today as _today
@@ -118,7 +118,7 @@ def _r1c1_to_rowcol_unbounded(label: str) -> tuple[IntOrInf, IntOrInf]:
   return (row, col)
 
 
-def r1c1_range_to_grid_range(name: str, sheet_id: Optional[int] = None) -> dict[str, int]:
+def r1c1_range_to_grid_range(name: str, sheet_id: int | None = None) -> dict[str, int]:
   """Converts a range defined in R1C1 notation to a dict representing
   a `GridRange`_.
 
