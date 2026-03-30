@@ -25,9 +25,6 @@ RUN adduser \
     --uid "${UID}" \
     appuser
 
-# Install procps for health check (pgrep command)
-# RUN apt-get update && apt-get install -y --no-install-recommends procps && \
-#     rm -rf /var/lib/apt/lists/*
 
 # Create directories for runtime data with proper permissions
 RUN mkdir -p /app/src/logs /app/src/queue_backups && \
