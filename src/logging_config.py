@@ -280,7 +280,7 @@ CWD = CustomPath.cwd()
 
 LOGGING_BASE_NAME = "ScheduledOrderMiddleman"
 
-LOG_LOC_FOLDER = CWD / ".." / "logs" if CWD.name == "src" else CWD / "logs"
+LOG_LOC_FOLDER = CWD / "logs"
 LOG_LOC_FOLDER.mkdir(exist_ok=True)
 
 print("LOOK RIGHT HERE THIS IS WHERE YOU NEED TO LOOK AAAAAAAAAAAAAAAAAAAAAAA")
