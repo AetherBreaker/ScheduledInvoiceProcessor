@@ -25,10 +25,6 @@ RUN adduser \
     --uid "${UID}" \
     appuser
 
-# Install gosu for dropping privileges in entrypoint
-RUN apt-get update && apt-get install -y --no-install-recommends gosu && \
-    rm -rf /var/lib/apt/lists/*
-
 # Create directories for runtime data with proper permissions
 RUN mkdir -p /app/src/logs /app/src/queue_backups && \
     chown -R appuser:appuser /app
