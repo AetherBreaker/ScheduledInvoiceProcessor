@@ -31,12 +31,12 @@ FATAL_EVENT = Event()
 # In Docker, these will be set to /run/secrets/<secret_name>
 
 
-if SETTINGS.googe_api_key_file.stem != "db-key":
-  raise FileNotFoundError(f"Google API key file name must be 'db-key', got: {SETTINGS.googe_api_key_file.stem}")
-if not SETTINGS.googe_api_key_file.exists():
+if SETTINGS.google_api_key_file.stem != "db-key":
+  raise FileNotFoundError(f"Google API key file name must be 'db-key', got: {SETTINGS.google_api_key_file.stem}")
+if not SETTINGS.google_api_key_file.exists():
   print_directory_tree(CWD)
   raise FileNotFoundError(
-    f"Google API key file not found at: {SETTINGS.googe_api_key_file}\n"
+    f"Google API key file not found at: {SETTINGS.google_api_key_file}\n"
     "Please create a service account key in the Google Cloud Console "
     "and save it as 'db-key' in the current directory.\n"
     "For Docker: ensure secrets are properly mounted in docker-compose.yml"

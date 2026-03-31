@@ -42,7 +42,7 @@ class Settings(BaseSettings):
   database_refresh_interval: Annotated[int, Field(alias="DATABASE_REFRESH_INTERVAL")] = 3600
   database_write_interval: Annotated[int, Field(alias="DATABASE_WRITE_INTERVAL")] = 60
 
-  googe_api_key_file: Annotated[Path, Field(alias="GOOGLE_API_KEY_FILE")]
+  google_api_key_file: Annotated[Path, Field(alias="GOOGLE_API_KEY_FILE")]
   sft_website_creds_file: Annotated[Path, Field(alias="SFT_WEBSITE_CREDS_FILE")]
   sas_ftp_creds_file: Annotated[Path, Field(alias="SAS_FTP_CREDS_FILE")]
   ryo_ftp_creds_file: Annotated[Path, Field(alias="RYO_FTP_CREDS_FILE")]
