@@ -6,8 +6,6 @@ services:
     container_name: scheduled-order-middleman
     restart: no
     # image: jogdensft/scheduledordermiddleman-scheduler:latest
-    ports:
-      - "3000:3000"
     user: appuser:appuser
     # Persist logs and queue backups
     volumes:
@@ -41,7 +39,7 @@ services:
       - DATABASE_WRITE_INTERVAL=30
       # File Serve Configuration
       - FILE_SERVE_HOST=localhost
-      - FILE_SERVE_PORT=3000
+      - FILE_SERVE_PORT=80
       # Alerts Emails
       - ALERTS_EMAIL=info@sweetfiretobacco.com
       - ALERTS_EMAIL_PWD=${ALERTS_EMAIL_PWD:?}
