@@ -60,7 +60,7 @@ if not SETTINGS.sas_ftp_creds_file.exists():
   )
 
 if SETTINGS.ryo_ftp_creds_file.stem != "ryo_ftp_creds":
-  raise FileNotFoundError(f"SAS FTP creds file name must be 'ryo_ftp_creds', got: {SETTINGS.sas_ftp_creds_file.stem}")
+  raise FileNotFoundError(f"RYO FTP creds file name must be 'ryo_ftp_creds', got: {SETTINGS.ryo_ftp_creds_file.stem}")
 if not SETTINGS.ryo_ftp_creds_file.exists():
   raise FileNotFoundError(
     f"SAS FTP creds file not found at: {SETTINGS.ryo_ftp_creds_file}\n"
