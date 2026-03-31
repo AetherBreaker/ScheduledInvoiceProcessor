@@ -6,7 +6,6 @@ if __name__ == "__main__":
 
 import sys
 from logging import getLogger
-from sched import Event
 from zoneinfo import ZoneInfo
 
 from aiologic import Event
