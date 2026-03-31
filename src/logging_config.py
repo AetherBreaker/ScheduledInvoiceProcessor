@@ -158,7 +158,10 @@ class ContextFilter(logging.Filter):
     self.identifier = identifier
 
   def filter(self, record):
-    return record.ctx == self.identifier  # pyright: ignore[reportAttributeAccessIssue]
+    try:
+      return record.ctx == self.identifier  # pyright: ignore[reportAttributeAccessIssue]
+    except AttributeError:
+      return False
 
 
 class CustomTimedRotatingFileHandler(TimedRotatingFileHandler):
