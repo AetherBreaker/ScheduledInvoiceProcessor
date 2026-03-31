@@ -7,6 +7,7 @@ from asyncio import gather, to_thread
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime, timedelta
+from errno import EACCES
 from ftplib import FTP, _SSLSocket, error_perm, error_temp  # type: ignore
 from io import BytesIO
 from json import loads
@@ -815,9 +816,9 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     try:
       source_loc = (source_folder / remote_file).as_posix()
       archive_loc = (archive_folder / remote_file).as_posix()
-      with self.waiting_ftp(self.waiting_ftp_creds) as sftp_client:
+      with self.waiting_ftp(self.waiting_ftp_creds) as ftp_client:
         try:
-          sftp_client.size(archive_loc)
+          ftp_client.size(archive_loc)
           local_logger.info(
             f"{self.__class__.__name__}: Archive file already exists at [yellow]{archive_loc}[/]",
             extra={"markup": True},
@@ -829,14 +830,14 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
               f"{self.__class__.__name__}: Archiving [yellow]{remote_file}[/] to {archive_folder.as_posix()}",
               extra={"markup": True},
             )
-            sftp_client.rename(source_loc, archive_loc)
+            ftp_client.rename(source_loc, archive_loc)
 
         else:
           if not debug:
             local_logger.info(
               f"{self.__class__.__name__}: Deleting new file from {source_loc} instead of moving.",
             )
-            sftp_client.delete(source_loc)
+            ftp_client.delete(source_loc)
     except (error_perm, error_temp, OSError) as e:
       local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving: {e}")
     # Ensure that exceptions actually get logged while executing off main thread
@@ -881,6 +882,13 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     except FileNotFoundError as e:
       local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving: {e}")
     # Ensure that exceptions actually get logged while executing off main thread
+    except IOError as e:
+      if e.args and e.args[0] is EACCES:
+        local_logger.error(f"{self.__class__.__name__}: Permission denied archiving file {remote_file} at {source_folder}: {e}")
+      else:
+        local_logger.error(f"{self.__class__.__name__}: IOError archiving file {remote_file} at {source_folder}: {e}")
+        raise e
+
     except Exception as e:
       local_logger.error(f"{self.__class__.__name__}: Error archiving file {remote_file}: {e}")
       raise e
