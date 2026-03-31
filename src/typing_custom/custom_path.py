@@ -1,4 +1,5 @@
-from pathlib import Path, PosixPath, PurePath
+import os
+from pathlib import Path, PosixPath, PurePath, PurePosixPath, PureWindowsPath, UnsupportedOperation, WindowsPath
 from typing import Any, Final
 
 from pydantic import GetCoreSchemaHandler
@@ -36,6 +37,11 @@ class CustomPurePath(PurePath):
 
 
 class CustomPath(Path):
+  def __new__(cls, *args, **kwargs):
+    if cls is CustomPath:
+      cls = CustomWindowsPath if os.name == "nt" else CustomPosixPath
+    return object.__new__(cls)
+
   def __init__(self, *args: str) -> None:
     super().__init__(*args)
 
@@ -49,14 +55,36 @@ class CustomPath(Path):
     return handler(Path)
 
 
-class CustomPosixPath(PosixPath):
-  def __init__(self, *args: str) -> None:
-    super().__init__(*args)
+class CustomWindowsPath(CustomPath, PureWindowsPath):
+  """Path subclass for Windows systems.
 
-    # create a string representation of self with the current working directory removed from the start of the path, if it exists
-    cwd_str = str(cwd)
-    self_str = str(self)
-    self.without_cwd: Final = self_str[len(cwd_str) :] if self_str.startswith(cwd_str) else self_str
+  On a Windows system, instantiating a Path should return this object.
+  """
+
+  __slots__ = ()
+
+  if os.name != "nt":
+
+    def __new__(cls, *args, **kwargs):
+      raise UnsupportedOperation(f"cannot instantiate {cls.__name__!r} on your system")
+
+  @classmethod
+  def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+    return handler(WindowsPath)
+
+
+class CustomPosixPath(CustomPath, PurePosixPath):
+  """Path subclass for non-Windows systems.
+
+  On a POSIX system, instantiating a Path should return this object.
+  """
+
+  __slots__ = ()
+
+  if os.name == "nt":
+
+    def __new__(cls, *args, **kwargs):
+      raise UnsupportedOperation(f"cannot instantiate {cls.__name__!r} on your system")
 
   @classmethod
   def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
