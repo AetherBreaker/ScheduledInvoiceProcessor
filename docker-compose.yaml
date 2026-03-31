@@ -40,7 +40,7 @@ services:
       - DATABASE_REFRESH_INTERVAL=3600
       - DATABASE_WRITE_INTERVAL=30
       # File Serve Configuration
-      - FILE_SERVE_HOST=0.0.0.0
+      - FILE_SERVE_HOST=localhost
       - FILE_SERVE_PORT=3000
       # Alerts Emails
       - ALERTS_EMAIL=info@sweetfiretobacco.com
