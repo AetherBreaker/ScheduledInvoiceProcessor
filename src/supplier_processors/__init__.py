@@ -21,7 +21,7 @@ from typing import Protocol, Self, cast
 from aiologic import Lock
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SU, relativedelta
-from environment_init_vars import CWD, SETTINGS
+from environment_init_vars import CWD, SETTINGS, TZ
 from logging_config import add_log_context
 from paramiko import SFTPClient, SSHException
 from pydantic import ConfigDict, Field, TypeAdapter
@@ -100,7 +100,7 @@ class FileRegisterData:
 
   @property
   def stale(self) -> bool:
-    return datetime.now() > ((self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)) + timedelta(days=7))
+    return datetime.now(TZ) > ((self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)) + timedelta(days=7))
 
 
 class FTPProtocol(Protocol):
