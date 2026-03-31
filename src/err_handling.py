@@ -81,9 +81,9 @@ def get_last_fatal_details() -> FatalDetails:
 #   return wrapper
 
 
-def handle_fatal_exc[**TP, TR](func: Callable[TP, TR]) -> Callable[TP, TR]:
+def handle_fatal_exc[**TP, TR](func: Callable[TP, TR]) -> Callable[TP, TR | None]:
   @wraps(func)
-  def wrapper(*args: TP.args, **kwargs: TP.kwargs) -> TR:
+  def wrapper(*args: TP.args, **kwargs: TP.kwargs) -> TR | None:
     try:
       return func(*args, **kwargs)
     except CancelledError:
@@ -108,6 +108,6 @@ def handle_fatal_exc[**TP, TR](func: Callable[TP, TR]) -> Callable[TP, TR]:
 
       send_alert_email(f"Fatal exception in {func.__qualname__}", f"{e}:\n\n{content}")
       FATAL_EVENT.set()
-      raise  # raise whatever to make the type checker happy about return values
+      return None
 
   return wrapper
