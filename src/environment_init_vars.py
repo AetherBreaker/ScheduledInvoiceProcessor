@@ -4,6 +4,7 @@ if __name__ == "__main__":
 
   configure_logging()
 
+import os
 import sys
 from logging import getLogger
 from zoneinfo import ZoneInfo
@@ -11,9 +12,11 @@ from zoneinfo import ZoneInfo
 from aiologic import Event
 from environment_settings import Settings
 from typing_custom.custom_path import CustomPath
-from utils import print_directory_tree
 
 logger = getLogger(__name__)
+
+if os.name != "nt" and hasattr(os, "geteuid") and os.geteuid() == 0:
+  logger.warning("Process is running as root on a Unix system. This is not recommended for production.")
 
 
 # Settings
@@ -26,14 +29,18 @@ SPEC_CWD = CustomPath(__file__).parent if getattr(sys, "frozen", False) else Cus
 
 FATAL_EVENT = Event()
 
-# Support environment variable overrides for Docker secrets
-# In Docker, these will be set to /run/secrets/<secret_name>
+TZ = ZoneInfo("US/Eastern")
+
+HOST_NAME = (
+  f"{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}"
+  if SETTINGS.file_serve_public_domain is None
+  else SETTINGS.file_serve_public_domain
+)
 
 
 if SETTINGS.google_api_key_file.stem != "db-key":
   raise FileNotFoundError(f"Google API key file name must be 'db-key', got: {SETTINGS.google_api_key_file.stem}")
 if not SETTINGS.google_api_key_file.exists():
-  print_directory_tree(CWD)
   raise FileNotFoundError(
     f"Google API key file not found at: {SETTINGS.google_api_key_file}\n"
     "Please create a service account key in the Google Cloud Console "
@@ -67,11 +74,3 @@ if not SETTINGS.ryo_ftp_creds_file.exists():
     "Please create the creds file and save it as 'ryo_ftp_creds' in the current directory.\n"
     "For Docker: ensure secrets are properly mounted in docker-compose.yml"
   )
-
-
-TZ = ZoneInfo("US/Eastern")
-HOST_NAME = (
-  f"{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}"
-  if SETTINGS.file_serve_public_domain is None
-  else SETTINGS.file_serve_public_domain
-)
