@@ -6,6 +6,8 @@ services:
     container_name: scheduled-order-middleman
     restart: no
     # image: jogdensft/scheduledordermiddleman-scheduler:latest
+    # ports:
+    #   - "80"
     user: appuser:appuser
     # Persist logs and queue backups
     volumes:
@@ -61,8 +63,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
-
-    labels:
-      - traefik.enable=true
-      - "traefik.http.routers.<unique_router_name>.rule=Host(`shadowarcanist.com`) && PathPrefix(`/`)"
-      - traefik.http.routers.<unique_router_name>.entryPoints=http
