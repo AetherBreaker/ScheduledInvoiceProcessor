@@ -150,7 +150,13 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
             self.pbar.update(files_preprocessing_task, advance=1)
 
           except Exception as e:
-            key = [k for k, v in futures.items() if result is v][0]
+            matched_results = [k for k, v in futures.items() if result is v]
+            if not matched_results:
+              local_logger.error(f"{self.__class__.__name__}: Could not find matching key for result {result} in futures")
+              raise RuntimeError(f"Could not find matching key for result {result} in futures") from e
+
+            key = matched_results[0]
+
             local_logger.error(f"{self.__class__.__name__}: {key}: Error preprocessing files {e}")
             errors.append((key, e))
 
