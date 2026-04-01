@@ -50,6 +50,10 @@ services:
       # TZ
       - TZ=America/New_York
 
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.scheduler.loadbalancer.server.port=8080
+
     # Healthcheck (optional - adjust based on your needs)
     healthcheck:
       # bash -c "[[ $(date -d "$(cat /app/src/logs/heartbeat.txt)" +"%s") -gt $(($(date +"%s") - 180)) ]] && exit 0 || exit 1"

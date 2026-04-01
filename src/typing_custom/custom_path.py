@@ -40,9 +40,15 @@ class CustomPath(Path):
   def __new__(cls, *args, **kwargs):
     if cls is CustomPath:
       cls = CustomWindowsPath if os.name == "nt" else CustomPosixPath
-    return object.__new__(cls)
+    # Normalize backslashes to forward slashes on POSIX so paths
+    # serialized on Windows can be deserialized in Docker/Linux
+    if os.name != "nt" and args:
+      args = tuple(str(a).replace("\\", "/") for a in args)
+    return super().__new__(cls, *args, **kwargs)
 
   def __init__(self, *args: str) -> None:
+    if os.name != "nt" and args:
+      args = tuple(str(a).replace("\\", "/") for a in args)
     super().__init__(*args)
 
     # create a string representation of self with the current working directory removed from the start of the path, if it exists
