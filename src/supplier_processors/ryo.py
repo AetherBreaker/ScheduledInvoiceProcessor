@@ -374,6 +374,8 @@ async def main():
     async for order in cache.schedule.walk_typed_rows():
       if order.supplier != SuppliersEnum.RYO:
         continue
+      if order.store != 32:
+        continue
 
       orders.append(order)
 
