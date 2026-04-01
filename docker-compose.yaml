@@ -55,16 +55,16 @@ services:
       - traefik.http.services.scheduler.loadbalancer.server.port=8080
 
     # Healthcheck (optional - adjust based on your needs)
-    # healthcheck:
-    #   # bash -c "[[ $(date -d "$(cat /app/src/logs/heartbeat.txt)" +"%s") -gt $(($(date +"%s") - 180)) ]] && exit 0 || exit 1"
-    #   test:
-    #     [
-    #       "CMD",
-    #       "sh",
-    #       "-ec",
-    #       'ts=$(cat /app/src/logs/heartbeat.txt 2>/dev/null) && [ -n \"$ts\" ] && now=$(date +%s) && heartbeat=$(date -d \"$ts\" +%s 2>/dev/null) && [ $((now - heartbeat)) -lt 180 ]',
-    #     ]
-    #   interval: 60s
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 120s
+    healthcheck:
+      # bash -c "[[ $(date -d "$(cat /app/src/logs/heartbeat.txt)" +"%s") -gt $(($(date +"%s") - 180)) ]] && exit 0 || exit 1"
+      test:
+        [
+          "CMD",
+          "sh",
+          "-ec",
+          'ts=$(cat /app/src/logs/heartbeat.txt 2>/dev/null) && [ -n \"$ts\" ] && now=$(date +%s) && heartbeat=$(date -d \"$ts\" +%s 2>/dev/null) && [ $((now - heartbeat)) -lt 180 ]',
+        ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
