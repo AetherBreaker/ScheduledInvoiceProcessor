@@ -285,18 +285,18 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
     if __debug__:
       pass
 
-      await cache.order_log.log_action(
-        supplier=SuppliersEnum.RYO,
-        store=None,
-        invoice_num=None,
-        customer=None,
-        action=LogActionEnum.FILE_DROPPED_OFF,
-        status=StatusCode.FAILURE,
-        action_datetime=datetime(2026, 4, 1, 10, 4, 2, 903824),
-        week_end_date=None,
-        note="Nothing logged",
-      )
-      pass
+      # await cache.order_log.log_action(
+      #   supplier=SuppliersEnum.RYO,
+      #   store=None,
+      #   invoice_num=None,
+      #   customer=None,
+      #   action=LogActionEnum.FILE_DROPPED_OFF,
+      #   status=StatusCode.FAILURE,
+      #   action_datetime=datetime(2026, 4, 1, 10, 4, 2, 903824),
+      #   week_end_date=None,
+      #   note="Nothing logged",
+      # )
+      # pass
 
       # scheduler.print_jobs()
 
