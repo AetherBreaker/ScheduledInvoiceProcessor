@@ -696,13 +696,13 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     )
 
     if picked_up:
-      local_logger.warning(
+      local_logger.info(
         f"{self.__class__.__name__}: "
         f"Attempted to register pickup for already grabbed invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
       return
     if applied:
-      local_logger.warning(
+      local_logger.info(
         f"{self.__class__.__name__}: "
         f"Attempted to register pickup for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
