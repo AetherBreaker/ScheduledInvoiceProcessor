@@ -46,7 +46,7 @@ ENV PYTHONPATH=/app/src
 
 # Health check - verifies heartbeat file was updated within last 3 minutes
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=120s \
-    CMD bash -c "[[ -f /app/src/logs/heartbeat.txt ]] && [ $(( $(date +%s) - $(date -d '$(cat /app/src/logs/heartbeat.txt)'' +%s) )) -lt 180 ] || exit 1"
+    CMD ["sh", "-ec", "ts=$(cat /app/src/logs/heartbeat.txt 2>/dev/null) && [ -n \"$ts\" ] && now=$(date +%s) && heartbeat=$(date -d \"$ts\" +%s 2>/dev/null) && [ $((now - heartbeat)) -lt 180 ]"]
 # Run the application.
 WORKDIR /app/src
 ENTRYPOINT ["/app/entrypoint.sh"]
