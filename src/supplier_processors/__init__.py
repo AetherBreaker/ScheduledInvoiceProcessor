@@ -767,7 +767,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
       (self.supplier_name, storenum), DatabaseScheduleColumns.invoice_applied
     )
     if not picked_up:
-      local_logger.warning(
+      local_logger.info(
         f"{self.__class__.__name__}: {key}: "
         f"Attempted to register dropoff for not-yet picked up invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
