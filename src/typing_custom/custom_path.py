@@ -44,7 +44,7 @@ class CustomPath(Path):
     # serialized on Windows can be deserialized in Docker/Linux
     if os.name != "nt" and args:
       args = tuple(str(a).replace("\\", "/") for a in args)
-    return super().__new__(cls, *args, **kwargs)
+    return super().__new__(cls, *args, **kwargs)  # type: ignore
 
   def __init__(self, *args: str) -> None:
     if os.name != "nt" and args:
