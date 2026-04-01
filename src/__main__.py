@@ -21,7 +21,7 @@ from scheduler_config import OrderProcessingScheduler
 from supplier_processors import SupplierProcessorBase
 from supplier_processors.ryo import RYOProcessor
 from supplier_processors.sas import SASProcessor
-from typing_custom.enums import SuppliersEnum
+from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
 logger = getLogger(__name__)
 
@@ -283,6 +283,19 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
     await site.start()
 
     if __debug__:
+      pass
+
+      await cache.order_log.log_action(
+        supplier=SuppliersEnum.RYO,
+        store=None,
+        invoice_num=None,
+        customer=None,
+        action=LogActionEnum.FILE_DROPPED_OFF,
+        status=StatusCode.FAILURE,
+        action_datetime=datetime(2026, 4, 1, 10, 4, 2, 903824),
+        week_end_date=None,
+        note="Nothing logged",
+      )
       pass
 
       # scheduler.print_jobs()

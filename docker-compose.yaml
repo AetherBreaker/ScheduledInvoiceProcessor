@@ -9,8 +9,6 @@ services:
     expose:
       - "8080"
 
-    # ports:
-    #   - "80"
     user: appuser:appuser
     # Persist logs and queue backups
     volumes:
