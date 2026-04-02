@@ -766,14 +766,15 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     applied = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
       (self.supplier_name, storenum), DatabaseScheduleColumns.invoice_applied
     )
+
     if not picked_up:
-      local_logger.info(
+      local_logger.debug(
         f"{self.__class__.__name__}: {key}: "
         f"Attempted to register dropoff for not-yet picked up invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
       return
     if applied:
-      local_logger.warning(
+      local_logger.debug(
         f"{self.__class__.__name__}: {key}: "
         f"Attempted to register dropoff for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
