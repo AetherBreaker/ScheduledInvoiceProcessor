@@ -29,7 +29,7 @@ RICH_CONSOLE = Console(
 
 PROJECT_NAME = "ScheduledOrderMiddleman"
 
-max_width = 20
+max_width = 40
 
 LOGGING_TIMESTAMP_FORMAT = "%b, %d %a %I:%M %p"
 
@@ -204,7 +204,7 @@ class CustomTimedRotatingFileHandler(TimedRotatingFileHandler):
 
 
 FILE_FORMATTER = FixedFormatter(
-  fmt=f"{{libpath: <{max_width}}} | [{{asctime}}] {{levelname: >8}} | {{message}}",
+  fmt=f"{{libpath: <{max_width}}} | [{{asctime}}] | {{levelname: >8}} | {{message}}",
   datefmt=LOGGING_TIMESTAMP_FORMAT,
   style="{",
 )
