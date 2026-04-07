@@ -26,10 +26,18 @@ RICH_CONSOLE = Console(
   log_time=platform == "win32",
 )
 
+CWD = CustomPath.cwd()
+
 
 PROJECT_NAME = "ScheduledOrderMiddleman"
 
 max_width = 40
+
+
+LOG_LOC_FOLDER = CWD / "logs"
+LOG_LOC_FOLDER.mkdir(exist_ok=True)
+
+MAX_WIDTH_FILE = LOG_LOC_FOLDER / "max_width.txt"
 
 LOGGING_TIMESTAMP_FORMAT = "%b, %d %a %I:%M %p"
 
@@ -111,7 +119,7 @@ class FixedLogRecord(logging.LogRecord):
 
     if length > max_width:
       max_width = length
-      with open("max_width.txt", "w") as f:
+      with MAX_WIDTH_FILE.open("w") as f:
         f.write(str(max_width))
 
     self.libname = libname
@@ -279,12 +287,7 @@ def add_log_context[**TP, TR](
   return add_log_context_under
 
 
-CWD = CustomPath.cwd()
-
 LOGGING_BASE_NAME = "ScheduledOrderMiddleman"
-
-LOG_LOC_FOLDER = CWD / "logs"
-LOG_LOC_FOLDER.mkdir(exist_ok=True)
 
 
 DEBUG_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}_debug.txt"
