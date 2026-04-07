@@ -7,6 +7,7 @@ from asyncio import as_completed, to_thread
 from collections.abc import Coroutine
 from contextvars import ContextVar
 from datetime import datetime
+from hashlib import file_digest
 from json import loads
 from logging import LoggerAdapter, getLogger
 from pathlib import PurePosixPath
@@ -252,8 +253,19 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
     first_lines: list[dict[str, str | None]] = []
     body_lines: list[bytes] = []
 
+    found_invoice_nums = set()
+    file_hashes = set()
+
     for file in original_invoice_files:
       # open the files in binary for speed, but decote the first line separately to check for the invoice type (A or B)
+      with file.open("rb") as fb:
+        digest = file_digest(fb, "sha256")
+        if digest in file_hashes:
+          local_logger.error(f"{self.__class__.__name__}: {key}: Duplicate file hash found for file {file.name}: {digest}")
+          continue  # skip this file since it has a duplicate hash
+        else:
+          file_hashes.add(digest.hexdigest())
+
       with file.open("rb") as f:
         first_line = f.readline().decode().strip()
         match = self.invoice_num_pattern.match(first_line)
@@ -272,6 +284,15 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
             "invoice_date": None,
           }
         )
+        if attrs["invoice_num"] not in [None, ""]:
+          if attrs["invoice_num"] in found_invoice_nums:
+            local_logger.error(
+              f"{self.__class__.__name__}: {key}: Duplicate invoice number found in file {file.name}: {attrs['invoice_num']}"
+            )
+            continue  # skip this file since it has a duplicate invoice number
+          else:
+            found_invoice_nums.add(attrs["invoice_num"])
+
         first_lines.append(attrs)
 
         body_lines.extend(f.readlines())
