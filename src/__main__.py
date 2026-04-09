@@ -26,10 +26,9 @@ from typing_custom.enums import SuppliersEnum
 logger = getLogger(__name__)
 
 
-# Heartbeat file for health checks
-HEARTBEAT_FILE = PurePosixPath("/app/src/logs/heartbeat.txt") if __debug__ else PosixPath("/app/src/logs/heartbeat.txt")
-
 if not __debug__:
+  # Heartbeat file for health checks
+  HEARTBEAT_FILE = PurePosixPath("/app/src/logs/heartbeat.txt") if __debug__ else PosixPath("/app/src/logs/heartbeat.txt")
 
   def write_heartbeat():
     """Write current timestamp to heartbeat file for health monitoring."""
