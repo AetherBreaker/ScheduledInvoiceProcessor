@@ -12,6 +12,7 @@ from json import loads
 from logging import LoggerAdapter, getLogger
 from pathlib import PurePosixPath
 from re import Pattern, compile
+from socket import gaierror
 from typing import Any
 
 from environment_init_vars import CWD, SETTINGS
@@ -22,7 +23,13 @@ from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 from utils import ftp_pbar_callback, ftp_writefile_pbar_callback
 
-from supplier_processors import FileRegisterData, SFTPProtocol, SupplierProcessorSFTPIntermediate, SupplierQueueKey
+from supplier_processors import (
+  FileRegisterData,
+  ServerNotAvailableError,
+  SFTPProtocol,
+  SupplierProcessorSFTPIntermediate,
+  SupplierQueueKey,
+)
 from supplier_processors.log_action import LogActionHandlerType, log_actions
 
 # from logging.handlers import QueueHandler
@@ -43,17 +50,31 @@ class RYOSFTPClient(SFTPProtocol):
     self.creds = creds
 
   def __enter__(self) -> SFTPClient:
-    self.ssh_client = SSHClient()
-    self.ssh_client.set_missing_host_key_policy(self.policy)
+    try:
+      self.ssh_client = SSHClient()
+      self.ssh_client.set_missing_host_key_policy(self.policy)
 
-    self.ssh_client.connect(
-      hostname=self.creds["HOSTNAME"],
-      port=self.creds.get("PORT", 2222),
-      username=self.creds["USER"],
-      password=self.creds["PWD"],
-    )
+      self.ssh_client.connect(
+        hostname=self.creds["HOSTNAME"],
+        port=self.creds.get("PORT", 2222),
+        username=self.creds["USER"],
+        password=self.creds["PWD"],
+      )
 
-    self.sftp_client = self.ssh_client.open_sftp()
+      self.sftp_client = self.ssh_client.open_sftp()
+
+    except ConnectionRefusedError as e:
+      raise ServerNotAvailableError(
+        f"Could not connect to FTP server at {self.creds['HOST']}:{self.creds['PORT']}"
+        f"\n Server exists but is not running an FTP service or is blocking the connection."
+      ) from e
+    except TimeoutError as e:
+      raise ServerNotAvailableError(
+        f"Connection to FTP server at {self.creds['HOST']}:{self.creds['PORT']} timed out."
+        f"\n Server may be offline or experiencing connectivity issues."
+      ) from e
+    except gaierror as e:
+      raise ServerNotAvailableError(f"FTP server hostname {self.creds['HOST']} could not be resolved.\n DNS has likely failed") from e
 
     return self.sftp_client
 
@@ -116,6 +137,12 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
     local_logger = adapted_logger or logger
     if not self._file_preprocess_queue:
       return
+
+    # check that the waiting ftp is online before continuing
+    if not self.check_waiting_ftp_online_logs():
+      local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling preprocessing step.")
+      return
+
     async with self._lock:
       items_to_advance = {**self._file_preprocess_queue}
 

@@ -14,7 +14,7 @@ from json import loads
 from logging import LoggerAdapter, getLogger
 from pathlib import PurePosixPath
 from re import Match, Pattern
-from socket import timeout as SocketTimeout
+from socket import gaierror, timeout as SocketTimeout
 from time import sleep
 from typing import Protocol, Self, cast
 
@@ -103,6 +103,10 @@ class FileRegisterData:
     return datetime.now(TZ) > ((self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)) + timedelta(days=7))
 
 
+class ServerNotAvailableError(ConnectionError):
+  pass
+
+
 class FTPProtocol(Protocol):
   def __init__(self, creds: dict) -> None: ...
   def __enter__(self) -> Self: ...
@@ -121,8 +125,21 @@ class SFTFTPClient(FTP, FTPProtocol):
     super().__init__()
 
   def __enter__(self) -> Self:
-    self.connect(host=self.creds["HOST"], port=self.creds["PORT"])
-    self.login(user=self.creds["USER"], passwd=self.creds["PWD"])
+    try:
+      self.connect(host=self.creds["HOST"], port=self.creds["PORT"])
+      self.login(user=self.creds["USER"], passwd=self.creds["PWD"])
+    except ConnectionRefusedError as e:
+      raise ServerNotAvailableError(
+        f"Could not connect to FTP server at {self.creds['HOST']}:{self.creds['PORT']}"
+        f"\n Server exists but is not running an FTP service or is blocking the connection."
+      ) from e
+    except TimeoutError as e:
+      raise ServerNotAvailableError(
+        f"Connection to FTP server at {self.creds['HOST']}:{self.creds['PORT']} timed out."
+        f"\n Server may be offline or experiencing connectivity issues."
+      ) from e
+    except gaierror as e:
+      raise ServerNotAvailableError(f"FTP server hostname {self.creds['HOST']} could not be resolved.\n DNS has likely failed") from e
     return self
 
   def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -342,6 +359,17 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return False
 
   @classmethod
+  def check_waiting_ftp_online_logs(cls) -> bool:
+    """Check if the waiting FTP server is online by attempting to connect and send a NOOP command."""
+    try:
+      with cls.waiting_ftp(cls.waiting_ftp_creds) as ftp:
+        ftp.voidcmd("NOOP")
+      return True
+    except Exception as e:
+      logger.error(f"{cls.__name__}: Waiting FTP server is offline: {e}")
+      return False
+
+  @classmethod
   def _check_vendor_ftp_online(cls) -> bool:
     """Check if the vendor SFTP server is online by attempting to connect"""
     try:
@@ -349,6 +377,17 @@ class SupplierProcessorBase(metaclass=SingletonType):
         ftp.listdir(".")
       return True
     except Exception:
+      return False
+
+  @classmethod
+  def check_vendor_ftp_online_logs(cls) -> bool:
+    """Check if the vendor SFTP server is online by attempting to connect"""
+    try:
+      with cls.vendor_ftp(cls.pickup_ftp_creds) as ftp:
+        ftp.listdir(".")
+      return True
+    except Exception as e:
+      logger.error(f"{cls.__name__}: Vendor FTP server is offline: {e}")
       return False
 
   async def register_pickup(
@@ -416,6 +455,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
     if not self._file_preprocess_queue:
       return
+    if not self.check_waiting_ftp_online_logs():
+      local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling preprocessing step.")
+      return
     async with self._lock:
       if not self._file_preprocess_queue:
         return
@@ -468,6 +510,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
 
     if not self._file_preprocess_queue:
+      return
+
+    if not self.check_waiting_ftp_online_logs():
+      local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling dropoff step.")
       return
 
     await self._preprocess_files()
@@ -904,6 +950,10 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     local_logger = adapted_logger or logger
     if not self._file_pickup_queue:
       return
+    if not self.check_vendor_ftp_online_logs() or not self.check_waiting_ftp_online_logs():
+      local_logger.warning(f"{self.__class__.__name__}: Aborting pickup_files due to offline FTP server(s)")
+      return
+
     async with self._lock:
       with self.vendor_ftp(self.pickup_ftp_creds) as sftp_client:
         remote_files = [file_attr.filename for file_attr in sftp_client.listdir_attr(self.pickup_ftp_folder.as_posix())]
