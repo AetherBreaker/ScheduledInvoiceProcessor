@@ -474,6 +474,7 @@ sas_ftp_creds.json
 ryo_ftp_creds.json
 
 # runtime data
+persisted_data/**
 logs/
 queue_backups/
 sas_files/
