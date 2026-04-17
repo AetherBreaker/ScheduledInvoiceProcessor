@@ -80,7 +80,7 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
     return compile(pattern)
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
-  @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
+  @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
   async def _preprocess_files(
     self,
     adapted_logger: LoggerAdapter | None = None,
