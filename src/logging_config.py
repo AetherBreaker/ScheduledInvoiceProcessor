@@ -126,6 +126,9 @@ class FixedLogRecord(logging.LogRecord):
         f.write(str(max_width))
 
     self.libname = libname
+    if "src." in libpath:
+      libpath = libpath.split("src.", 1)[1]
+
     self.libpath = libpath
 
     super().__init__(*args, **kwargs)
