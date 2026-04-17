@@ -10,6 +10,7 @@ from sys import platform
 from time import gmtime, localtime, strftime, time
 from typing import TYPE_CHECKING, Literal
 
+from environment_init_vars import SETTINGS
 from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
 from rich.traceback import Traceback
@@ -34,8 +35,8 @@ PROJECT_NAME = "ScheduledOrderMiddleman"
 max_width = 40
 
 
-LOG_LOC_FOLDER = CWD / "logs"
-LOG_LOC_FOLDER.mkdir(exist_ok=True)
+LOG_LOC_FOLDER = SETTINGS.persisted_dir_loc / "logs"
+LOG_LOC_FOLDER.mkdir(exist_ok=True, parents=True)
 
 MAX_WIDTH_FILE = LOG_LOC_FOLDER / "max_width.txt"
 

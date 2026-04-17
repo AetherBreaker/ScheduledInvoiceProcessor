@@ -22,26 +22,23 @@ services:
     # Persist logs and queue backups
     volumes:
       - type: bind
-        source: /data/scheduler_files/secrets
-        target: /app/secrets
-        is_directory: true
-      - type: bind
-        source: /data/scheduler_files/logs
-        target: /app/src/logs
-        is_directory: true
-      - type: bind
-        source: /data/scheduler_files/queue_backups
-        target: /app/src/queue_backups
-        is_directory: true
+        source: /data/scheduler_files
+        target: /app/persisted_data
+      # - type: bind
+      #   source: /data/scheduler_files/secrets
+      #   target: /app/secrets
+      # - type: bind
+      #   source: /data/scheduler_files/logs
+      #   target: /app/src/logs
+      # - type: bind
+      #   source: /data/scheduler_files/queue_backups
+      #   target: /app/src/queue_backups
 
     # Environment variables (customize as needed)
     environment:
       # - TZ=America/New_York
-      # Override secret file paths to use Docker secrets location
-      - GOOGLE_API_KEY_FILE=/app/secrets/db-key.json
-      - RYO_FTP_CREDS_FILE=/app/secrets/ryo_ftp_creds.json
-      - SAS_FTP_CREDS_FILE=/app/secrets/sas_ftp_creds.json
-      - SFT_WEBSITE_CREDS_FILE=/app/secrets/sft_creds.json
+      # Tell the program where to expect persisted data
+      - PERSISTED_DIR_LOC=/app/persisted_data
       # Database configuration (from production.env - optional overrides)
       # Uncomment and modify these to override production.env values
       - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0

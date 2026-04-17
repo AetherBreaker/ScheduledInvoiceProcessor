@@ -20,8 +20,8 @@ from typing import cast
 from aiologic import Lock
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SU, relativedelta
-from environment_init_vars import CWD, SETTINGS, TZ
-from logging_config import add_log_context
+from environment_init_vars import SETTINGS, TZ
+from logging_config import LOG_LOC_FOLDER, add_log_context
 from paramiko import SSHException
 from pydantic import ConfigDict, Field, TypeAdapter
 from pydantic.dataclasses import dataclass
@@ -94,7 +94,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _file_waiting_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_dropoff_queue: dict[SupplierQueueKey, FileRegisterData]
   _queue_ta = TypeAdapter(dict[str, FileRegisterData])
-  _file_queue_backup_folder: CustomPath = CWD / "queue_backups"
+  _file_queue_backup_folder: CustomPath = SETTINGS.persisted_dir_loc / "queue_backups"
   _corrupted_queue_backup_folder: CustomPath = _file_queue_backup_folder / "corrupted"
   _transient_transfer_retries = 3
   _lock: Lock = Lock()
@@ -122,7 +122,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   local_post_processing_folder: CustomPath
 
   identifier_prefix: str = ""
-  log_file_loc: CustomPath = CWD / "logs"
+  log_file_loc: CustomPath = LOG_LOC_FOLDER
   ctx_var_identifier: ContextVar[str | None]
   ctx_var_log_loc: ContextVar[CustomPath | None]
 

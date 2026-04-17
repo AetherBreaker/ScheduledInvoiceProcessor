@@ -51,6 +51,7 @@ ryo_ftp_creds.json
 *.env
 
 # Exclude runtime data
+persisted_data/**
 manual_files/**
 logs/
 queue_backups/
