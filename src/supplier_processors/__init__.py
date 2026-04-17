@@ -19,7 +19,7 @@ from typing import cast
 
 from aiologic import Lock
 from database.cache import DatabaseCache
-from dateutil.relativedelta import SU, relativedelta
+from dateutil.relativedelta import SA, SU, relativedelta
 from environment_init_vars import SETTINGS, TZ
 from logging_config import LOG_LOC_FOLDER, add_log_context
 from paramiko import SSHException
@@ -107,6 +107,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   supplier_name: SuppliersEnum
 
   invoice_num_pattern: Pattern[str] | None
+
+  checks_date_in_filename: bool = False
 
   pickup_ftp_folder: PurePosixPath
   pickup_archive_ftp_folder: PurePosixPath
@@ -851,8 +853,20 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
         matched_files: list[Match[str]] = []
 
         for remote_file in remote_files:
-          if match := file_meta.file_pattern.match(remote_file):
-            matched_files.append(match)
+          if match := file_meta.file_pattern.match(remote_file.filename):
+            if self.checks_date_in_filename:
+              matched_files.append(match)
+            else:
+              file_date = remote_file.modified_time
+              if file_date is not None:
+                start_date = (
+                  file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
+                ) - relativedelta(weeks=1 if file_meta.current_week else 0)
+                end_date = (
+                  file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
+                ) - relativedelta(weeks=0 if file_meta.current_week else 1)
+                if start_date <= file_date < end_date:
+                  matched_files.append(match)
 
         if matched_files:
           file_meta.file_names = {idx: m.string for idx, m in enumerate(matched_files)}

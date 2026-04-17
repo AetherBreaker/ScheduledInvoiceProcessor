@@ -42,6 +42,8 @@ class SASProcessor(SupplierProcessorSFTPIntermediate):
 
   pickup_ftp_creds: dict = loads(SETTINGS.sas_ftp_creds_file.read_text())
 
+  checks_date_in_filename = True
+
   pickup_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices")
   pickup_archive_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices/Archive")
   pre_processing_waiting_folder = PurePosixPath("/Waiting/SAS")

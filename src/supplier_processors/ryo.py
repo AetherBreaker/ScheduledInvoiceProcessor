@@ -47,6 +47,8 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
 
   pickup_ftp_creds: dict = loads(SETTINGS.ryo_ftp_creds_file.read_text())
 
+  checks_date_in_filename: bool = False
+
   pickup_ftp_folder = PurePosixPath("/RYOtoSFT")
   pickup_archive_ftp_folder = PurePosixPath("/RYOtoSFT/Archive")
   pre_processing_waiting_folder = PurePosixPath("/Waiting/RYO")
