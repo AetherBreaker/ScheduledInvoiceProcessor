@@ -721,6 +721,13 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
       if key in self._file_preprocess_queue or key in self._file_dropoff_queue:
         local_logger.warning(f"{self.__class__.__name__}: {key}: File already registered for dropoff")
         return
+      if key not in self._file_waiting_queue:
+        local_logger.error(
+          f"{self.__class__.__name__}: {key}: Key not found in the file waiting queue! "
+          f"{self.supplier_name}, {storenum}, {customer_id}, {pickup_date.isoformat()}"
+        )
+        return
+      else:
         try:
           matched_item = self._file_waiting_queue.pop(key)
         except KeyError as e:
