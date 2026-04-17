@@ -8,22 +8,21 @@ from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime, timedelta
 from errno import EACCES
-from ftplib import FTP, _SSLSocket, error_perm, error_temp  # type: ignore
+from ftplib import all_errors
 from io import BytesIO
-from json import loads
 from logging import LoggerAdapter, getLogger
 from pathlib import PurePosixPath
 from re import Match, Pattern
-from socket import gaierror, timeout as SocketTimeout
+from socket import timeout as SocketTimeout
 from time import sleep
-from typing import Protocol, Self, cast
+from typing import cast
 
 from aiologic import Lock
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SU, relativedelta
 from environment_init_vars import CWD, SETTINGS, TZ
 from logging_config import add_log_context
-from paramiko import SFTPClient, SSHException
+from paramiko import SSHException
 from pydantic import ConfigDict, Field, TypeAdapter
 from pydantic.dataclasses import dataclass
 from rich_custom import CustomTaskID, ProgressCustom
@@ -34,6 +33,7 @@ from typing_custom.custom_path import CustomPath
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
+from supplier_processors.ftp_adapter import AdaptedFTP, FTPAdapter, SFTFTPClient
 from supplier_processors.log_action import LogActionHandlerType, log_actions
 
 # from logging.handlers import QueueHandler
@@ -103,49 +103,6 @@ class FileRegisterData:
     return datetime.now(TZ) > ((self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)) + timedelta(days=7))
 
 
-class ServerNotAvailableError(ConnectionError):
-  pass
-
-
-class FTPProtocol(Protocol):
-  def __init__(self, creds: dict) -> None: ...
-  def __enter__(self) -> Self: ...
-  def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
-
-
-class SFTPProtocol(Protocol):
-  def __init__(self, creds: dict) -> None: ...
-  def __enter__(self) -> SFTPClient: ...
-  def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
-
-
-class SFTFTPClient(FTP, FTPProtocol):
-  def __init__(self, creds: dict) -> None:
-    self.creds = creds
-    super().__init__()
-
-  def __enter__(self) -> Self:
-    try:
-      self.connect(host=self.creds["HOST"], port=self.creds["PORT"])
-      self.login(user=self.creds["USER"], passwd=self.creds["PWD"])
-    except ConnectionRefusedError as e:
-      raise ServerNotAvailableError(
-        f"Could not connect to FTP server at {self.creds['HOST']}:{self.creds['PORT']}"
-        f"\n Server exists but is not running an FTP service or is blocking the connection."
-      ) from e
-    except TimeoutError as e:
-      raise ServerNotAvailableError(
-        f"Connection to FTP server at {self.creds['HOST']}:{self.creds['PORT']} timed out."
-        f"\n Server may be offline or experiencing connectivity issues."
-      ) from e
-    except gaierror as e:
-      raise ServerNotAvailableError(f"FTP server hostname {self.creds['HOST']} could not be resolved.\n DNS has likely failed") from e
-    return self
-
-  def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-    self.quit()
-
-
 class SupplierProcessorBase(metaclass=SingletonType):
   _file_pickup_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_preprocess_queue: dict[SupplierQueueKey, FileRegisterData]
@@ -157,8 +114,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _transient_transfer_retries = 3
   _lock: Lock = Lock()
 
-  vendor_ftp: type[SFTPProtocol]
-  waiting_ftp = SFTFTPClient
+  vendor_ftp: FTPAdapter
+  waiting_ftp: FTPAdapter[AdaptedFTP] = FTPAdapter(SFTFTPClient, container_cls="SupplierProcessorBase")
 
   queue_backup_prefix: str
 
@@ -189,6 +146,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
     self._file_preprocess_queue = {}
     self._file_waiting_queue = {}
     self._file_dropoff_queue = {}
+
+    if pbar is not None:
+      self.waiting_ftp.pbar = pbar
 
     self._file_queue_backup_folder.mkdir(exist_ok=True, parents=True)
     self._corrupted_queue_backup_folder.mkdir(exist_ok=True, parents=True)
@@ -338,8 +298,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   @classmethod
   def check_connections(cls) -> bool:
-    waiting_ftp_online = cls._check_waiting_ftp_online()
-    vendor_ftp_online = cls._check_vendor_ftp_online()
+    waiting_ftp_online = cls.waiting_ftp.test_connection()
+    vendor_ftp_online = cls.vendor_ftp.test_connection()
 
     if not waiting_ftp_online:
       logger.error(f"{cls.__name__}: Waiting FTP server is offline.")
@@ -347,48 +307,6 @@ class SupplierProcessorBase(metaclass=SingletonType):
       logger.error(f"{cls.__name__}: Vendor FTP server is offline.")
 
     return waiting_ftp_online and vendor_ftp_online
-
-  @classmethod
-  def _check_waiting_ftp_online(cls) -> bool:
-    """Check if the waiting FTP server is online by attempting to connect and send a NOOP command."""
-    try:
-      with cls.waiting_ftp(cls.waiting_ftp_creds) as ftp:
-        ftp.voidcmd("NOOP")
-      return True
-    except Exception:
-      return False
-
-  @classmethod
-  def check_waiting_ftp_online_logs(cls) -> bool:
-    """Check if the waiting FTP server is online by attempting to connect and send a NOOP command."""
-    try:
-      with cls.waiting_ftp(cls.waiting_ftp_creds) as ftp:
-        ftp.voidcmd("NOOP")
-      return True
-    except Exception as e:
-      logger.error(f"{cls.__name__}: Waiting FTP server is offline: {e}")
-      return False
-
-  @classmethod
-  def _check_vendor_ftp_online(cls) -> bool:
-    """Check if the vendor SFTP server is online by attempting to connect"""
-    try:
-      with cls.vendor_ftp(cls.pickup_ftp_creds) as ftp:
-        ftp.listdir(".")
-      return True
-    except Exception:
-      return False
-
-  @classmethod
-  def check_vendor_ftp_online_logs(cls) -> bool:
-    """Check if the vendor SFTP server is online by attempting to connect"""
-    try:
-      with cls.vendor_ftp(cls.pickup_ftp_creds) as ftp:
-        ftp.listdir(".")
-      return True
-    except Exception as e:
-      logger.error(f"{cls.__name__}: Vendor FTP server is offline: {e}")
-      return False
 
   async def register_pickup(
     self,
@@ -455,7 +373,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
     if not self._file_preprocess_queue:
       return
-    if not self.check_waiting_ftp_online_logs():
+    if not self.waiting_ftp.test_connection(logit=True):
       local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling preprocessing step.")
       return
     async with self._lock:
@@ -512,7 +430,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     if not self._file_preprocess_queue:
       return
 
-    if not self.check_waiting_ftp_online_logs():
+    if not self.waiting_ftp.test_connection(logit=True):
       local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling dropoff step.")
       return
 
@@ -582,36 +500,21 @@ class SupplierProcessorBase(metaclass=SingletonType):
       try:
         transient_file = BytesIO()
 
-        with self.vendor_ftp(self.pickup_ftp_creds) as origin_client:  # type: ignore
-          file_size = origin_client.stat(send_path.as_posix()).st_size
-          with self.waiting_ftp(self.waiting_ftp_creds) as dest_client:
-            dest_client.voidcmd("TYPE I")
-            with self.pbar.add_task(f"Transferring {send_path.name}") as transfer_task:
-              with origin_client.open(send_path.as_posix(), "rb") as read_file:
-                read_file.prefetch(file_size)
-                with dest_client.transfercmd(f"STOR {recv_path.as_posix()}") as write_file:
-                  while buffer := read_file.read(8192):
-                    write_file.sendall(buffer)
-                    transient_file.write(buffer)
-                    self.pbar.update(transfer_task, advance=len(buffer))
-                  if _SSLSocket is not None and isinstance(write_file, _SSLSocket):
-                    write_file.unwrap()  # type: ignore
-                dest_client.voidresp()
+        with self.vendor_ftp.start_session() as source_client, self.waiting_ftp.start_session() as dest_client:
+          success = source_client.transfer_file(
+            source_remote_path=send_path.as_posix(),
+            dest_remote_path=recv_path.as_posix(),
+            other=dest_client,
+            task_msg=f"Transferring {send_path.name} (Attempt {attempt})",
+            mem_stream=transient_file,
+          )
 
-            # Verify file was transferred successfully
-            success = False
-            try:
-              dest_client.size(recv_path.as_posix())
-              success = True
-              result = StatusCode.SUCCESS
-            except (error_perm, error_temp, OSError) as e:
-              local_logger.warning(f"{self.__class__.__name__}: Failed to verify transfer of {send_path.name}: {e}")
-              result = StatusCode.FAILURE
+        result = StatusCode.SUCCESS if success else StatusCode.FAILURE
 
-            # update items to log with result of transfer and pickup success status
-            getattr(file_meta, success_attr)[idx] = success
-            if log_action_handler is not None:
-              log_action_handler(key, result, file_meta)
+        # update items to log with result of transfer and pickup success status
+        getattr(file_meta, success_attr)[idx] = success
+        if log_action_handler is not None:
+          log_action_handler(key, result, file_meta)
 
         local_logger.info(
           f"{self.__class__.__name__}: Transferred {self.supplier_name} [yellow]{send_path}[/] to SFT FTP [yellow]{recv_path}[/]",
@@ -686,20 +589,19 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
     result = StatusCode.UNKNOWN
     try:
-      with self.waiting_ftp(self.waiting_ftp_creds) as origin_client:
-        origin_client.voidcmd("TYPE I")
-        origin_client.rename(send_path.as_posix(), recv_path.as_posix())
+      with self.waiting_ftp.start_session() as client:
+        client.rename(send_path.as_posix(), recv_path.as_posix())
 
         # Verify file was moved successfully
         success = False
         try:
-          origin_client.size(recv_path.as_posix())
+          client.get_size(recv_path.as_posix())
           success = True
           result = StatusCode.SUCCESS
           local_logger.info(
             f"{self.__class__.__name__}: Moved [yellow]{send_path}[/] to [yellow]{recv_path}[/]", extra={"markup": True}
           )
-        except (error_perm, error_temp, OSError) as e:
+        except (*all_errors, OSError) as e:
           local_logger.warning(f"{self.__class__.__name__}: Failed to verify move of {send_path.name}: {e}")
           result = StatusCode.FAILURE
         getattr(file_meta, success_attr)[idx] = success
@@ -863,15 +765,15 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     try:
       source_loc = (source_folder / remote_file).as_posix()
       archive_loc = (archive_folder / remote_file).as_posix()
-      with self.waiting_ftp(self.waiting_ftp_creds) as ftp_client:
+      with self.waiting_ftp.start_session() as ftp_client:
         try:
-          ftp_client.size(archive_loc)
+          ftp_client.get_size(archive_loc)
           local_logger.info(
             f"{self.__class__.__name__}: Archive file already exists at [yellow]{archive_loc}[/]",
             extra={"markup": True},
           )
 
-        except (error_perm, error_temp, OSError):
+        except (*all_errors, OSError):
           if not debug:
             local_logger.info(
               f"{self.__class__.__name__}: Archiving [yellow]{remote_file}[/] to {archive_folder.as_posix()}",
@@ -884,8 +786,8 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
             local_logger.info(
               f"{self.__class__.__name__}: Deleting new file from {source_loc} instead of moving.",
             )
-            ftp_client.delete(source_loc)
-    except (error_perm, error_temp, OSError) as e:
+            ftp_client.remove(source_loc)
+    except (*all_errors, OSError) as e:
       local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving: {e}")
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
@@ -904,9 +806,9 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     try:
       source_loc = (source_folder / remote_file).as_posix()
       archive_loc = (archive_folder / remote_file).as_posix()
-      with self.vendor_ftp(self.pickup_ftp_creds) as sftp_client:
+      with self.vendor_ftp.start_session() as sftp_client:
         try:
-          sftp_client.stat(archive_loc)
+          sftp_client.get_size(archive_loc)
           local_logger.info(
             f"{self.__class__.__name__}: Archive file already exists at [yellow]{archive_loc}[/]",
             extra={"markup": True},
@@ -950,13 +852,13 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     local_logger = adapted_logger or logger
     if not self._file_pickup_queue:
       return
-    if not self.check_vendor_ftp_online_logs() or not self.check_waiting_ftp_online_logs():
+    if not self.vendor_ftp.test_connection() or not self.waiting_ftp.test_connection():
       local_logger.warning(f"{self.__class__.__name__}: Aborting pickup_files due to offline FTP server(s)")
       return
 
     async with self._lock:
-      with self.vendor_ftp(self.pickup_ftp_creds) as sftp_client:
-        remote_files = [file_attr.filename for file_attr in sftp_client.listdir_attr(self.pickup_ftp_folder.as_posix())]
+      with self.vendor_ftp.start_session() as client:
+        remote_files = [*client.listdir(self.pickup_ftp_folder.as_posix())]
 
       items_to_dl: dict[str, FileRegisterData] = {}
       for key, file_meta in self._file_pickup_queue.items():

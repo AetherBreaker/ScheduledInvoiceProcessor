@@ -12,24 +12,17 @@ from json import loads
 from logging import LoggerAdapter, getLogger
 from pathlib import PurePosixPath
 from re import Pattern, compile
-from socket import gaierror
 from typing import Any
 
 from environment_init_vars import CWD, SETTINGS
 from logging_config import add_log_context
-from paramiko import AutoAddPolicy, SFTPClient, SSHClient
+from rich_custom import ProgressCustom
 from typing_custom import CustomerID
 from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
-from utils import ftp_pbar_callback, ftp_writefile_pbar_callback
 
-from supplier_processors import (
-  FileRegisterData,
-  ServerNotAvailableError,
-  SFTPProtocol,
-  SupplierProcessorSFTPIntermediate,
-  SupplierQueueKey,
-)
+from supplier_processors import FileRegisterData, SupplierProcessorSFTPIntermediate, SupplierQueueKey
+from supplier_processors.ftp_adapter import AdaptedSFTP, FTPAdapter, RYOSFTPClient
 from supplier_processors.log_action import LogActionHandlerType, log_actions
 
 # from logging.handlers import QueueHandler
@@ -43,48 +36,8 @@ logger = getLogger(__name__)
 # contextual_log_listener = DynamicQueueListener(contextual_logs_queue, respect_handler_level=True)  # type: ignore
 
 
-class RYOSFTPClient(SFTPProtocol):
-  policy = AutoAddPolicy()
-
-  def __init__(self, creds: dict):
-    self.creds = creds
-
-  def __enter__(self) -> SFTPClient:
-    try:
-      self.ssh_client = SSHClient()
-      self.ssh_client.set_missing_host_key_policy(self.policy)
-
-      self.ssh_client.connect(
-        hostname=self.creds["HOSTNAME"],
-        port=self.creds.get("PORT", 2222),
-        username=self.creds["USER"],
-        password=self.creds["PWD"],
-      )
-
-      self.sftp_client = self.ssh_client.open_sftp()
-
-    except ConnectionRefusedError as e:
-      raise ServerNotAvailableError(
-        f"Could not connect to FTP server at {self.creds['HOST']}:{self.creds['PORT']}"
-        f"\n Server exists but is not running an FTP service or is blocking the connection."
-      ) from e
-    except TimeoutError as e:
-      raise ServerNotAvailableError(
-        f"Connection to FTP server at {self.creds['HOST']}:{self.creds['PORT']} timed out."
-        f"\n Server may be offline or experiencing connectivity issues."
-      ) from e
-    except gaierror as e:
-      raise ServerNotAvailableError(f"FTP server hostname {self.creds['HOST']} could not be resolved.\n DNS has likely failed") from e
-
-    return self.sftp_client
-
-  def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-    self.sftp_client.close()
-    self.ssh_client.close()
-
-
 class RYOProcessor(SupplierProcessorSFTPIntermediate):
-  vendor_ftp = RYOSFTPClient
+  vendor_ftp: FTPAdapter[AdaptedSFTP] = FTPAdapter(RYOSFTPClient, container_cls="RYOProcessor")
 
   queue_backup_prefix: str = "ryo"
 
@@ -117,6 +70,11 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
   ctx_var_identifier = ContextVar("ryo_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("ryo_log_loc", default=log_file_loc)
 
+  def __init__(self, pbar: ProgressCustom = None) -> None:
+    if pbar is not None:
+      self.vendor_ftp.pbar = pbar
+    super().__init__(pbar)
+
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern:
@@ -139,7 +97,7 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
       return
 
     # check that the waiting ftp is online before continuing
-    if not self.check_waiting_ftp_online_logs():
+    if not self.waiting_ftp.test_connection():
       local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling preprocessing step.")
       return
 
@@ -238,10 +196,10 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
       for new_file_loc in new_file_meta.local_copy_loc.values():
         send_path = self.post_processing_waiting_folder / new_file_loc.name
         with new_file_loc.open("rb") as f:
-          with self.waiting_ftp(self.waiting_ftp_creds) as waiting_client:
-            waiting_client.voidcmd("TYPE I")
-            with self.pbar.add_task(f"Uploading {send_path.name}") as transfer_task:
-              waiting_client.storbinary(f"STOR {send_path.as_posix()}", f, callback=ftp_pbar_callback(self.pbar, transfer_task))
+          with self.waiting_ftp.start_session() as waiting_client:
+            waiting_client.upload_file(
+              send_path.as_posix(), callback=f.read, file_size=new_file_loc.stat().st_size, task_msg=f"Uploading {send_path.name}"
+            )
         local_logger.info(f"{self.__class__.__name__}: {key}: Uploaded merged file to remote location {send_path}")
 
         try:
@@ -262,14 +220,12 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
     local_logger = adapted_logger or logger
     original_invoice_files: list[CustomPath] = []
 
-    with self.waiting_ftp(self.waiting_ftp_creds) as waiting_client:
-      waiting_client.voidcmd("TYPE I")
+    with self.waiting_ftp.start_session() as waiting_client:
       for remote_file_loc, local_file_loc in zip(old_file_meta.remote_file_locs.values(), old_file_meta.local_copy_loc.values()):
         with local_file_loc.open("wb") as local_file:
-          with self.pbar.add_task(f"Downloading {remote_file_loc.name}", total=0) as download_task:
-            waiting_client.retrbinary(
-              f"RETR {remote_file_loc.as_posix()}", ftp_writefile_pbar_callback(self.pbar, download_task, local_file)
-            )
+          waiting_client.download_file(
+            remote_file_loc.as_posix(), callback=local_file.write, task_msg=f"Downloading {remote_file_loc.name}"
+          )
         original_invoice_files.append(local_file_loc)
         local_logger.info(
           f"{self.__class__.__name__}: {key}: Downloaded original invoice file from\n[yellow]{remote_file_loc}[/] to\n[yellow]{local_file_loc.without_cwd}[/]",

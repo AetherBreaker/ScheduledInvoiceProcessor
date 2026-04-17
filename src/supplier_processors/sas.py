@@ -9,17 +9,17 @@ from json import loads
 from logging import getLogger
 from pathlib import PurePosixPath
 from re import Pattern, compile
-from socket import gaierror
 
 from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
 from environment_init_vars import CWD, SETTINGS
-from paramiko import AutoAddPolicy, SFTPClient, SSHClient
+from rich_custom import ProgressCustom
 from typing_custom import CustomerID
 from typing_custom.custom_path import CustomPath
 from typing_custom.enums import SuppliersEnum
 
-from supplier_processors import ServerNotAvailableError, SFTPProtocol, SupplierProcessorSFTPIntermediate
+from supplier_processors import SupplierProcessorSFTPIntermediate
+from supplier_processors.ftp_adapter import AdaptedSFTP, FTPAdapter, SASSFTPClient
 
 # from logging.handlers import QueueHandler
 # from queue import Queue
@@ -32,47 +32,8 @@ logger = getLogger(__name__)
 # contextual_log_listener = DynamicQueueListener(contextual_logs_queue, respect_handler_level=True)  # type: ignore
 
 
-class SASSFTPClient(SFTPProtocol):
-  policy = AutoAddPolicy()
-
-  def __init__(self, creds: dict):
-    self.creds = creds
-
-  def __enter__(self) -> SFTPClient:
-    try:
-      self.ssh_client = SSHClient()
-      self.ssh_client.set_missing_host_key_policy(self.policy)
-
-      self.ssh_client.connect(
-        hostname=self.creds["HOSTNAME"],
-        port=self.creds.get("PORT", 22),
-        username=self.creds["USER"],
-        password=self.creds["PWD"],
-      )
-
-      self.sftp_client = self.ssh_client.open_sftp()
-    except ConnectionRefusedError as e:
-      raise ServerNotAvailableError(
-        f"Could not connect to FTP server at {self.creds['HOST']}:{self.creds['PORT']}"
-        f"\n Server exists but is not running an FTP service or is blocking the connection."
-      ) from e
-    except TimeoutError as e:
-      raise ServerNotAvailableError(
-        f"Connection to FTP server at {self.creds['HOST']}:{self.creds['PORT']} timed out."
-        f"\n Server may be offline or experiencing connectivity issues."
-      ) from e
-    except gaierror as e:
-      raise ServerNotAvailableError(f"FTP server hostname {self.creds['HOST']} could not be resolved.\n DNS has likely failed") from e
-
-    return self.sftp_client
-
-  def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-    self.sftp_client.close()
-    self.ssh_client.close()
-
-
 class SASProcessor(SupplierProcessorSFTPIntermediate):
-  vendor_ftp = SASSFTPClient
+  vendor_ftp: FTPAdapter[AdaptedSFTP] = FTPAdapter(SASSFTPClient, container_cls="SASProcessor")
 
   queue_backup_prefix: str = "sas"
 
@@ -103,6 +64,11 @@ class SASProcessor(SupplierProcessorSFTPIntermediate):
   log_file_loc: CustomPath = CWD / "logs" / "sas"
   ctx_var_identifier = ContextVar("sas_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
+
+  def __init__(self, pbar: ProgressCustom = None) -> None:
+    if pbar is not None:
+      self.vendor_ftp.pbar = pbar
+    super().__init__(pbar)
 
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
