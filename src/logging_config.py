@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Literal
 from environment_init_vars import SETTINGS
 from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
-from rich.traceback import Traceback
+from rich.traceback import Traceback, install
 from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum
 
@@ -26,6 +26,8 @@ RICH_CONSOLE = Console(
   # force_terminal=True,
   log_time=platform == "win32",
 )
+
+install(show_locals=True)
 
 CWD = CustomPath.cwd()
 
@@ -336,6 +338,7 @@ def configure_logging():
     console=RICH_CONSOLE,
     rich_tracebacks=True,
     log_time_format=LOGGING_TIMESTAMP_FORMAT,
+    # tracebacks_show_locals=True,
   )
 
   console_info_handler.setLevel(logging.INFO)

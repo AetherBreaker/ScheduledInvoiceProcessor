@@ -513,12 +513,13 @@ class SupplierProcessorBase(metaclass=SingletonType):
           backoff_seconds = 2 ** (attempt - 1)
           local_logger.warning(
             f"{self.__class__.__name__}: Transient transfer failure for {send_path.name} on attempt {attempt} of "
-            f"{self._transient_transfer_retries + 1}. Retrying in {backoff_seconds} seconds: {e}"
+            f"{self._transient_transfer_retries + 1}. Retrying in {backoff_seconds} seconds",
+            exc_info=e,
           )
           sleep(backoff_seconds)
           continue
 
-        local_logger.error(f"{self.__class__.__name__}: Error transferring {send_path.name} to {recv_path.name}: {e}")
+        local_logger.error(f"{self.__class__.__name__}: Error transferring {send_path} to {recv_path}", exc_info=e)
         getattr(file_meta, success_attr)[idx] = False
         if log_action_handler is not None:
           log_action_handler(key, StatusCode.FAILURE, file_meta)
@@ -597,7 +598,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
       local_logger.error(
-        f"{self.__class__.__name__}: Error moving\n[yellow]{send_path}[/] to\n[yellow]{recv_path}[/]: {e}", extra={"markup": True}
+        f"{self.__class__.__name__}: Error moving\n[yellow]{send_path}[/] to\n[yellow]{recv_path}[/]",
+        exc_info=e,
+        extra={"markup": True},
       )
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.FAILURE, file_meta)
@@ -719,15 +722,16 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
       if key in self._file_preprocess_queue or key in self._file_dropoff_queue:
         local_logger.warning(f"{self.__class__.__name__}: {key}: File already registered for dropoff")
         return
-      try:
-        matched_item = self._file_waiting_queue.pop(key)
-      except KeyError:
-        local_logger.error(
-          f"{self.__class__.__name__}: {key}: "
-          f"No waiting file found for: {self.supplier_name}, {storenum}, {customer_id}, {pickup_date.isoformat()}\n"
-          f"Invoice may not have been picked up or is missing!"
-        )
-        return
+        try:
+          matched_item = self._file_waiting_queue.pop(key)
+        except KeyError as e:
+          local_logger.critical(
+            f"{self.__class__.__name__}: {key}: "
+            f"No waiting file found for: {self.supplier_name}, {storenum}, {customer_id}, {pickup_date.isoformat()}\n"
+            f"Invoice may not have been picked up or is missing!",
+            exc_info=e,
+            stack_info=True,
+          )
 
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.SUCCESS, matched_item)
@@ -773,10 +777,10 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
             )
             ftp_client.remove(source_loc)
     except (*all_errors, OSError) as e:
-      local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving: {e}")
+      local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving", exc_info=e)
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
-      local_logger.error(f"{self.__class__.__name__}: Error archiving file {remote_file}: {e}")
+      local_logger.error(f"{self.__class__.__name__}: Error archiving file {remote_file} at {source_folder}", exc_info=e)
       raise e
 
   def _vendor_archive_file(
@@ -814,17 +818,17 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
             )
             sftp_client.remove(source_loc)
     except FileNotFoundError as e:
-      local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving: {e}")
+      local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving", exc_info=e)
     # Ensure that exceptions actually get logged while executing off main thread
     except IOError as e:
       if e.args and e.args[0] is EACCES:
-        local_logger.error(f"{self.__class__.__name__}: Permission denied archiving file {remote_file} at {source_folder}: {e}")
+        local_logger.error(f"{self.__class__.__name__}: Permission denied archiving file {remote_file} at {source_folder}", exc_info=e)
       else:
-        local_logger.error(f"{self.__class__.__name__}: IOError archiving file {remote_file} at {source_folder}: {e}")
+        local_logger.error(f"{self.__class__.__name__}: IOError archiving file {remote_file} at {source_folder}", exc_info=e)
         raise e
 
     except Exception as e:
-      local_logger.error(f"{self.__class__.__name__}: Error archiving file {remote_file}: {e}")
+      local_logger.error(f"{self.__class__.__name__}: Error archiving file {remote_file}", exc_info=e)
       raise e
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)

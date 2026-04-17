@@ -182,7 +182,7 @@ class RYOProcessor(SupplierProcessorSFTPIntermediate):
           local_file_loc.unlink()
           local_logger.info(f"{self.__class__.__name__}: {key}: Deleted local file {local_file_loc.without_cwd}")
         except Exception as e:
-          local_logger.error(f"{self.__class__.__name__}: {key}: Failed to delete local file {local_file_loc.without_cwd}: {e}")
+          local_logger.error(f"{self.__class__.__name__}: {key}: Failed to delete local file {local_file_loc.without_cwd}", exc_info=e)
 
       # Uploaded the new file to the remote waiting folder, replacing the old invoice files.
       for new_file_loc in new_file_meta.local_copy_loc.values():
