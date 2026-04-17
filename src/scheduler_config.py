@@ -5,6 +5,7 @@ if __name__ == "__main__":
 
 from datetime import timedelta, timezone
 from logging import getLogger
+from re import compile
 
 import apscheduler.executors.base as exec_base
 from apscheduler.events import EVENT_JOB_ADDED, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED, JobEvent, JobExecutionEvent
@@ -26,7 +27,11 @@ from utils import get_now
 logger = getLogger(__name__)
 
 
-DO_NOT_LOG_JOBS = ["submit_queued_writes_to_pool"]
+DO_NOT_LOG_PATTERNS = [
+  compile(r".*?_register_dropoff_.*"),
+  compile(r"submit_queued_writes_to_pool"),
+  compile(r".*?_register_pickup_.*"),
+]
 
 
 def run_job(job, jobstore_alias, run_times, logger_name):
@@ -50,7 +55,7 @@ def run_job(job, jobstore_alias, run_times, logger_name):
         local_logger.warning(f'Run time of job "{job.id}" was missed by {difference}')
         continue
 
-    if job.id not in DO_NOT_LOG_JOBS:
+    if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
       local_logger.info(f'Running job "{job.id}" (scheduled at {run_time})')
     else:
       local_logger.debug(f'Running job "{job.id}" (scheduled at {run_time})')
@@ -77,7 +82,7 @@ def run_job(job, jobstore_alias, run_times, logger_name):
     #   raise e
     # else:
     events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
-    if job.id not in DO_NOT_LOG_JOBS:
+    if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
       logger.info(f'Job "{job.id}" executed successfully')
     else:
       logger.debug(f'Job "{job.id}" executed successfully')
@@ -101,7 +106,7 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
         logger.warning(f'Run time of job "{job.id}" was missed by {difference}')
         continue
 
-    if job.id not in DO_NOT_LOG_JOBS:
+    if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
       logger.info(f'Running job "{job.id}" (scheduled at {run_time})')
     else:
       logger.debug(f'Running job "{job.id}" (scheduled at {run_time})')
@@ -125,7 +130,7 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
     #   raise e
     # else:
     events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
-    if job.id not in DO_NOT_LOG_JOBS:
+    if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
       logger.info(f'Job "{job.id}" executed successfully')
     else:
       logger.debug(f'Job "{job.id}" executed successfully')
