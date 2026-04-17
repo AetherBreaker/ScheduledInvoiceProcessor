@@ -84,7 +84,7 @@ async def bootstrap_runtime(live: LiveCustom) -> DatabaseCache:
 async def reschedule_all_tasks():
   cache = DatabaseCache()
   current_week = cache.schedule
-  previous_week = cache.prev_week_schedule
+  # previous_week = cache.prev_week_schedule
 
   for supplier, processor in supplier_register.items():
     scheduler.add_job(
@@ -155,46 +155,46 @@ async def reschedule_all_tasks():
       jobstore="order_processing",
     )
 
-  async for order in previous_week.walk_typed_rows():
-    if not order.customer or not order.store:
-      continue
-    scheduler.add_job(
-      supplier_register[order.supplier]().register_pickup,
-      CronTrigger(
-        minute="1-59/5",
-        start_date=order.invoice_pickup_time,
-        end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
-      ),
-      kwargs={
-        "storenum": order.store,
-        "customer_id": order.customer,
-        "pickup_date": order.invoice_pickup_time,
-        "dropoff_date": order.invoice_dropoff_time,
-        "current_week": False,
-      },
-      id=f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-      replace_existing=True,
-      jobstore="order_processing",
-    )
+  # async for order in previous_week.walk_typed_rows():
+  #   if not order.customer or not order.store:
+  #     continue
+  #   scheduler.add_job(
+  #     supplier_register[order.supplier]().register_pickup,
+  #     CronTrigger(
+  #       minute="1-59/5",
+  #       start_date=order.invoice_pickup_time,
+  #       end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+  #     ),
+  #     kwargs={
+  #       "storenum": order.store,
+  #       "customer_id": order.customer,
+  #       "pickup_date": order.invoice_pickup_time,
+  #       "dropoff_date": order.invoice_dropoff_time,
+  #       "current_week": False,
+  #     },
+  #     id=f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+  #     replace_existing=True,
+  #     jobstore="order_processing",
+  #   )
 
-    scheduler.add_job(
-      supplier_register[order.supplier]().register_dropoff,
-      CronTrigger(
-        minute="3-59/5",
-        start_date=order.invoice_dropoff_time,
-        end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
-      ),
-      kwargs={
-        "storenum": order.store,
-        "customer_id": order.customer,
-        "pickup_date": order.invoice_pickup_time,
-        "dropoff_date": order.invoice_dropoff_time,
-        "current_week": False,
-      },
-      id=f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-      replace_existing=True,
-      jobstore="order_processing",
-    )
+  #   scheduler.add_job(
+  #     supplier_register[order.supplier]().register_dropoff,
+  #     CronTrigger(
+  #       minute="3-59/5",
+  #       start_date=order.invoice_dropoff_time,
+  #       end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+  #     ),
+  #     kwargs={
+  #       "storenum": order.store,
+  #       "customer_id": order.customer,
+  #       "pickup_date": order.invoice_pickup_time,
+  #       "dropoff_date": order.invoice_dropoff_time,
+  #       "current_week": False,
+  #     },
+  #     id=f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+  #     replace_existing=True,
+  #     jobstore="order_processing",
+  #   )
 
   scheduler.print_jobs()
 
