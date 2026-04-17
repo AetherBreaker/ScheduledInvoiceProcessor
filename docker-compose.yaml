@@ -18,7 +18,7 @@ services:
       retries: 3
       start_period: 15s
 
-    user: appuser:appuser
+    user: nonroot:nonroot
     # Persist logs and queue backups
     volumes:
       - type: bind
