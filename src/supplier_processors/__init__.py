@@ -693,7 +693,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
-    key = f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
+    key = self.assemble_queue_key(storenum, customer_id, pickup_date)
 
     picked_up = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
       (self.supplier_name, storenum), DatabaseScheduleColumns.invoice_grabbed
