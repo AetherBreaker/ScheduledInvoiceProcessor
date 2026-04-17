@@ -111,7 +111,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   checks_date_in_filename: bool = False
 
   pickup_ftp_folder: PurePosixPath
-  pickup_archive_ftp_folder: PurePosixPath
+  pickup_archive_ftp_folder: PurePosixPath | None
   pre_processing_waiting_folder: PurePosixPath
   pre_processing_archive_folder: PurePosixPath
   post_processing_waiting_folder: PurePosixPath
@@ -902,17 +902,18 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
       items_to_advance: dict[str, FileRegisterData] = {}
       for key, file_meta in items_to_dl.items():
         if all(file_meta.pickup_success.values()):
-          archive_futures.extend(
-            to_thread(
-              self._vendor_archive_file,
-              source_folder=self.pickup_ftp_folder,
-              remote_file=filename,
-              archive_folder=self.pickup_archive_ftp_folder,
-              adapted_logger=adapted_logger,
-              debug=__debug__,
+          if self.pickup_archive_ftp_folder is not None:
+            archive_futures.extend(
+              to_thread(
+                self._vendor_archive_file,
+                source_folder=self.pickup_ftp_folder,
+                remote_file=filename,
+                archive_folder=self.pickup_archive_ftp_folder,
+                adapted_logger=adapted_logger,
+                debug=__debug__,
+              )
+              for filename in file_meta.file_names.values()
             )
-            for filename in file_meta.file_names.values()
-          )
           items_to_advance[key] = file_meta
           schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
 
@@ -921,7 +922,8 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
           )
           await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_grabbed)
 
-      await gather(*archive_futures)
+      if self.pickup_archive_ftp_folder is not None:
+        await gather(*archive_futures)
 
     for key, item in items_to_advance.items():
       self._file_waiting_queue[key] = item

@@ -45,7 +45,7 @@ class SASProcessor(SupplierProcessorSFTPIntermediate):
   checks_date_in_filename = True
 
   pickup_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices")
-  pickup_archive_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices/Archive")
+  pickup_archive_ftp_folder = PurePosixPath("/Fastrax Invoices/Archive")
   pre_processing_waiting_folder = PurePosixPath("/Waiting/SAS")
   pre_processing_archive_folder = PurePosixPath("/Waiting/SAS/Archive")
   post_processing_waiting_folder = PurePosixPath("/Processed/SAS")
