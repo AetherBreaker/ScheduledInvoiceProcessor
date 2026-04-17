@@ -108,9 +108,6 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   invoice_num_pattern: Pattern[str] | None
 
-  pickup_ftp_creds: dict
-  waiting_ftp_creds: dict = loads(SETTINGS.sft_website_creds_file.read_text())
-
   pickup_ftp_folder: PurePosixPath
   pickup_archive_ftp_folder: PurePosixPath
   pre_processing_waiting_folder: PurePosixPath
