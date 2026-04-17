@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 # RICH_CONSOLE = Console()
 RICH_CONSOLE = Console(
-  width=None if platform == "win32" else 175,
+  width=None if platform == "win32" else 160,
   # force_terminal=True,
   log_time=platform == "win32",
 )
