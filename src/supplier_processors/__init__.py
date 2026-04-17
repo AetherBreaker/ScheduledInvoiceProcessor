@@ -738,6 +738,22 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
             exc_info=e,
             stack_info=True,
           )
+          if log_action_handler is not None:
+            log_action_handler(
+              key,
+              StatusCode.FAILURE,
+              FileRegisterData(
+                storenum=storenum,
+                customer_id=customer_id,
+                pickup_date=pickup_date,
+                dropoff_date=dropoff_date,
+                file_pattern=self.assemble_filename_pattern(customer_id, pickup_date, dropoff_date, current_week),
+                current_week=current_week,
+                _waiting_folder=self.pre_processing_waiting_folder,
+                _local_copy_folder=self.local_pre_processing_folder,
+              ),
+            )
+          return
 
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.SUCCESS, matched_item)
