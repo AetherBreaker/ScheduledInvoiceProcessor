@@ -23,6 +23,7 @@ class CustomStrEnum(StrEnum):
 class SuppliersEnum(CustomStrEnum):
   SAS = "SAS"
   RYO = "RYO"
+  COREMARK = "COREMARK"
 
 
 class StateEnum(CustomStrEnum):
