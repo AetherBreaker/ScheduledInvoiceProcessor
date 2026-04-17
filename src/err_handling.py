@@ -15,10 +15,6 @@ from rich.console import Console
 from send_alert_email import send_alert_email
 from typing_custom import FatalDetails
 
-# from os import _exit
-# from collections.abc import Awaitable
-
-
 logger = getLogger(__name__)
 
 
@@ -68,17 +64,6 @@ def _is_database_origin_exception(exc: BaseException) -> bool:
 def get_last_fatal_details() -> FatalDetails:
   return _last_fatal_details
 
-
-# def handle_fatal_exc_async[**TP, TR](func: Callable[TP, Awaitable[TR]]) -> Callable[TP, Awaitable[TR]]:
-#   @wraps(func)
-#   async def wrapper(*args: TP.args, **kwargs: TP.kwargs) -> TR:
-#     try:
-#       return await func(*args, **kwargs)
-#     except BaseException as e:
-#       logger.critical(f"Fatal exception in {func.__name__}: {e}", exc_info=True)
-#       exit(1)  # Exit with non-zero code to indicate failure to Coolify
-
-#   return wrapper
 
 if not __debug__:
 

@@ -3,44 +3,16 @@ if __name__ == "__main__":
 
   configure_logging()
 
-from collections.abc import Callable
 from datetime import datetime, timedelta
 from os import sep, walk
 from os.path import abspath, basename
 from re import compile
-from typing import TYPE_CHECKING, BinaryIO
 
 from dateutil.relativedelta import SA, relativedelta
 from dateutil.utils import today as _today
 from gspread import IncorrectCellLabel
 from typing_custom import IntOrInf
 from typing_custom.custom_path import CustomPath
-
-if TYPE_CHECKING:
-  from rich_custom import CustomTaskID, ProgressCustom
-
-
-def paramiko_pbar_callback(pbar: "ProgressCustom", task_id: "CustomTaskID") -> Callable[[int, int], None]:
-  def callback_transferred_bytes(transferred: int, total: int):
-    pbar.update(task_id, completed=transferred, total=total)
-
-  return callback_transferred_bytes
-
-
-def ftp_writefile_pbar_callback(pbar: "ProgressCustom", task_id: "CustomTaskID", file_stream: BinaryIO) -> Callable[[bytes], None]:
-  def callback_save_bytes(bytes_received: bytes):
-    file_stream.write(bytes_received)
-    pbar.update(task_id, advance=len(bytes_received))
-
-  return callback_save_bytes
-
-
-def ftp_pbar_callback(pbar: "ProgressCustom", task_id: "CustomTaskID") -> Callable[[bytes], None]:
-  def callback_transferred_bytes(bytes_received: bytes):
-    pbar.update(task_id, advance=len(bytes_received))
-
-  return callback_transferred_bytes
-
 
 shift = timedelta()
 

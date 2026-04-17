@@ -36,10 +36,6 @@ from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 from supplier_processors.ftp_adapter import AdaptedFTP, FTPAdapter, SFTFTPClient
 from supplier_processors.log_action import LogActionHandlerType, log_actions
 
-# from logging.handlers import QueueHandler
-# from queue import Queue
-# from logging_config import DynamicQueueListener
-
 logger = getLogger(__name__)
 TRANSIENT_TRANSFER_ERROR_STRINGS = (
   "connection reset",
@@ -52,17 +48,6 @@ TRANSIENT_TRANSFER_ERROR_STRINGS = (
   "socket is closed",
   "eof",
 )
-# contextual_logs_queue = Queue(-1)
-# logger.addHandler(QueueHandler(contextual_logs_queue))  # type: ignore
-
-# contextual_log_listener = DynamicQueueListener(contextual_logs_queue, respect_handler_level=True)  # type: ignore
-
-
-def advance_pbar(pbar: ProgressCustom, task_id: CustomTaskID):
-  def advance(data: bytes):
-    pbar.update(task_id, advance=len(data))
-
-  return advance
 
 
 @dataclass

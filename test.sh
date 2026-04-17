@@ -1,1 +1,0 @@
-ts=$(cat /app/src/logs/heartbeat.txt 2>/dev/null) && [ -n \"$ts\" ] && now=$(date +%s) && heartbeat=$(date -d \"$ts\" +%s 2>/dev/null) && [ $((now - heartbeat)) -lt 180 ]

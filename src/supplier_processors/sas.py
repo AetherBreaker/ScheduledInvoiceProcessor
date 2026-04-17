@@ -21,15 +21,7 @@ from typing_custom.enums import SuppliersEnum
 from supplier_processors import SupplierProcessorSFTPIntermediate
 from supplier_processors.ftp_adapter import AdaptedSFTP, FTPAdapter, SASSFTPClient
 
-# from logging.handlers import QueueHandler
-# from queue import Queue
-# from logging_config import DynamicQueueListener
-
 logger = getLogger(__name__)
-# contextual_logs_queue = Queue(-1)
-# logger.addHandler(QueueHandler(contextual_logs_queue))  # type: ignore
-
-# contextual_log_listener = DynamicQueueListener(contextual_logs_queue, respect_handler_level=True)  # type: ignore
 
 
 class SASProcessor(SupplierProcessorSFTPIntermediate):
