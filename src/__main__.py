@@ -70,7 +70,8 @@ async def bootstrap_runtime(live: LiveCustom) -> DatabaseCache:
     raise
 
   for processor in supplier_register.values():
-    processor(live.pbar)
+    p = processor(live.pbar)
+    await p.clean_stale_queue_entries()
 
   try:
     await reschedule_all_tasks()

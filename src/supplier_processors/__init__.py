@@ -3,8 +3,7 @@ if __name__ == "__main__":
 
   configure_logging()
 
-from asyncio import gather, run, to_thread
-from asyncio.events import get_running_loop
+from asyncio import gather, to_thread
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime
@@ -162,13 +161,6 @@ class SupplierProcessorBase(metaclass=SingletonType):
     self.pbar = cast(ProgressCustom, pbar)
 
     self._load_queue_backups()
-
-    try:
-      loop = get_running_loop()
-      loop.run_until_complete(self._clean_stale_queue_entries())
-      loop.run_forever()
-    except RuntimeError:
-      run(self._clean_stale_queue_entries())
 
     self.cache: DatabaseCache = DatabaseCache()
 
