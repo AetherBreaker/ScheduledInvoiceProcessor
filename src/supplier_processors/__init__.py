@@ -153,15 +153,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self.cache: DatabaseCache = DatabaseCache()
 
+  def __del__(self) -> None:
+    self._save_backups()
+
   async def save_queue_backups_off_thread(self) -> None:
     await to_thread(self._save_backups)
-
-  async def cleanup_stale_queue_entries(self) -> None:
-    async with self._lock:
-      removed_entries = self._clean_stale_queue_entries()
-
-    if removed_entries:
-      await to_thread(self._save_backups)
 
   def _save_backups(self) -> None:
     try:
@@ -200,9 +196,6 @@ class SupplierProcessorBase(metaclass=SingletonType):
     except Exception as e:
       logger.error(f"{self.__class__.__name__}: Error saving queue backups: {e}")
       raise e
-
-  def __del__(self) -> None:
-    self._save_backups()
 
   def _load_queue_backups(self) -> None:
     # Note: Called during __init__, no need for lock protection
@@ -257,11 +250,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
       )
       return {}
 
-  def _quarantine_corrupted_queue_backup(self, backup_file: CustomPath, raw_backup: str) -> CustomPath:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    quarantined_file = self._corrupted_queue_backup_folder / f"{backup_file.stem}_{timestamp}{backup_file.suffix}"
-    quarantined_file.write_text(raw_backup)
-    return quarantined_file
+  async def cleanup_stale_queue_entries(self) -> None:
+    async with self._lock:
+      removed_entries = self._clean_stale_queue_entries()
+
+    if removed_entries:
+      await to_thread(self._save_backups)
 
   def _clean_stale_queue_entries(self) -> int:
     # Note: Called during __init__, no need for lock protection
@@ -279,6 +273,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
           logger.warning(f"{self.__class__.__name__}: Removed stale queue entry {key}")
 
     return removed_entries
+
+  def _quarantine_corrupted_queue_backup(self, backup_file: CustomPath, raw_backup: str) -> CustomPath:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    quarantined_file = self._corrupted_queue_backup_folder / f"{backup_file.stem}_{timestamp}{backup_file.suffix}"
+    quarantined_file.write_text(raw_backup)
+    return quarantined_file
 
   @classmethod
   def check_connections(cls) -> bool:
