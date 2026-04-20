@@ -3,6 +3,7 @@ if __name__ == "__main__":
 
   configure_logging()
 
+from asyncio import set_event_loop
 from datetime import datetime
 from logging import getLogger
 from pathlib import PosixPath, PurePosixPath
@@ -62,14 +63,14 @@ async def bootstrap_runtime(live: LiveCustom) -> DatabaseCache:
     logger.critical("Failed to initialize database cache during startup.", exc_info=True)
     raise
 
-  for processor in supplier_register.values():
-    processor(live.pbar)
-
   try:
     await cache.refresh_cache()
   except Exception:
     logger.critical("Initial cache refresh failed during startup.", exc_info=True)
     raise
+
+  for processor in supplier_register.values():
+    processor(live.pbar)
 
   try:
     await reschedule_all_tasks()
@@ -107,7 +108,7 @@ async def reschedule_all_tasks():
     )
 
     scheduler.add_job(
-      processor().cleanup_stale_queue_entries,
+      processor().clean_stale_queue_entries,
       CronTrigger(hour=3, minute=0),
       id=f"{supplier}_cleanup_stale_queue_entries",
       replace_existing=True,
@@ -364,8 +365,9 @@ if __name__ == "__main__":
   from sys import platform
 
   if platform in ("win32", "cygwin", "cli"):
-    from winloop import run
+    from winloop import new_event_loop, run
   else:
     # if we're on apple or linux do this instead
-    from uvloop import run  # type: ignore
+    from uvloop import new_event_loop, run  # type: ignore
+  set_event_loop(new_event_loop())
   run(main())

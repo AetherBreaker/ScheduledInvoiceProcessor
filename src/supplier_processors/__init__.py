@@ -151,6 +151,13 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self._load_queue_backups()
 
+    try:
+      loop = get_running_loop()
+      loop.run_until_complete(self._clean_stale_queue_entries())
+      loop.run_forever()
+    except RuntimeError:
+      run(self._clean_stale_queue_entries())
+
     self.cache: DatabaseCache = DatabaseCache()
 
   def __del__(self) -> None:
@@ -222,8 +229,6 @@ class SupplierProcessorBase(metaclass=SingletonType):
       target.clear()
       target.update(deepcopy(loaded))
 
-    self._clean_stale_queue_entries()
-
   def _load_queue_backup_file(self, backup_file: CustomPath, queue_name: str) -> dict[str, FileRegisterData]:
     if not backup_file.exists():
       return {}
@@ -250,29 +255,46 @@ class SupplierProcessorBase(metaclass=SingletonType):
       )
       return {}
 
-  async def cleanup_stale_queue_entries(self) -> None:
+  async def clean_stale_queue_entries(self) -> None:
     async with self._lock:
-      removed_entries = self._clean_stale_queue_entries()
+      changed_entries = await self._clean_stale_queue_entries()
 
-    if removed_entries:
+    if changed_entries:
       await to_thread(self._save_backups)
 
-  def _clean_stale_queue_entries(self) -> int:
+  async def _clean_stale_queue_entries(self) -> int:
     # Note: Called during __init__, no need for lock protection
-    removed_entries = 0
-    for queue in (
-      self._file_pickup_queue,
-      self._file_preprocess_queue,
-      self._file_waiting_queue,
-      self._file_dropoff_queue,
-    ):
-      for key, item in tuple(queue.items()):
-        if item.stale:
-          queue.pop(key)
-          removed_entries += 1
-          logger.warning(f"{self.__class__.__name__}: Removed stale queue entry {key}")
+    changed_entries = 0
 
-    return removed_entries
+    for key, item in self._file_pickup_queue.items():
+      if item.stale:
+        self._file_pickup_queue.pop(key)
+        changed_entries += 1
+        logger.warning(f"{self.__class__.__name__}: Removed stale queue entry {key} from pickup queue")
+      elif await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
+        (self.supplier_name, item.storenum), DatabaseScheduleColumns.invoice_grabbed
+      ):
+        entry = self._file_pickup_queue.pop(key)
+        self._file_waiting_queue[key] = entry
+        changed_entries += 1
+        logger.warning(
+          f"{self.__class__.__name__}: queue entry {key} found in pickup queue while marked as invoice_grabbed. Moved entry to waiting queue."
+        )
+
+    for queue_name, queue in {
+      "waiting": self._file_waiting_queue,
+      "preprocess": self._file_preprocess_queue,
+      "dropoff": self._file_dropoff_queue,
+    }.items():
+      for key, item in tuple(queue.items()):
+        if item.stale or await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
+          (self.supplier_name, item.storenum), DatabaseScheduleColumns.invoice_applied
+        ):
+          queue.pop(key)
+          changed_entries += 1
+          logger.warning(f"{self.__class__.__name__}: Removed stale queue entry {key} from {queue_name} queue")
+
+    return changed_entries
 
   def _quarantine_corrupted_queue_backup(self, backup_file: CustomPath, raw_backup: str) -> CustomPath:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
