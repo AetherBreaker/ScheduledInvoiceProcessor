@@ -3,10 +3,11 @@ if __name__ == "__main__":
 
   configure_logging()
 
-from asyncio import gather, to_thread
+from asyncio import gather, run, to_thread
+from asyncio.events import get_running_loop
 from contextvars import ContextVar
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime
 from errno import EACCES
 from ftplib import all_errors
 from io import BytesIO
@@ -65,7 +66,7 @@ class FileRegisterData:
   pickup_date: datetime
   dropoff_date: datetime
   file_pattern: Pattern[str]
-  current_week: bool
+  _current_week: bool
   _waiting_folder: PurePosixPath
   _local_copy_folder: CustomPath
 
@@ -74,6 +75,16 @@ class FileRegisterData:
   pickup_success: dict[int, bool] = Field(default_factory=dict)
   preprocess_success: dict[int, bool] = Field(default_factory=dict)
   dropoff_success: dict[int, bool] = Field(default_factory=dict)
+
+  @property
+  def current_week(self) -> bool:
+    if self._current_week:
+      now = datetime.now(TZ)
+      window_start = self.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0)
+      window_end = self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)
+
+      return window_start <= now < window_end
+    return False
 
   @property
   def remote_file_locs(self) -> dict[int, PurePosixPath]:
@@ -85,7 +96,8 @@ class FileRegisterData:
 
   @property
   def stale(self) -> bool:
-    return datetime.now(TZ) > ((self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)) + timedelta(days=7))
+    return datetime.now(TZ) > (self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0))
+    # return datetime.now(TZ) > ((self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)) + timedelta(days=7))
 
 
 class SupplierProcessorBase(metaclass=SingletonType):
@@ -686,7 +698,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
       pickup_date=pickup_date,
       dropoff_date=dropoff_date,
       file_pattern=pattern,
-      current_week=current_week,
+      _current_week=current_week,
       _waiting_folder=self.pre_processing_waiting_folder,
       _local_copy_folder=self.local_pre_processing_folder,
     )
@@ -770,7 +782,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
                 pickup_date=pickup_date,
                 dropoff_date=dropoff_date,
                 file_pattern=self.assemble_filename_pattern(customer_id, pickup_date, dropoff_date, current_week),
-                current_week=current_week,
+                _current_week=current_week,
                 _waiting_folder=self.pre_processing_waiting_folder,
                 _local_copy_folder=self.local_pre_processing_folder,
               ),
