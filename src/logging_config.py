@@ -34,7 +34,7 @@ CWD = CustomPath.cwd()
 
 PROJECT_NAME = "ScheduledOrderMiddleman"
 
-max_width = 40
+max_width = 36
 
 
 LOG_LOC_FOLDER = SETTINGS.persisted_dir_loc / "logs"
@@ -78,6 +78,8 @@ class FixedRichHandler(RichHandler):
       libname_index = 0
 
     path = ".".join(pathpath.parts[libname_index:])
+    if "src." in path:
+      path = path.split("src.", 1)[1]
 
     level = self.get_level_text(record)
     time_format = None if self.formatter is None else self.formatter.datefmt
