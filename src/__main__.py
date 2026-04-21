@@ -19,9 +19,9 @@ from err_handling import get_last_fatal_details
 from logging_config import RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
-from supplier_processors import SupplierProcessorBase
-from supplier_processors.ryo import RYOProcessor
-from supplier_processors.sas import SASProcessor
+from suppliers import SupplierProcessorBase
+from suppliers.ryo import RYOProcessor
+from suppliers.sas import SASProcessor
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import SuppliersEnum
 

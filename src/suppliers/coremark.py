@@ -21,13 +21,13 @@ from typing_custom import CustomerID
 from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
-from supplier_processors import (
+from suppliers import (
   FileRegisterData,
   SupplierProcessorSFTPIntermediate,
   SupplierQueueKey,
 )
-from supplier_processors.ftp_adapter import AdaptedSFTP, CoremarkFTPClient, FTPAdapter
-from supplier_processors.log_action import LogActionHandlerType, log_actions
+from suppliers.ftp_adapter import AdaptedSFTP, CoremarkFTPClient, FTPAdapter
+from suppliers.log_action import LogActionHandlerType, log_actions
 
 logger = getLogger(__name__)
 

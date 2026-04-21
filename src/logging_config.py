@@ -18,7 +18,7 @@ from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum
 
 if TYPE_CHECKING:
-  from supplier_processors import SupplierProcessorBase
+  from suppliers import SupplierProcessorBase
 
 # RICH_CONSOLE = Console()
 RICH_CONSOLE = Console(

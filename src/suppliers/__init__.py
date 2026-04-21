@@ -33,8 +33,8 @@ from typing_custom.custom_path import CustomPath
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
-from supplier_processors.ftp_adapter import AdaptedFTP, FTPAdapter, SFTFTPClient
-from supplier_processors.log_action import LogActionHandlerType, log_actions
+from suppliers.ftp_adapter import AdaptedFTP, FTPAdapter, SFTFTPClient
+from suppliers.log_action import LogActionHandlerType, log_actions
 
 logger = getLogger(__name__)
 TRANSIENT_TRANSFER_ERROR_STRINGS = (
@@ -981,7 +981,7 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
 
 
 if __name__ == "__main__":
-  from supplier_processors.sas import SASProcessor
+  from suppliers.sas import SASProcessor
 
   processor = SASProcessor()
   pass

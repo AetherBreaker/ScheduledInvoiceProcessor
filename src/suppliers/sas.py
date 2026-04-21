@@ -18,8 +18,8 @@ from typing_custom import CustomerID
 from typing_custom.custom_path import CustomPath
 from typing_custom.enums import SuppliersEnum
 
-from supplier_processors import SupplierProcessorSFTPIntermediate
-from supplier_processors.ftp_adapter import AdaptedSFTP, FTPAdapter, SASSFTPClient
+from suppliers import SupplierProcessorSFTPIntermediate
+from suppliers.ftp_adapter import AdaptedSFTP, FTPAdapter, SASSFTPClient
 
 logger = getLogger(__name__)
 
