@@ -21,6 +21,7 @@ from scheduler_config import OrderProcessingScheduler
 from supplier_processors import SupplierProcessorBase
 from supplier_processors.ryo import RYOProcessor
 from supplier_processors.sas import SASProcessor
+from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import SuppliersEnum
 
 logger = getLogger(__name__)
@@ -115,9 +116,25 @@ async def reschedule_all_tasks():
       replace_existing=True,
     )
 
-  async for order in current_week.walk_typed_rows():
+  current_week_orders = [order async for order in current_week.walk_typed_rows()]
+
+  for order in current_week_orders:
     if not order.customer or not order.store:
       continue
+    picked_up = await cache.schedule.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_grabbed)
+    applied = await cache.schedule.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_applied)
+
+    if picked_up and applied:
+      scheduler.remove_job(
+        f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+        jobstore="order_processing",
+      )
+      scheduler.remove_job(
+        f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+        jobstore="order_processing",
+      )
+      continue
+
     scheduler.add_job(
       supplier_register[order.supplier]().register_pickup,
       CronTrigger(
@@ -156,9 +173,23 @@ async def reschedule_all_tasks():
       jobstore="order_processing",
     )
 
-  # async for order in previous_week.walk_typed_rows():
+  # previous_week_orders = [order async for order in previous_week.walk_typed_rows()]
+  # for order in previous_week_orders:
   #   if not order.customer or not order.store:
   #     continue
+  #   picked_up = await previous_week.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_grabbed)
+  #   applied = await previous_week.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_applied)
+  #   if picked_up and applied:
+  #     scheduler.remove_job(
+  #       f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+  #       jobstore="order_processing",
+  #     )
+  #     scheduler.remove_job(
+  #       f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+  #       jobstore="order_processing",
+  #     )
+  #     continue
+
   #   scheduler.add_job(
   #     supplier_register[order.supplier]().register_pickup,
   #     CronTrigger(
