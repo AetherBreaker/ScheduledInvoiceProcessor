@@ -228,7 +228,7 @@ async def reschedule_all_tasks():
   #     jobstore="order_processing",
   #   )
 
-  scheduler.print_jobs()
+  # scheduler.print_jobs()
 
 
 async def flip_week():
