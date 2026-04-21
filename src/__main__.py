@@ -4,7 +4,6 @@ if __name__ == "__main__":
   configure_logging()
 
 from asyncio import set_event_loop
-from contextlib import suppress
 from datetime import datetime
 from logging import getLogger
 from pathlib import PosixPath, PurePosixPath
@@ -126,6 +125,11 @@ async def reschedule_all_tasks():
     picked_up = await cache.schedule.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_grabbed)
     applied = await cache.schedule.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_applied)
 
+    reg_pickup_job_id = f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}"
+    reg_dropoff_job_id = (
+      f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}"
+    )
+
     if not picked_up:
       scheduler.add_job(
         supplier_register[order.supplier]().register_pickup,
@@ -141,16 +145,17 @@ async def reschedule_all_tasks():
           "dropoff_date": order.invoice_dropoff_time,
           "current_week": True,
         },
-        id=f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+        id=reg_pickup_job_id,
         replace_existing=True,
         jobstore="order_processing",
       )
     else:
-      with suppress(JobLookupError):
-        scheduler.remove_job(
-          f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-          jobstore="order_processing",
-        )
+      try:
+        scheduler.remove_job(reg_pickup_job_id, jobstore="order_processing")
+      except JobLookupError:
+        pass
+      else:
+        logger.info(f"Removed register_pickup because order was marked as picked up: {reg_pickup_job_id}")
     if not applied:
       scheduler.add_job(
         supplier_register[order.supplier]().register_dropoff,
@@ -166,16 +171,17 @@ async def reschedule_all_tasks():
           "dropoff_date": order.invoice_dropoff_time,
           "current_week": True,
         },
-        id=f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+        id=reg_dropoff_job_id,
         replace_existing=True,
         jobstore="order_processing",
       )
     else:
-      with suppress(JobLookupError):
-        scheduler.remove_job(
-          f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-          jobstore="order_processing",
-        )
+      try:
+        scheduler.remove_job(reg_dropoff_job_id, jobstore="order_processing")
+      except JobLookupError:
+        pass
+      else:
+        logger.info(f"Removed register_dropoff because order was marked as applied: {reg_dropoff_job_id}")
 
   # previous_week_orders = [order async for order in previous_week.walk_typed_rows()]
   # for order in previous_week_orders:
@@ -183,6 +189,11 @@ async def reschedule_all_tasks():
   #     continue
   #   picked_up = await previous_week.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_grabbed)
   #   applied = await previous_week.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_applied)
+
+  #   reg_pickup_job_id = f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}"
+  #   reg_dropoff_job_id = (
+  #     f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}"
+  #   )
 
   #   if not picked_up:
   #     scheduler.add_job(
@@ -199,16 +210,18 @@ async def reschedule_all_tasks():
   #         "dropoff_date": order.invoice_dropoff_time,
   #         "current_week": False,
   #       },
-  #       id=f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+  #       id=reg_pickup_job_id,
   #       replace_existing=True,
   #       jobstore="order_processing",
   #     )
   #   else:
-  #     with suppress(JobLookupError):
-  #       scheduler.remove_job(
-  #         f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-  #         jobstore="order_processing",
-  #       )
+  #     try:
+  #       scheduler.remove_job(reg_pickup_job_id, jobstore="order_processing")
+  #     except JobLookupError:
+  #       pass
+  #     else:
+  #       logger.info(f"Removed register_pickup because order was marked as picked up: {reg_pickup_job_id}")
+
   #   if not applied:
   #     scheduler.add_job(
   #       supplier_register[order.supplier]().register_dropoff,
@@ -224,16 +237,17 @@ async def reschedule_all_tasks():
   #         "dropoff_date": order.invoice_dropoff_time,
   #         "current_week": False,
   #       },
-  #       id=f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+  #       id=reg_dropoff_job_id,
   #       replace_existing=True,
   #       jobstore="order_processing",
   #     )
   #   else:
-  #     with suppress(JobLookupError):
-  #       scheduler.remove_job(
-  #         f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-  #         jobstore="order_processing",
-  #       )
+  #     try:
+  #       scheduler.remove_job(reg_dropoff_job_id, jobstore="order_processing")
+  #     except JobLookupError:
+  #       pass
+  #     else:
+  #       logger.info(f"Removed register_dropoff because order was marked as applied: {reg_dropoff_job_id}")
 
   # scheduler.print_jobs()
 
