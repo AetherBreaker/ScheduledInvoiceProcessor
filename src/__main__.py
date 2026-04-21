@@ -4,12 +4,14 @@ if __name__ == "__main__":
   configure_logging()
 
 from asyncio import set_event_loop
+from contextlib import suppress
 from datetime import datetime
 from logging import getLogger
 from pathlib import PosixPath, PurePosixPath
 from typing import NoReturn
 
 from aiohttp.web import Application, AppRunner, TCPSite
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
@@ -144,11 +146,11 @@ async def reschedule_all_tasks():
         jobstore="order_processing",
       )
     else:
-      scheduler.remove_job(
-        f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-        jobstore="order_processing",
-      )
-
+      with suppress(JobLookupError):
+        scheduler.remove_job(
+          f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+          jobstore="order_processing",
+        )
     if not applied:
       scheduler.add_job(
         supplier_register[order.supplier]().register_dropoff,
@@ -169,10 +171,11 @@ async def reschedule_all_tasks():
         jobstore="order_processing",
       )
     else:
-      scheduler.remove_job(
-        f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-        jobstore="order_processing",
-      )
+      with suppress(JobLookupError):
+        scheduler.remove_job(
+          f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+          jobstore="order_processing",
+        )
 
   # previous_week_orders = [order async for order in previous_week.walk_typed_rows()]
   # for order in previous_week_orders:
@@ -201,11 +204,11 @@ async def reschedule_all_tasks():
   #       jobstore="order_processing",
   #     )
   #   else:
-  #     scheduler.remove_job(
-  #       f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-  #       jobstore="order_processing",
-  #     )
-
+  #     with suppress(JobLookupError):
+  #       scheduler.remove_job(
+  #         f"{order.supplier}_register_pickup_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+  #         jobstore="order_processing",
+  #       )
   #   if not applied:
   #     scheduler.add_job(
   #       supplier_register[order.supplier]().register_dropoff,
@@ -226,10 +229,11 @@ async def reschedule_all_tasks():
   #       jobstore="order_processing",
   #     )
   #   else:
-  #     scheduler.remove_job(
-  #       f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
-  #       jobstore="order_processing",
-  #     )
+  #     with suppress(JobLookupError):
+  #       scheduler.remove_job(
+  #         f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}",
+  #         jobstore="order_processing",
+  #       )
 
   # scheduler.print_jobs()
 
