@@ -9,7 +9,7 @@ from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime
 from logging import getLogger
-from typing import Any, Literal, overload
+from typing import Any, ClassVar, Literal, overload
 
 from aiologic import Lock
 from aiorwlock import RWLock
@@ -246,7 +246,6 @@ class DatabaseCache(metaclass=SingletonType):
       schedule_data: list[list[str | int | float]] = result["valueRanges"][0]["values"]
       self.schedule = CacheViewschedule(
         raw_data=schedule_data,
-        columns=DatabaseScheduleColumns,
         types_model=ScheduledOrderDBEntryModel,
         cache_core=self,
         sheet_id=None,
@@ -255,7 +254,6 @@ class DatabaseCache(metaclass=SingletonType):
       prev_week_schedule_data: list[list[str | int | float]] = result["valueRanges"][1]["values"]
       self.prev_week_schedule = CacheViewschedule(
         raw_data=prev_week_schedule_data,
-        columns=DatabaseScheduleColumns,
         types_model=ScheduledOrderDBEntryModel,
         cache_core=self,
         sheet_id=None,
@@ -272,7 +270,6 @@ class DatabaseCache(metaclass=SingletonType):
         order_log_data: list[list[str | int | float]] = result["valueRanges"][2]["values"]
         self.order_log = CacheViewOrderLog(
           raw_data=order_log_data,
-          columns=DatabaseOrderLogColumns,
           types_model=OrderLogDBEntryModel,
           cache_core=self,
           sheet_id=SETTINGS.database_order_log_id,
@@ -280,19 +277,18 @@ class DatabaseCache(metaclass=SingletonType):
       except KeyError:
         self.order_log = CacheViewOrderLog(
           raw_data=[],
-          columns=DatabaseOrderLogColumns,
           types_model=OrderLogDBEntryModel,
           cache_core=self,
           sheet_id=SETTINGS.database_order_log_id,
         )
 
       self._original_sizes = {
-        self.schedule._range_format: (len(self.schedule._cache), len(self.schedule._columns)),
+        self.schedule._range_format: (len(self.schedule._cache), len(self.schedule.columns)),
         self.prev_week_schedule._range_format: (
           len(self.prev_week_schedule._cache),
-          len(self.prev_week_schedule._columns),
+          len(self.prev_week_schedule.columns),
         ),
-        self.order_log._range_format: (len(self.order_log._cache), len(self.order_log._columns)),
+        self.order_log._range_format: (len(self.order_log._cache), len(self.order_log.columns)),
       }
 
       # self.schedule._cache.to_csv("debug_schedule.csv")
@@ -442,18 +438,17 @@ class CacheViewBase[ModelT: CustomBaseModel]:
   _range_format: str
   _range_format_single: str
   _field_type_adapters: dict[str, TypeAdapter]
+  columns: ClassVar[type[ColNameEnum]]
 
   def __init__(
     self,
     raw_data: list[list[str | int | float]],
-    columns: type[ColNameEnum],
     types_model: type[ModelT],
     cache_core: DatabaseCache,
     sheet_id: int | None,
   ) -> None:
-    self._cache = build_typed_dataframe(data=raw_data, columns=columns, types_model=types_model)  # type: ignore
-    self._cache_index = columns.__index_items__
-    self._columns = columns
+    self._cache = build_typed_dataframe(data=raw_data, columns=self.columns, types_model=types_model)  # type: ignore
+    self._cache_index = self.columns.__index_items__
     self._core = cache_core
     self._model = types_model
     self._sheet_id = sheet_id
@@ -523,7 +518,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
 
     await self._core.queue_db_api_values_raw_update(
       ValueRange(
-        range=self._range_format_single.format(cell=f"R{row_number}C{self._columns.get_enum_index(column) + 1}"),
+        range=self._range_format_single.format(cell=f"R{row_number}C{self.columns.get_enum_index(column) + 1}"),
         majorDimension=Dimension.rows,
         values=[[sheets_value]],
       )
@@ -536,7 +531,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
       row = Series(values.model_dump(), dtype=object)
       sheets_row = Series(values.model_dump(mode="json"), dtype=object)
     elif isinstance(values, Sequence):
-      row = Series(values, dtype=object, index=self._columns.all_columns())
+      row = Series(values, dtype=object, index=self.columns.all_columns())
       sheets_row = row.copy()
     else:
       raise TypeError(f"{type(values)} does not match the expected type of Sequence[Any] or {self._model}")
@@ -549,7 +544,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
     # get column index
 
     update_data = ValueRange(
-      range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self._columns)}"),
+      range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self.columns)}"),
       majorDimension=Dimension.rows,
       values=[sheets_row.tolist()],  # type: ignore
     )
@@ -578,7 +573,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
     # get column index
 
     update_data = ValueRange(
-      range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self._columns)}"),
+      range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self.columns)}"),
       majorDimension=Dimension.rows,
       values=[sheets_row.tolist()],  # type: ignore
     )
@@ -607,6 +602,7 @@ class CacheViewschedule(CacheViewBase[ScheduledOrderDBEntryModel]):
   _range_format_single = "Current Week!{cell}"
   _range_format = "Current Week!{start}:{end}"
   _field_type_adapters = SCHEDULE_TYPE_ADAPTERS
+  columns = DatabaseScheduleColumns
 
   async def read_typed_row(self, index: DatabaseScheduleIndex, re_validate: bool = False) -> ScheduledOrderDBEntryModel:
     return await super().read_typed_row(index, re_validate)
@@ -684,6 +680,7 @@ class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
   _range_format_single = "'Processing Log'!{cell}"
   _range_format = "'Processing Log'!{start}:{end}"
   _field_type_adapters = ORDER_LOG_TYPE_ADAPTERS
+  columns: ClassVar[type[DatabaseOrderLogColumns]] = DatabaseOrderLogColumns  # type: ignore
 
   async def read_typed_row(self, index: DatabaseOrderLogIndex, re_validate: bool = False) -> OrderLogDBEntryModel:
     return await super().read_typed_row(index, re_validate)
