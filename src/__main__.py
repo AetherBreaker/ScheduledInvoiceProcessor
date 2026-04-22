@@ -16,7 +16,7 @@ from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
 from environment_init_vars import CWD, FATAL_EVENT, SETTINGS
 from err_handling import get_last_fatal_details
-from logging_config import RICH_CONSOLE
+from logging_config import LOG_LOC_FOLDER, RICH_CONSOLE
 from rich_custom import LiveCustom
 from scheduler_config import OrderProcessingScheduler
 from suppliers import SupplierProcessorBase
@@ -328,7 +328,7 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
     scheduler.print_jobs()
 
     app = Application()
-    app.router.add_static("/", CWD / "logs", show_index=True, follow_symlinks=True, append_version=True)
+    app.router.add_static("/", LOG_LOC_FOLDER, show_index=True, follow_symlinks=True, append_version=True)
     runner = AppRunner(app)
     await runner.setup()
     site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
