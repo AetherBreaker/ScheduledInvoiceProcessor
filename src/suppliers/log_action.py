@@ -60,9 +60,9 @@ def log_actions[**TP, TR](
         adapted_logger.exception(f"Exception in {func.__name__}: {e}")
         await self_obj.cache.order_log.log_action(
           supplier=self_obj.supplier_name,
-          store=None,
+          store=kwargs.get("storenum"),  # type: ignore
           invoice_num=None,
-          customer=None,
+          customer=kwargs.get("customer_id"),  # type: ignore
           action=action_identifier_prefix,
           status=StatusCode.FAILURE,
           action_datetime=datetime.now(),
