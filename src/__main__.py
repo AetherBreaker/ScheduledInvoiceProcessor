@@ -92,20 +92,20 @@ async def reschedule_all_tasks():
   for supplier, processor in supplier_register.items():
     scheduler.add_job(
       processor().pickup_files,
-      CronTrigger(minute="2-59/5"),
+      CronTrigger(minute="2-59/10"),
       id=f"{supplier}_pickup_files",
       replace_existing=True,
     )
     scheduler.add_job(
       processor().dropoff_files,
-      CronTrigger(minute="4-59/5"),
+      CronTrigger(minute="6-59/10"),
       id=f"{supplier}_dropoff_files",
       replace_existing=True,
     )
 
     scheduler.add_job(
       processor().save_queue_backups_off_thread,
-      CronTrigger(minute="*/5"),
+      CronTrigger(minute="8-59/10"),
       id=f"{supplier}_save_queue_backups",
       replace_existing=True,
     )
@@ -134,7 +134,7 @@ async def reschedule_all_tasks():
       scheduler.add_job(
         supplier_register[order.supplier]().register_pickup,
         CronTrigger(
-          minute="1-59/5",
+          minute="0-59/10",
           start_date=order.invoice_pickup_time,
           end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
         ),
@@ -160,7 +160,7 @@ async def reschedule_all_tasks():
       scheduler.add_job(
         supplier_register[order.supplier]().register_dropoff,
         CronTrigger(
-          minute="3-59/5",
+          minute="4-59/10",
           start_date=order.invoice_dropoff_time,
           end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
         ),
@@ -199,7 +199,7 @@ async def reschedule_all_tasks():
   #     scheduler.add_job(
   #       supplier_register[order.supplier]().register_pickup,
   #       CronTrigger(
-  #         minute="1-59/5",
+  #         minute="0-59/10",
   #         start_date=order.invoice_pickup_time,
   #         end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
   #       ),
@@ -226,7 +226,7 @@ async def reschedule_all_tasks():
   #     scheduler.add_job(
   #       supplier_register[order.supplier]().register_dropoff,
   #       CronTrigger(
-  #         minute="3-59/5",
+  #         minute="4-59/10",
   #         start_date=order.invoice_dropoff_time,
   #         end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
   #       ),
