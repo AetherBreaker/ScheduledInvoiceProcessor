@@ -310,6 +310,12 @@ LOGGING_BASE_NAME = "ScheduledOrderMiddleman"
 DEBUG_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}_debug.txt"
 INFO_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}.txt"
 
+SCHEDULER_LOG_LOC = LOG_LOC_FOLDER / "scheduler_logs"
+SCHEDULER_LOG_LOC.mkdir(exist_ok=True, parents=True)
+
+APSCHEDULER_DEBUG_LOG_LOC = SCHEDULER_LOG_LOC / "scheduler_debug.txt"
+APSCHEDULER_INFO_LOG_LOC = SCHEDULER_LOG_LOC / "scheduler.txt"
+
 
 LOGGING_TYPE: Literal["daily", "per_run"] = "daily"
 
@@ -331,6 +337,27 @@ def configure_logging():
   paramiko = logging.getLogger("paramiko")
   paramiko.setLevel(logging.WARNING)
 
+  scheduler = logging.getLogger("apscheduler")
+  scheduler.propagate = False
+
+  scheduler_log_queue = Queue(-1)
+
+  scheduler_queue_handler = QueueHandler(scheduler_log_queue)
+
+  scheduler_info_handler = CustomTimedRotatingFileHandler(APSCHEDULER_INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
+  scheduler_debug_handler = CustomTimedRotatingFileHandler(APSCHEDULER_DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
+  scheduler_info_handler.setLevel(logging.INFO)
+  scheduler_debug_handler.setLevel(logging.DEBUG)
+
+  scheduler_queue_listener = QueueListener(
+    scheduler_log_queue,
+    scheduler_debug_handler,
+    scheduler_info_handler,
+    respect_handler_level=True,
+  )
+
+  scheduler.addHandler(scheduler_queue_handler)
+
   root = logging.getLogger()
   root.setLevel(logging.DEBUG if __debug__ else logging.INFO)
   # root.setLevel(logging.DEBUG)
@@ -340,11 +367,6 @@ def configure_logging():
 
   info_file_handler = daily_info_handler if LOGGING_TYPE == "daily" else per_run_info_handler
   info_file_handler.setLevel(logging.INFO)
-
-  # console_error_handler = logging.StreamHandler(sys.stderr)
-  # console_error_handler.setLevel(logging.ERROR)
-  # console_info_handler = logging.StreamHandler(sys.stdout)
-  # console_info_handler.setLevel(logging.INFO)
 
   console_info_handler = FixedRichHandler(
     # level=logging.DEBUG if __debug__ else logging.INFO,
@@ -359,8 +381,6 @@ def configure_logging():
 
   debugging_file_handler.setFormatter(FILE_FORMATTER)
   info_file_handler.setFormatter(FILE_FORMATTER)
-  # console_error_handler.setFormatter(formatter)
-  # console_info_handler.setFormatter(formatter)
 
   log_queue = Queue(-1)
 
@@ -373,22 +393,11 @@ def configure_logging():
     respect_handler_level=True,
   )
 
-  # root.addHandler(debugging_file_handler)
-  # root.addHandler(info_file_handler)
   root.addHandler(queue_handler)
-  # root.addHandler(console_error_handler)
   root.addHandler(console_info_handler)
 
   queue_listener.start()
+  scheduler_queue_listener.start()
 
   atexit.register(queue_listener.stop)
-
-  # if __debug__:
-  #   console_debug_handler = FixedRichHandler(
-  #     level=logging.DEBUG,
-  #     console=RICH_CONSOLE,
-  #     rich_tracebacks=True,
-  #     log_time_format=logging_timestamp_fmt,
-  #   )
-  #   # console_debug_handler.setFormatter(formatter)
-  #   root.addHandler(console_debug_handler)
+  atexit.register(scheduler_queue_listener.stop)

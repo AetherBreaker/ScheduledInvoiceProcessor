@@ -31,6 +31,7 @@ DO_NOT_LOG_PATTERNS = [
   compile(r".*?_register_dropoff_.*"),
   compile(r"submit_queued_writes_to_pool"),
   compile(r".*?_register_pickup_.*"),
+  compile(r"print_jobs"),
 ]
 
 
@@ -56,9 +57,9 @@ def run_job(job, jobstore_alias, run_times, logger_name):
         continue
 
     if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
-      local_logger.info(f'Running job "{job.id}" (scheduled at {run_time})')
+      logger.info(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
     else:
-      local_logger.debug(f'Running job "{job.id}" (scheduled at {run_time})')
+      logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
     # try:
     retval = job.func(*job.args, **job.kwargs)
     # except BaseException as e:
@@ -83,9 +84,9 @@ def run_job(job, jobstore_alias, run_times, logger_name):
     # else:
     events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
     if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
-      logger.info(f'Job "{job.id}" executed successfully')
+      local_logger.info(f'Job "{job.id}" executed successfully')
     else:
-      logger.debug(f'Job "{job.id}" executed successfully')
+      local_logger.debug(f'Job "{job.id}" executed successfully')
 
   return events
 
@@ -93,7 +94,7 @@ def run_job(job, jobstore_alias, run_times, logger_name):
 async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
   """Coroutine version of run_job()."""
   events = []
-  logger = getLogger(logger_name)
+  local_logger = getLogger(logger_name)
   for run_time in run_times:
     # See if the job missed its run time window, and handle possible misfires accordingly
     if job.misfire_grace_time is not None:
@@ -103,17 +104,17 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
       grace_time = timedelta(seconds=job.misfire_grace_time)
       if difference > grace_time:
         events.append(JobExecutionEvent(EVENT_JOB_MISSED, job.id, jobstore_alias, run_time))
-        logger.warning(f'Run time of job "{job.id}" was missed by {difference}')
+        local_logger.warning(f'Run time of job "{job.id}" was missed by {difference}')
         continue
 
     if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
-      logger.info(f'Running job "{job.id}" (scheduled at {run_time})')
+      logger.info(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
     else:
-      logger.debug(f'Running job "{job.id}" (scheduled at {run_time})')
+      logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
     # try:
     retval = await job.func(*job.args, **job.kwargs)
     # except BaseException as e:
-    #   logger.error(f'Job "{job.id}" raised an exception: {e}', exc_info=True)
+    #   local_logger.error(f'Job "{job.id}" raised an exception: {e}', exc_info=True)
     #   exc, tb = exc_info()[1:]
     #   formatted_tb = "".join(format_tb(tb))
     #   events.append(
@@ -131,9 +132,9 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
     # else:
     events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
     if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
-      logger.info(f'Job "{job.id}" executed successfully')
+      local_logger.info(f'Job "{job.id}" executed successfully')
     else:
-      logger.debug(f'Job "{job.id}" executed successfully')
+      local_logger.debug(f'Job "{job.id}" executed successfully')
 
   return events
 
