@@ -12,7 +12,10 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - bash -ec '[ -f /app/src/logs/heartbeat.txt ] && ts=$$(cat /app/src/logs/heartbeat.txt 2>/dev/null) && [ -n "$$ts" ] && hb=$$(date -d "$$ts" +%s 2>/dev/null) && now=$$(date +%s) && [ $$((now - hb)) -lt 180 ]'
+        - bash -ec '[ -f /app/persisted_data/logs/heartbeat.txt ] && ts=$$(cat
+          /app/persisted_data/logs/heartbeat.txt 2>/dev/null) && [ -n "$$ts" ]
+          && hb=$$(date -d "$$ts" +%s 2>/dev/null) && now=$$(date +%s) && [
+          $$((now - hb)) -lt 180 ]'
       interval: 30s
       timeout: 5s
       retries: 3
@@ -34,7 +37,7 @@ services:
       #   source: /data/scheduler_files/queue_backups
       #   target: /app/src/queue_backups
 
-    # Environment variables (customize as needed)
+      # Environment variables (customize as needed)
     environment:
       # - TZ=America/New_York
       # Tell the program where to expect persisted data

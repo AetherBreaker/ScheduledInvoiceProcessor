@@ -6,7 +6,6 @@ if __name__ == "__main__":
 from asyncio import set_event_loop
 from datetime import datetime
 from logging import getLogger
-from pathlib import PosixPath, PurePosixPath
 from typing import NoReturn
 
 from aiohttp.web import Application, AppRunner, TCPSite
@@ -30,7 +29,7 @@ logger = getLogger(__name__)
 
 if not __debug__:
   # Heartbeat file for health checks
-  HEARTBEAT_FILE = PurePosixPath("/app/src/logs/heartbeat.txt") if __debug__ else PosixPath("/app/src/logs/heartbeat.txt")
+  HEARTBEAT_FILE = LOG_LOC_FOLDER / "heartbeat.txt"
 
   def write_heartbeat():
     """Write current timestamp to heartbeat file for health monitoring."""
