@@ -10,7 +10,7 @@ from datetime import datetime
 from hashlib import file_digest
 from json import loads
 from logging import LoggerAdapter, getLogger
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from re import Pattern, compile
 from typing import Any
 
@@ -18,7 +18,6 @@ from environment_init_vars import CWD, SETTINGS
 from logging_config import add_log_context
 from rich_custom import ProgressCustom
 from typing_custom import CustomerID
-from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
 from suppliers import (
@@ -215,7 +214,7 @@ class CoremarkProcessor(SupplierProcessorSFTPIntermediate):
     self, key: SupplierQueueKey, old_file_meta: FileRegisterData, adapted_logger: LoggerAdapter | None = None
   ) -> FileRegisterData:
     local_logger = adapted_logger or logger
-    original_invoice_files: list[CustomPath] = []
+    original_invoice_files: list[Path] = []
 
     with self.waiting_ftp.start_session() as waiting_client:
       for remote_file_loc, local_file_loc in zip(old_file_meta.remote_file_locs.values(), old_file_meta.local_copy_loc.values()):

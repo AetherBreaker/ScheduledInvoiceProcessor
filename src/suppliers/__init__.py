@@ -11,7 +11,7 @@ from errno import EACCES
 from ftplib import all_errors
 from io import BytesIO
 from logging import LoggerAdapter, getLogger
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from re import Match, Pattern
 from socket import timeout as SocketTimeout
 from time import sleep
@@ -29,7 +29,6 @@ from rich_custom import CustomTaskID, ProgressCustom
 from send_alert_email import send_alert_email
 from typing_custom import CustomerID, StoreNum, SupplierQueueKey
 from typing_custom.abc import SingletonType
-from typing_custom.custom_path import CustomPath
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
@@ -67,7 +66,7 @@ class FileRegisterData:
   file_pattern: Pattern[str]
   _current_week: bool
   _waiting_folder: PurePosixPath
-  _local_copy_folder: CustomPath
+  _local_copy_folder: Path
 
   file_names: dict[int, str] = Field(default_factory=dict)
   invoice_nums: dict[int, str] = Field(default_factory=dict)
@@ -90,7 +89,7 @@ class FileRegisterData:
     return {idx: self._waiting_folder / name for idx, name in self.file_names.items()}
 
   @property
-  def local_copy_loc(self) -> dict[int, CustomPath]:
+  def local_copy_loc(self) -> dict[int, Path]:
     return {idx: self._local_copy_folder / name for idx, name in self.file_names.items()}
 
   @property
@@ -105,8 +104,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _file_waiting_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_dropoff_queue: dict[SupplierQueueKey, FileRegisterData]
   _queue_ta = TypeAdapter(dict[str, FileRegisterData])
-  _file_queue_backup_folder: CustomPath = SETTINGS.persisted_dir_loc / "queue_backups"
-  _corrupted_queue_backup_folder: CustomPath = _file_queue_backup_folder / "corrupted"
+  _file_queue_backup_folder: Path = SETTINGS.persisted_dir_loc / "queue_backups"
+  _corrupted_queue_backup_folder: Path = _file_queue_backup_folder / "corrupted"
   _transient_transfer_retries = 3
   _lock: Lock = Lock()
 
@@ -128,13 +127,13 @@ class SupplierProcessorBase(metaclass=SingletonType):
   post_processing_waiting_folder: PurePosixPath
   destination_ftp_folder: PurePosixPath
 
-  local_pre_processing_folder: CustomPath
-  local_post_processing_folder: CustomPath
+  local_pre_processing_folder: Path
+  local_post_processing_folder: Path
 
   identifier_prefix: str = ""
-  log_file_loc: CustomPath = LOG_LOC_FOLDER
+  log_file_loc: Path = LOG_LOC_FOLDER
   ctx_var_identifier: ContextVar[str | None]
-  ctx_var_log_loc: ContextVar[CustomPath | None]
+  ctx_var_log_loc: ContextVar[Path | None]
 
   def __init__(self, pbar: ProgressCustom = None) -> None:  # type: ignore
     self._file_pickup_queue = {}
@@ -233,7 +232,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       target.clear()
       target.update(deepcopy(loaded))
 
-  def _load_queue_backup_file(self, backup_file: CustomPath, queue_name: str) -> dict[str, FileRegisterData]:
+  def _load_queue_backup_file(self, backup_file: Path, queue_name: str) -> dict[str, FileRegisterData]:
     if not backup_file.exists():
       return {}
 
@@ -300,7 +299,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     return changed_entries
 
-  def _quarantine_corrupted_queue_backup(self, backup_file: CustomPath, raw_backup: str) -> CustomPath:
+  def _quarantine_corrupted_queue_backup(self, backup_file: Path, raw_backup: str) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     quarantined_file = self._corrupted_queue_backup_folder / f"{backup_file.stem}_{timestamp}{backup_file.suffix}"
     quarantined_file.write_text(raw_backup)

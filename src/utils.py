@@ -6,13 +6,13 @@ if __name__ == "__main__":
 from datetime import datetime, timedelta
 from os import sep, walk
 from os.path import abspath, basename
+from pathlib import Path
 from re import compile
 
 from dateutil.relativedelta import SA, relativedelta
 from dateutil.utils import today as _today
 from gspread import IncorrectCellLabel
 from typing_custom import IntOrInf
-from typing_custom.custom_path import CustomPath
 
 shift = timedelta()
 
@@ -130,7 +130,7 @@ def r1c1_range_to_grid_range(name: str, sheet_id: int | None = None) -> dict[str
   return filtered_grid_range
 
 
-def print_directory_tree(root_dir: CustomPath):
+def print_directory_tree(root_dir: Path):
   print(f"Current Working Directory: {abspath(root_dir)}")
   for each_dir_path, each_dir_name, dir_files in walk(root_dir):
     base = basename(each_dir_path)

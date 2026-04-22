@@ -1,11 +1,11 @@
 import os
 import sys
 from logging import getLogger
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from aiologic import Event
 from environment_settings import Settings
-from typing_custom.custom_path import CustomPath
 
 logger = getLogger(__name__)
 
@@ -17,9 +17,9 @@ if os.name != "nt" and hasattr(os, "geteuid") and os.geteuid() == 0:
 SETTINGS = Settings()  # type: ignore
 
 # Folder paths
-CWD = CustomPath.cwd()
+CWD = Path.cwd()
 
-SPEC_CWD = CustomPath(__file__).parent if getattr(sys, "frozen", False) else CustomPath.cwd()
+SPEC_CWD = Path(__file__).parent if getattr(sys, "frozen", False) else Path.cwd()
 
 FATAL_EVENT = Event()
 

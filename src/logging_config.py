@@ -4,6 +4,8 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from functools import wraps
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, TimedRotatingFileHandler
+from os import getcwd
+from pathlib import Path, PurePath
 from queue import Queue
 from secrets import token_urlsafe
 from sys import platform
@@ -14,8 +16,15 @@ from environment_init_vars import SETTINGS
 from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
 from rich.traceback import Traceback, install
-from typing_custom.custom_path import CustomPath
 from typing_custom.enums import LogActionEnum
+
+
+def without_cwd(self) -> str:
+  cwd = getcwd()
+  return str(self)[len(cwd) :] if str(self).startswith(cwd) else str(self)
+
+
+PurePath.without_cwd = without_cwd
 
 if TYPE_CHECKING:
   from suppliers import SupplierProcessorBase
@@ -29,7 +38,7 @@ RICH_CONSOLE = Console(
 
 install(show_locals=True)
 
-CWD = CustomPath.cwd()
+CWD = Path.cwd()
 
 
 PROJECT_NAME = "ScheduledOrderMiddleman"
@@ -64,7 +73,7 @@ class FixedRichHandler(RichHandler):
         ConsoleRenderable: Renderable to display log.
     """
 
-    pathpath = CustomPath(record.pathname)
+    pathpath = Path(record.pathname)
 
     if "site-packages" in pathpath.parts:
       libname_index = pathpath.parts.index("site-packages") + 1
@@ -100,7 +109,7 @@ class FixedRichHandler(RichHandler):
 class FixedLogRecord(logging.LogRecord):
   def __init__(self, *args, **kwargs):
     global max_width
-    pathpath = CustomPath(args[2])
+    pathpath = Path(args[2])
 
     if "site-packages" in pathpath.parts:
       libname_index = pathpath.parts.index("site-packages") + 1
@@ -189,7 +198,7 @@ class CustomTimedRotatingFileHandler(TimedRotatingFileHandler):
     then we have to get a list of matching filenames, sort them and remove
     the one with the oldest suffix.
     """
-    base_path = CustomPath(self.baseFilename)
+    base_path = Path(self.baseFilename)
     # get the time that this sequence started at and make it a TimeTuple
     currentTime = int(time())
     t = self.rolloverAt - self.interval
@@ -213,7 +222,7 @@ class CustomTimedRotatingFileHandler(TimedRotatingFileHandler):
     self.rotate(self.baseFilename, str(dfn))
     if self.backupCount > 0:
       for s in self.getFilesToDelete():
-        CustomPath(s).unlink()
+        Path(s).unlink()
     if not self.delay:
       self.stream = self._open()
     self.rolloverAt = self.computeRollover(currentTime)

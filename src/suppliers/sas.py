@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from datetime import datetime
 from json import loads
 from logging import getLogger
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from re import Pattern, compile
 
 from dateutil.relativedelta import SA, SU, relativedelta
@@ -15,7 +15,6 @@ from dateutil.rrule import DAILY, rrule
 from environment_init_vars import CWD, SETTINGS
 from rich_custom import ProgressCustom
 from typing_custom import CustomerID
-from typing_custom.custom_path import CustomPath
 from typing_custom.enums import SuppliersEnum
 
 from suppliers import SupplierProcessorSFTPIntermediate
@@ -55,7 +54,7 @@ class SASProcessor(SupplierProcessorSFTPIntermediate):
   local_post_processing_folder = CWD / "SAS_files" / "post_processing"
 
   identifier_prefix: str = "SAS"
-  log_file_loc: CustomPath = CWD / "logs" / "sas"
+  log_file_loc: Path = CWD / "logs" / "sas"
   ctx_var_identifier = ContextVar("sas_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
 
