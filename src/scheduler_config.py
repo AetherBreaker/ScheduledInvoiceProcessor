@@ -32,6 +32,7 @@ DO_NOT_LOG_PATTERNS = [
   compile(r"submit_queued_writes_to_pool"),
   compile(r".*?_register_pickup_.*"),
   compile(r"print_jobs"),
+  compile(r"heartbeat"),
 ]
 
 
