@@ -19,7 +19,7 @@ from google.oauth2.service_account import Credentials
 from gspread import Client, authorize
 from gspread.http_client import BackOffHTTPClient
 from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption, finditem
-from pandas import DataFrame, Series
+from pandas import DataFrame, Series, to_numeric
 from pydantic import TypeAdapter
 from typing_custom import (
   AppendDimension,
@@ -731,6 +731,8 @@ class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
     week_end_date: datetime | None,
     note: str | None = None,
   ) -> None:
+    if invoice_num is None:
+      invoice_num = str(min(int(to_numeric(self._cache.loc[:, self.columns.invoice_number], errors="coerce").min()), 0) - 1)
     new_entry = {
       "supplier": supplier,
       "store": store,
