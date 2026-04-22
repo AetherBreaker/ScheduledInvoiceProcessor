@@ -58,8 +58,10 @@ def run_job(job, jobstore_alias, run_times, logger_name):
 
     if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
       logger.info(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
+      local_logger.info(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
     else:
       logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
+      local_logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
     # try:
     retval = job.func(*job.args, **job.kwargs)
     # except BaseException as e:
@@ -109,8 +111,10 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
 
     if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
       logger.info(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
+      local_logger.info(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
     else:
       logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
+      local_logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
     # try:
     retval = await job.func(*job.args, **job.kwargs)
     # except BaseException as e:
