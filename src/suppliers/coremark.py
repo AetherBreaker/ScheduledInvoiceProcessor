@@ -329,7 +329,7 @@ class CoremarkProcessor(SupplierProcessorSFTPIntermediate):
     )
 
 
-if __debug__:
+if __debug__ and SETTINGS.use_testing_folders:
   for attr_name in [
     "pre_processing_waiting_folder",
     "pre_processing_archive_folder",

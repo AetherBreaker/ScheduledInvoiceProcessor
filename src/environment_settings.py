@@ -41,6 +41,8 @@ class Settings(BaseSettings):
   database_refresh_interval: Annotated[int, Field(alias="DATABASE_REFRESH_INTERVAL")] = 3600
   database_write_interval: Annotated[int, Field(alias="DATABASE_WRITE_INTERVAL")] = 60
 
+  use_testing_folders: Annotated[bool, Field(alias="USE_TESTING_FOLDERS")] = False
+
   file_serve_public_domain: Annotated[str, Field(alias="FILE_SERVE_PUBLIC_DOMAIN")] = "som.sweetfiretobacco.com"
   file_serve_host: Annotated[str, Field(alias="FILE_SERVE_HOST")] = "localhost"
   file_serve_port: Annotated[int, Field(alias="FILE_SERVE_PORT")] = 8080
