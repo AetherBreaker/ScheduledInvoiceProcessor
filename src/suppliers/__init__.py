@@ -135,11 +135,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ctx_var_identifier: ContextVar[str | None]
   ctx_var_log_loc: ContextVar[Path | None]
 
+  errored: bool
+
   def __init__(self, pbar: ProgressCustom = None) -> None:  # type: ignore
     self._file_pickup_queue = {}
     self._file_preprocess_queue = {}
     self._file_waiting_queue = {}
     self._file_dropoff_queue = {}
+
+    self.errored = False
 
     if pbar is not None:
       self.waiting_ftp.pbar = pbar
@@ -259,6 +263,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return {}
 
   async def clean_stale_queue_entries(self) -> None:
+    if self.errored:
+      logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping cleanup of stale queue entries")
+      return
     async with self._lock:
       changed_entries = await self._clean_stale_queue_entries()
 
@@ -325,17 +332,33 @@ class SupplierProcessorBase(metaclass=SingletonType):
     dropoff_date: datetime,
     current_week: bool = True,
   ) -> None:
+    if self.errored:
+      logger.warning(
+        f"{self.__class__.__name__}: Disabled due to error state. Skipping registration of pickup for {storenum}, {customer_id}"
+      )
+      return
     await self._register_pickup(storenum, customer_id, pickup_date, dropoff_date, current_week)
 
   async def register_dropoff(
     self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime, dropoff_date: datetime, current_week: bool
   ) -> None:
+    if self.errored:
+      logger.warning(
+        f"{self.__class__.__name__}: Disabled due to error state. Skipping registration of dropoff for {storenum}, {customer_id}"
+      )
+      return
     await self._register_dropoff(storenum, customer_id, pickup_date, dropoff_date, current_week)
 
   async def pickup_files(self) -> None:
+    if self.errored:
+      logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping pickup of files")
+      return
     await self._pickup_files()
 
   async def dropoff_files(self) -> None:
+    if self.errored:
+      logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping dropoff of files")
+      return
     await self._dropoff_files()
 
   @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
@@ -380,6 +403,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
+    if self.errored:
+      local_logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping preprocessing of files")
+      return
     if not self._file_preprocess_queue:
       return
     if not self.waiting_ftp.test_connection(logit=True):
@@ -445,6 +471,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     await self._preprocess_files()
 
+    if self.errored:
+      local_logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping dropoff of files")
+      return
+
     if not self._file_dropoff_queue:
       local_logger.error(
         f"{self.__class__.__name__}: No files to drop off after preprocessing step."
@@ -506,6 +536,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
     result = StatusCode.UNKNOWN
     for attempt in range(1, self._transient_transfer_retries + 2):
+      if self.errored:
+        local_logger.warning(
+          f"{self.__class__.__name__}: Disabled due to error state. Skipping transfer of files from vendor to main FTP"
+        )
+        return False
       try:
         transient_file = BytesIO()
 
@@ -598,6 +633,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ):
     local_logger = adapted_logger or logger
     result = StatusCode.UNKNOWN
+    if self.errored:
+      local_logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping transfer of files within main FTP")
+      return False
     try:
       with self.waiting_ftp.start_session() as client:
         client.rename(send_path.as_posix(), recv_path.as_posix())
@@ -798,6 +836,11 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     debug: bool = False,
   ) -> None:
     local_logger = adapted_logger or logger
+    if self.errored:
+      local_logger.warning(
+        f"{self.__class__.__name__}: Disabled due to error state. Skipping archiving of file {remote_file} from {source_folder} to {archive_folder}"
+      )
+      return
     try:
       source_loc = (source_folder / remote_file).as_posix()
       archive_loc = (archive_folder / remote_file).as_posix()
@@ -839,6 +882,11 @@ class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
     debug: bool = False,
   ) -> None:
     local_logger = adapted_logger or logger
+    if self.errored:
+      local_logger.warning(
+        f"{self.__class__.__name__}: Disabled due to error state. Skipping archiving of file {remote_file} from {source_folder} to {archive_folder}"
+      )
+      return
     try:
       source_loc = (source_folder / remote_file).as_posix()
       archive_loc = (archive_folder / remote_file).as_posix()

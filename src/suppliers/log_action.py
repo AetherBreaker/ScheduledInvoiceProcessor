@@ -58,6 +58,7 @@ def log_actions[**TP, TR](
         result = await func(*args, **kwargs)
       except Exception as e:
         adapted_logger.exception(f"Exception in {func.__name__}", exc_info=e)
+        self_obj.errored = True
         await self_obj.cache.order_log.log_action(
           supplier=self_obj.supplier_name,
           store=kwargs.get("storenum"),  # type: ignore

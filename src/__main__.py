@@ -3,7 +3,7 @@ if __name__ == "__main__":
 
   configure_logging()
 
-from asyncio import set_event_loop
+from asyncio import set_event_loop, sleep
 from datetime import datetime
 from logging import getLogger
 from typing import NoReturn
@@ -13,7 +13,7 @@ from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
-from environment_init_vars import CWD, FATAL_EVENT, SETTINGS
+from environment_init_vars import FATAL_EVENT, SETTINGS
 from err_handling import get_last_fatal_details
 from logging_config import LOG_LOC_FOLDER, RICH_CONSOLE
 from rich_custom import LiveCustom
@@ -384,6 +384,12 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
     with RICH_CONSOLE.status("Application is running."):
       await FATAL_EVENT
+      fatal_details = get_last_fatal_details()
+
+      if not fatal_details["is_database_origin"] and any(processor().errored for processor in supplier_register.values()):
+        await sleep(
+          600
+        )  # Sleep for 10 minutes to allow pending operations from non-error-state processors to flush through before exiting
 
       try:
         logger.warning("Fatal shutdown: stopping scheduler to freeze application state")
