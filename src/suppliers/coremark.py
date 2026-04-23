@@ -17,14 +17,10 @@ from typing import Any
 from environment_init_vars import CWD, SETTINGS
 from logging_config import add_log_context
 from rich_custom import ProgressCustom
-from typing_custom import CustomerID
+from typing_custom import CustomerID, SupplierQueueKey
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
-from suppliers import (
-  FileRegisterData,
-  SupplierProcessorSFTPIntermediate,
-  SupplierQueueKey,
-)
+from suppliers import FileRegisterData, SupplierProcessorSFTPIntermediate
 from suppliers.ftp_adapter import AdaptedSFTP, CoremarkFTPClient, FTPAdapter
 from suppliers.log_action import LogActionHandlerType, log_actions
 
