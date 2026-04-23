@@ -86,7 +86,7 @@ class CustomBaseModel(BaseModel):
   @model_validator(mode="wrap")
   @classmethod
   def log_failed_validation(cls, data: Any, handler: ModelWrapValidatorHandler[Self], info: ValidationInfo) -> Self:
-    results = handler({})
+    results = None
     try:
       results = handler(data)
     except ValidationError as e:
@@ -96,4 +96,4 @@ class CustomBaseModel(BaseModel):
       for err in e.errors():
         if err["type"] != "missing":
           raise e
-    return results
+    return results  # type: ignore
