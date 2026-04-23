@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -6,7 +8,7 @@ if __name__ == "__main__":
 from asyncio import set_event_loop, sleep
 from datetime import datetime
 from logging import getLogger
-from typing import NoReturn
+from typing import TYPE_CHECKING
 
 from aiohttp.web import Application, AppRunner, TCPSite
 from apscheduler.jobstores.base import JobLookupError
@@ -16,13 +18,17 @@ from dateutil.relativedelta import SA, relativedelta
 from environment_init_vars import FATAL_EVENT, SETTINGS
 from err_handling import get_last_fatal_details
 from logging_config import LOG_LOC_FOLDER, RICH_CONSOLE
-from rich_custom import LiveCustom
+from rich_custom import ProgressCustom
 from scheduler_config import OrderProcessingScheduler
-from suppliers import SupplierProcessorBase
 from suppliers.ryo import RYOProcessor
 from suppliers.sas import SASProcessor
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import SuppliersEnum
+
+if TYPE_CHECKING:
+  from typing import NoReturn
+
+  from suppliers import SupplierProcessorBase
 
 logger = getLogger(__name__)
 
@@ -34,7 +40,7 @@ if not __debug__:
   def write_heartbeat():
     """Write current timestamp to heartbeat file for health monitoring."""
     try:
-      HEARTBEAT_FILE.write_text(datetime.now().isoformat())  # type: ignore
+      HEARTBEAT_FILE.write_text(datetime.now().isoformat())
     except Exception as e:
       logger.error(f"Failed to write heartbeat: {e}")
 else:
@@ -57,7 +63,7 @@ supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
 scheduler = OrderProcessingScheduler.init_scheduler()
 
 
-async def bootstrap_runtime(live: LiveCustom) -> DatabaseCache:
+async def bootstrap_runtime(pbar: ProgressCustom) -> DatabaseCache:
   try:
     cache = DatabaseCache()
   except Exception:
@@ -71,7 +77,7 @@ async def bootstrap_runtime(live: LiveCustom) -> DatabaseCache:
     raise
 
   for processor in supplier_register.values():
-    p = processor(live.pbar)
+    p = processor(pbar)
     await p.clean_stale_queue_entries()
 
   try:
@@ -266,8 +272,8 @@ async def flip_week():
 
 async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
-  with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
-    cache = await bootstrap_runtime(live)
+  with ProgressCustom(refresh_per_second=10, console=RICH_CONSOLE) as pbar:
+    cache = await bootstrap_runtime(pbar)
 
     scheduler.add_job(
       cache.refresh_cache,

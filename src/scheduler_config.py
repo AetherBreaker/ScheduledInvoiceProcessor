@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -18,11 +20,6 @@ from apscheduler.util import iscoroutinefunction_partial
 from environment_init_vars import TZ
 from err_handling import handle_fatal_exc
 from utils import get_now
-
-# from sys import exc_info
-# from traceback import clear_frames, format_tb
-# from apscheduler.events import EVENT_JOB_ERROR
-
 
 logger = getLogger(__name__)
 
@@ -63,28 +60,7 @@ def run_job(job, jobstore_alias, run_times, logger_name):
     else:
       logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
       local_logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
-    # try:
     retval = job.func(*job.args, **job.kwargs)
-    # except BaseException as e:
-    #   exc, tb = exc_info()[1:]
-    #   formatted_tb = "".join(format_tb(tb))
-    #   events.append(
-    #     JobExecutionEvent(
-    #       EVENT_JOB_ERROR,
-    #       job.id,
-    #       jobstore_alias,
-    #       run_time,
-    #       exception=exc,
-    #       traceback=formatted_tb,
-    #     )
-    #   )
-    #   local_logger.exception(f'Job "{job.id}" raised an exception')
-
-    #   # This is to prevent cyclic references that would lead to memory leaks
-    #   clear_frames(tb)
-    #   del tb
-    #   raise e
-    # else:
     events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
     if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
       local_logger.info(f'Job "{job.id}" executed successfully')
@@ -116,25 +92,7 @@ async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
     else:
       logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
       local_logger.debug(f'Scheduler: Running job "{job.id}" (scheduled at {run_time})')
-    # try:
     retval = await job.func(*job.args, **job.kwargs)
-    # except BaseException as e:
-    #   local_logger.error(f'Job "{job.id}" raised an exception: {e}', exc_info=True)
-    #   exc, tb = exc_info()[1:]
-    #   formatted_tb = "".join(format_tb(tb))
-    #   events.append(
-    #     JobExecutionEvent(
-    #       EVENT_JOB_ERROR,
-    #       job.id,
-    #       jobstore_alias,
-    #       run_time,
-    #       exception=exc,
-    #       traceback=formatted_tb,
-    #     )
-    #   )
-    #   clear_frames(tb)
-    #   raise e
-    # else:
     events.append(JobExecutionEvent(EVENT_JOB_EXECUTED, job.id, jobstore_alias, run_time, retval=retval))
     if not any(pattern.match(job.id) for pattern in DO_NOT_LOG_PATTERNS):
       local_logger.info(f'Job "{job.id}" executed successfully')

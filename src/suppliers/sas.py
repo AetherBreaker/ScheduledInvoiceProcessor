@@ -19,11 +19,10 @@ from dateutil.rrule import DAILY, rrule
 from environment_init_vars import CWD, SETTINGS
 from typing_custom.enums import SuppliersEnum
 
-from suppliers import SupplierProcessorSFTPIntermediate
+from suppliers import SupplierProcessorBase
 from suppliers.ftp_adapter import FTPAdapter, SASSFTPClient
 
 if TYPE_CHECKING:
-  from pathlib import Path
   from re import Pattern
 
   from rich_custom import ProgressCustom
@@ -34,7 +33,7 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-class SASProcessor(SupplierProcessorSFTPIntermediate):
+class SASProcessor(SupplierProcessorBase):
   vendor_ftp: FTPAdapter[AdaptedSFTP] = FTPAdapter(SASSFTPClient, container_cls="SASProcessor")
 
   queue_backup_prefix: str = "sas"
@@ -126,14 +125,14 @@ if __debug__ and SETTINGS.use_testing_folders:
 async def main():
   from database.cache import DatabaseCache
   from logging_config import RICH_CONSOLE
-  from rich_custom import LiveCustom
+  from rich_custom import ProgressCustom
 
   cache = DatabaseCache()
   await cache.refresh_cache()
   now = datetime.now()
 
-  with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
-    sas = SASProcessor(live.pbar)
+  with ProgressCustom(refresh_per_second=10, console=RICH_CONSOLE) as pbar:
+    sas = SASProcessor(pbar)
     orders = []
 
     async for order in cache.schedule.walk_typed_rows():
@@ -174,11 +173,13 @@ async def main():
 
 
 if __name__ == "__main__":
+  from asyncio import set_event_loop
   from sys import platform
 
   if platform in ("win32", "cygwin", "cli"):
-    from winloop import run
+    from winloop import new_event_loop, run
   else:
     # if we're on apple or linux do this instead
-    from uvloop import run  # type: ignore
+    from uvloop import new_event_loop, run  # type: ignore
+  set_event_loop(new_event_loop())
   run(main())

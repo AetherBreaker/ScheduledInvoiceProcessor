@@ -1,16 +1,22 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
   configure_logging()
 
-from collections.abc import Sequence
 from logging import getLogger
+from typing import TYPE_CHECKING
 
 from numpy import nan
 from pandas import DataFrame, Series, concat, isna
-from typing_custom.dataframe_column_names import ColNameEnum
 
-from validation import CustomBaseModel
+if TYPE_CHECKING:
+  from collections.abc import Sequence
+
+  from typing_custom.dataframe_column_names import ColNameEnum
+
+  from validation import CustomBaseModel
 
 logger = getLogger(__name__)
 
@@ -28,7 +34,7 @@ def build_typed_dataframe(
 
   if not df.empty:
     # Ensure all None-like objects within the dataframe are replaced with None prior to validation
-    df = df.infer_objects(copy=False).replace(NULL_VALUES, value=nan)  # type: ignore
+    df = df.infer_objects(copy=False).replace(NULL_VALUES, value=nan)
 
     newly_typed_rows = []
 

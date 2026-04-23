@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -48,7 +50,7 @@ def process_formatted_time_pattern_str(target_time) -> datetime:
   match = TIMESTAMP_PATTERN.match(target_time) if target_time else None
 
   if not match:
-    return target_time  # type: ignore
+    return target_time
   now = today(tzinfo=TZ)
 
   next_sunday = now + relativedelta(weekday=SU)

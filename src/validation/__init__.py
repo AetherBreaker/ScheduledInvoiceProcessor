@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -84,7 +86,7 @@ class CustomBaseModel(BaseModel):
   @model_validator(mode="wrap")
   @classmethod
   def log_failed_validation(cls, data: Any, handler: ModelWrapValidatorHandler[Self], info: ValidationInfo) -> Self:
-    results = None
+    results = handler({})
     try:
       results = handler(data)
     except ValidationError as e:
@@ -94,4 +96,4 @@ class CustomBaseModel(BaseModel):
       for err in e.errors():
         if err["type"] != "missing":
           raise e
-    return results  # type: ignore
+    return results

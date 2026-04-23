@@ -1,19 +1,24 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
   configure_logging()
 
-from enum import StrEnum
 from logging import getLogger
-from typing import Any, Self
+from typing import TYPE_CHECKING
 
-from typing_custom import CustomerID, InvoiceNum, StoreNum
-from typing_custom.enums import LogActionEnum, SuppliersEnum
+from typing_custom.enums import CustomStrEnum, LogActionEnum, SuppliersEnum
+
+if TYPE_CHECKING:
+  from typing import Self
+
+  from typing_custom import CustomerID, InvoiceNum, StoreNum
 
 logger = getLogger(__name__)
 
 
-class ColNameEnum(StrEnum):
+class ColNameEnum(CustomStrEnum):
   __exclude__: list[str] = []
   __init_include__: list[str] = []
   __index_items__: list[str] = []
@@ -56,13 +61,6 @@ class ColNameEnum(StrEnum):
   @classmethod
   def get_enum_index(cls, value: Self) -> int:
     return list(cls).index(value)
-
-  @staticmethod
-  def _generate_next_value_(name, start, count, last_values) -> Any:
-    """
-    Return the member name.
-    """
-    return name
 
 
 class DatabaseScheduleColumns(ColNameEnum):

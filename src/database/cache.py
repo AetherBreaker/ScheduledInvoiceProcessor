@@ -124,10 +124,10 @@ class DatabaseCache(metaclass=SingletonType):
   @property
   def client(self) -> Client:
     now = self.loop.time()
-    if self._client_last_auth_time is None or ((self._client_last_auth_time + self.reauth_interval) < now):
+    if self._client is None or self._client_last_auth_time is None or ((self._client_last_auth_time + self.reauth_interval) < now):
       self._client = authorize(self._creds, http_client=BackOffHTTPClient)
       self._client_last_auth_time = self.loop.time()
-    return self._client  # type: ignore
+    return self._client
 
   @property
   def queued_values_raw_updates(self) -> list[ValueRange]:
@@ -189,21 +189,21 @@ class DatabaseCache(metaclass=SingletonType):
       ValueRange(
         range=self._schedule_range_format.format(start="R1C1", end=f"R1C{len(DatabaseScheduleColumns.all_columns())}"),
         majorDimension=Dimension.rows,
-        values=[DatabaseScheduleColumns.all_columns()],  # type: ignore
+        values=[DatabaseScheduleColumns.all_columns()],
       )
     )
     body["data"].append(
       ValueRange(
         range=self._prev_week_schedule_range_format.format(start="R1C1", end=f"R1C{len(DatabaseScheduleColumns.all_columns())}"),
         majorDimension=Dimension.rows,
-        values=[DatabaseScheduleColumns.all_columns()],  # type: ignore
+        values=[DatabaseScheduleColumns.all_columns()],
       )
     )
     body["data"].append(
       ValueRange(
         range=self._order_log_range_format.format(start="R1C1", end=f"R1C{len(DatabaseOrderLogColumns.all_columns())}"),
         majorDimension=Dimension.rows,
-        values=[DatabaseOrderLogColumns.all_columns()],  # type: ignore
+        values=[DatabaseOrderLogColumns.all_columns()],
       )
     )
 
@@ -253,10 +253,10 @@ class DatabaseCache(metaclass=SingletonType):
 
       self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_dropoff_time] = self.prev_week_schedule._cache.loc[
         :, DatabaseScheduleColumns.invoice_dropoff_time
-      ].map(lambda x: x - relativedelta(weeks=1) if x else x)  # type: ignore
+      ].map(lambda x: x - relativedelta(weeks=1) if x else x)
       self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_pickup_time] = self.prev_week_schedule._cache.loc[
         :, DatabaseScheduleColumns.invoice_pickup_time
-      ].map(lambda x: x - relativedelta(weeks=1) if x else x)  # type: ignore
+      ].map(lambda x: x - relativedelta(weeks=1) if x else x)
 
       try:
         order_log_data: list[list[str | int | float]] = result["valueRanges"][2]["values"]
@@ -533,7 +533,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     update_data = ValueRange(
       range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self.columns)}"),
       majorDimension=Dimension.rows,
-      values=[sheets_row.tolist()],  # type: ignore
+      values=[sheets_row.tolist()],
     )
 
     if raw:
@@ -562,7 +562,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     update_data = ValueRange(
       range=self._range_format.format(start=f"R{row_number}C1", end=f"C{len(self.columns)}"),
       majorDimension=Dimension.rows,
-      values=[sheets_row.tolist()],  # type: ignore
+      values=[sheets_row.tolist()],
     )
 
     await self._core.queue_db_api_before_write_update(

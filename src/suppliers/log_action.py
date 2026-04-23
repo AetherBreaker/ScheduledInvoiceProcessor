@@ -1,4 +1,5 @@
-from collections.abc import Awaitable, Callable
+from __future__ import annotations
+
 from datetime import datetime
 from functools import partial, wraps
 from itertools import zip_longest
@@ -6,14 +7,16 @@ from logging import LoggerAdapter
 from typing import TYPE_CHECKING
 
 from environment_init_vars import HOST_NAME
-from typing_custom import SupplierQueueKey
 from typing_custom.enums import LogActionEnum, StatusCode
 from utils import get_last_sat, get_next_sat
 
 if TYPE_CHECKING:
+  from collections.abc import Awaitable, Callable
+
+  from typing_custom import SupplierQueueKey
+
   from suppliers import SupplierProcessorBase
   from suppliers.file_register_data import FileRegisterData
-
 
 type LogActionHandlerType = Callable[[SupplierQueueKey, StatusCode, "FileRegisterData"], None]
 

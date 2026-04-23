@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import atexit
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import datetime
 from functools import wraps
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, TimedRotatingFileHandler
@@ -10,13 +11,20 @@ from queue import Queue
 from secrets import token_urlsafe
 from sys import platform
 from time import gmtime, localtime, strftime, time
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from environment_init_vars import SETTINGS
-from rich.console import Console, ConsoleRenderable
+from rich.console import Console
 from rich.logging import RichHandler
-from rich.traceback import Traceback, install
-from typing_custom.enums import LogActionEnum
+from rich.traceback import install
+
+if TYPE_CHECKING:
+  from collections.abc import Awaitable, Callable
+  from typing import Literal
+
+  from rich.console import ConsoleRenderable
+  from rich.traceback import Traceback
+  from typing_custom.enums import LogActionEnum
 
 
 def without_cwd(self) -> str:
@@ -29,7 +37,6 @@ PurePath.without_cwd = without_cwd
 if TYPE_CHECKING:
   from suppliers import SupplierProcessorBase
 
-# RICH_CONSOLE = Console()
 RICH_CONSOLE = Console(
   width=None if platform == "win32" else 160,
   # force_terminal=True,
@@ -147,7 +154,6 @@ class FixedLogRecord(logging.LogRecord):
 
 class FixedFormatter(logging.Formatter):
   default_msec_format = None
-  converter = datetime.fromtimestamp  # type: ignore
 
   def formatTime(self, record, datefmt=None):
     """
@@ -167,11 +173,11 @@ class FixedFormatter(logging.Formatter):
     formatters, for example if you want all logging times to be shown in GMT,
     set the 'converter' attribute in the Formatter class.
     """
-    dt = self.converter(record.created)
+    dt = datetime.fromtimestamp(record.created)
     if datefmt:
-      s = dt.strftime(datefmt)  # type: ignore
+      s = dt.strftime(datefmt)
     else:
-      s = dt.strftime(self.default_time_format)  # type: ignore
+      s = dt.strftime(self.default_time_format)
       if self.default_msec_format:
         s = self.default_msec_format % (s, record.msecs)
     return s

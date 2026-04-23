@@ -15,13 +15,13 @@ from io import BytesIO
 from logging import getLogger
 from socket import timeout as SocketTimeout
 from time import sleep
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from aiologic import Lock
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, SU, relativedelta
 from environment_init_vars import SETTINGS
-from logging_config import LOG_LOC_FOLDER, TYPE_CHECKING, add_log_context
+from logging_config import LOG_LOC_FOLDER, add_log_context
 from paramiko import SSHException
 from pydantic import TypeAdapter
 from send_alert_email import send_alert_email
@@ -98,7 +98,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   errored: bool
 
-  def __init__(self, pbar: ProgressCustom = None) -> None:  # type: ignore
+  def __init__(self, pbar: ProgressCustom = None) -> None:
     self._file_pickup_queue = {}
     self._file_preprocess_queue = {}
     self._file_waiting_queue = {}
@@ -237,7 +237,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     # Note: Called during __init__, no need for lock protection
     changed_entries = 0
 
-    for key, item in self._file_pickup_queue.items():
+    for key, item in self._file_pickup_queue.copy().items():
       if item.stale:
         self._file_pickup_queue.pop(key)
         changed_entries += 1
@@ -257,7 +257,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       "preprocess": self._file_preprocess_queue,
       "dropoff": self._file_dropoff_queue,
     }.items():
-      for key, item in tuple(queue.items()):
+      for key, item in tuple(queue.copy().items()):
         if item.stale or await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
           (self.supplier_name, item.storenum), DatabaseScheduleColumns.invoice_applied
         ):
@@ -321,40 +321,6 @@ class SupplierProcessorBase(metaclass=SingletonType):
       logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping dropoff of files")
       return
     await self._dropoff_files()
-
-  @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
-  @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
-  async def _register_pickup(
-    self,
-    storenum: StoreNum,
-    customer_id: CustomerID,
-    pickup_date: datetime,
-    dropoff_date: datetime,
-    current_week: bool = True,
-    adapted_logger: LoggerAdapter | None = None,
-    log_action_handler: LogActionHandlerType | None = None,
-  ): ...
-
-  @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF, log_subfolder=LogActionEnum.REGISTERED_DROPOFF)
-  @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF)
-  async def _register_dropoff(
-    self,
-    storenum: StoreNum,
-    customer_id: CustomerID,
-    pickup_date: datetime,
-    dropoff_date: datetime,
-    current_week: bool,
-    adapted_logger: LoggerAdapter | None = None,
-    log_action_handler: LogActionHandlerType | None = None,
-  ): ...
-
-  @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
-  @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)
-  async def _pickup_files(
-    self,
-    adapted_logger: LoggerAdapter | None = None,
-    log_action_handler: LogActionHandlerType | None = None,
-  ): ...
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
@@ -628,8 +594,6 @@ class SupplierProcessorBase(metaclass=SingletonType):
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.FAILURE, file_meta)
 
-
-class SupplierProcessorSFTPIntermediate(SupplierProcessorBase):
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern: ...

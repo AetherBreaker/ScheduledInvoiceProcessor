@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
   configure_logging()
 
-from collections.abc import Mapping
 from logging import getLogger
-from typing import Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
-from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption
+if TYPE_CHECKING:
+  from collections.abc import Mapping, Sequence
+  from typing import Any, NotRequired
+
+  from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption
 
 logger = getLogger(__name__)
 
@@ -20,12 +25,9 @@ type InvoiceNum = str
 
 type SheetsValue = int | float | str
 type SheetsRangeName = str
-type SheetsRangeUpdateValues = list[list[SheetsValue]]
+type SheetsRangeUpdateValues = Sequence[Sequence[SheetsValue]]
 
 type Request = "AppendDimension" | Mapping[str, Any]
-
-
-type IntOrInf = int | float
 
 
 class ValueRange(TypedDict):

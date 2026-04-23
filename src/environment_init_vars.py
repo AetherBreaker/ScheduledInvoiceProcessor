@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 from logging import getLogger
@@ -14,7 +16,7 @@ if os.name != "nt" and hasattr(os, "geteuid") and os.geteuid() == 0:
 
 
 # Settings
-SETTINGS = Settings()  # type: ignore
+SETTINGS = Settings.model_validate({})
 
 # Folder paths
 CWD = Path.cwd()

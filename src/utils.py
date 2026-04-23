@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -6,21 +8,18 @@ if __name__ == "__main__":
 from datetime import datetime, timedelta
 from os import sep, walk
 from os.path import abspath, basename
-from pathlib import Path
 from re import compile
+from typing import TYPE_CHECKING
 
 from dateutil.relativedelta import SA, relativedelta
 from dateutil.utils import today as _today
 from gspread import IncorrectCellLabel
-from typing_custom import IntOrInf
+
+if TYPE_CHECKING:
+  type IntOrInf = int | float
+  from pathlib import Path
 
 shift = timedelta()
-
-# if __debug__:
-#   # if debugging, calculate the difference between now and last saturday at 11:58pm
-#   now = datetime.now()
-#   last_saturday = now + relativedelta(weekday=SA(-1), hour=23, minute=58, second=0, microsecond=0)
-#   shift = last_saturday - now
 
 
 def today(tzinfo=None):

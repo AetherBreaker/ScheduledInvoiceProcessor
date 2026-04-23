@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
   configure_logging()
 
 from abc import abstractmethod
-from collections.abc import Buffer, Callable, Iterator
 from contextlib import nullcontext
 from datetime import datetime
 from enum import Enum, auto
@@ -13,11 +14,16 @@ from io import BytesIO
 from json import loads
 from logging import getLogger
 from socket import gaierror
-from typing import Any, NamedTuple, Protocol, Self
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 from environment_init_vars import SETTINGS, TZ
 from paramiko import AutoAddPolicy, SFTPClient, SFTPError, SSHClient
 from rich_custom import ProgressCustom
+
+if TYPE_CHECKING:
+  from collections.abc import Buffer, Callable, Iterator
+  from typing import Any, Self
+
 
 logger = getLogger(__name__)
 
@@ -585,7 +591,7 @@ class FTPAdapter[HandlerType_T: AdaptedFTP | AdaptedSFTP]:
     return self.protocol_handler(self.ftp_protocol(), container_cls=self.container_cls, pbar=self.pbar)  # type: ignore
 
   def test_connection(self, logit: bool = False) -> bool:
-    return self.start_session().test_connection(logit)  # type: ignore
+    return self.start_session().test_connection(logit)
 
 
 class SFTFTPClient(FTPProtocol):
@@ -727,7 +733,7 @@ if __name__ == "__main__":
 
   from environment_init_vars import CWD
   from logging_config import RICH_CONSOLE
-  from rich_custom import LiveCustom
+  from rich_custom import ProgressCustom
 
   local_testing_file = CWD / "test.txt"
   local_testing_file.write_text("This is a test file for FTP/SFTP upload and download testing.\n" * 1000)
@@ -745,10 +751,10 @@ if __name__ == "__main__":
   remote_test_file_ftp_path = ftp_test_folder / local_testing_file.name
   remote_test_file_sftp_path = sftp_test_folder / local_testing_file.name
 
-  with LiveCustom(refresh_per_second=10, console=RICH_CONSOLE) as live:
-    ftp = FTPAdapter["AdaptedFTP"](SFTFTPClient, container_cls="FTPTestContainer", pbar=live.pbar)
-    sftp = FTPAdapter["AdaptedSFTP"](SASSFTPClient, container_cls="SFTPTestContainer", pbar=live.pbar)
-    coremark = FTPAdapter["AdaptedFTP"](CoremarkFTPClient, container_cls="CoremarkTestContainer", pbar=live.pbar)
+  with ProgressCustom(refresh_per_second=10, console=RICH_CONSOLE) as pbar:
+    ftp = FTPAdapter["AdaptedFTP"](SFTFTPClient, container_cls="FTPTestContainer", pbar=pbar)
+    sftp = FTPAdapter["AdaptedSFTP"](SASSFTPClient, container_cls="SFTPTestContainer", pbar=pbar)
+    coremark = FTPAdapter["AdaptedFTP"](CoremarkFTPClient, container_cls="CoremarkTestContainer", pbar=pbar)
 
     # Testing Connections
     assert ftp.test_connection(logit=True), "FTP connection test failed"

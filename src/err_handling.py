@@ -1,19 +1,25 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
   configure_logging()
 
 from asyncio import CancelledError
-from collections.abc import Callable
 from functools import wraps
 from io import StringIO
 from logging import getLogger
 from traceback import extract_tb
+from typing import TYPE_CHECKING
 
 from environment_init_vars import FATAL_EVENT
 from rich.console import Console
 from send_alert_email import send_alert_email
-from typing_custom import FatalDetails
+
+if TYPE_CHECKING:
+  from collections.abc import Callable
+
+  from typing_custom import FatalDetails
 
 logger = getLogger(__name__)
 
@@ -65,9 +71,9 @@ def get_last_fatal_details() -> FatalDetails:
   return _last_fatal_details
 
 
-if not __debug__:
+def handle_fatal_exc[**TP, TR](func: Callable[TP, TR]) -> Callable[TP, TR | None]:
+  if not __debug__:
 
-  def handle_fatal_exc[**TP, TR](func: Callable[TP, TR]) -> Callable[TP, TR | None]:  # type: ignore
     @wraps(func)
     def wrapper(*args: TP.args, **kwargs: TP.kwargs) -> TR | None:
       try:
@@ -97,8 +103,5 @@ if not __debug__:
         return None
 
     return wrapper
-
-else:
-
-  def handle_fatal_exc[**TP, TR](func: Callable[TP, TR]) -> Callable[TP, TR]:
+  else:
     return func
