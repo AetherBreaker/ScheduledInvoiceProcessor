@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -7,18 +11,25 @@ from contextvars import ContextVar
 from datetime import datetime
 from json import loads
 from logging import getLogger
-from pathlib import Path, PurePosixPath
-from re import Pattern, compile
+from pathlib import PurePosixPath
+from re import compile
 
 from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
 from environment_init_vars import CWD, SETTINGS
-from rich_custom import ProgressCustom
-from typing_custom import CustomerID
 from typing_custom.enums import SuppliersEnum
 
 from suppliers import SupplierProcessorSFTPIntermediate
-from suppliers.ftp_adapter import AdaptedSFTP, FTPAdapter, SASSFTPClient
+from suppliers.ftp_adapter import FTPAdapter, SASSFTPClient
+
+if TYPE_CHECKING:
+  from pathlib import Path
+  from re import Pattern
+
+  from rich_custom import ProgressCustom
+  from typing_custom import CustomerID
+
+  from suppliers.ftp_adapter import AdaptedSFTP
 
 logger = getLogger(__name__)
 

@@ -1,29 +1,41 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
   configure_logging()
 
 from asyncio import as_completed, to_thread
-from collections.abc import Coroutine
 from contextvars import ContextVar
 from datetime import datetime
 from hashlib import file_digest
 from json import loads
-from logging import LoggerAdapter, getLogger
-from pathlib import Path, PurePosixPath
-from re import Pattern, compile
-from typing import Any
+from logging import getLogger
+from pathlib import PurePosixPath
+from re import compile
+from typing import TYPE_CHECKING
 
 from environment_init_vars import CWD, SETTINGS
 from logging_config import add_log_context
-from rich_custom import ProgressCustom
-from typing_custom import CustomerID, SupplierQueueKey
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
 from suppliers import SupplierProcessorSFTPIntermediate
 from suppliers.file_register_data import FileRegisterData
-from suppliers.ftp_adapter import AdaptedSFTP, CoremarkFTPClient, FTPAdapter
-from suppliers.log_action import LogActionHandlerType, log_actions
+from suppliers.ftp_adapter import CoremarkFTPClient, FTPAdapter
+from suppliers.log_action import log_actions
+
+if TYPE_CHECKING:
+  from collections.abc import Coroutine
+  from logging import LoggerAdapter
+  from pathlib import Path
+  from re import Pattern
+  from typing import Any
+
+  from rich_custom import ProgressCustom
+  from typing_custom import CustomerID, SupplierQueueKey
+
+  from suppliers.ftp_adapter import AdaptedSFTP
+  from suppliers.log_action import LogActionHandlerType
 
 logger = getLogger(__name__)
 
