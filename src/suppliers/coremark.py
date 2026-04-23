@@ -20,7 +20,8 @@ from rich_custom import ProgressCustom
 from typing_custom import CustomerID, SupplierQueueKey
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
-from suppliers import FileRegisterData, SupplierProcessorSFTPIntermediate
+from suppliers import SupplierProcessorSFTPIntermediate
+from suppliers.file_register_data import FileRegisterData
 from suppliers.ftp_adapter import AdaptedSFTP, CoremarkFTPClient, FTPAdapter
 from suppliers.log_action import LogActionHandlerType, log_actions
 

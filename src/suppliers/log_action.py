@@ -11,7 +11,8 @@ from typing_custom.enums import LogActionEnum, StatusCode
 from utils import get_last_sat, get_next_sat
 
 if TYPE_CHECKING:
-  from suppliers import FileRegisterData, SupplierProcessorBase
+  from suppliers import SupplierProcessorBase
+  from suppliers.file_register_data import FileRegisterData
 
 
 type LogActionHandlerType = Callable[[SupplierQueueKey, StatusCode, "FileRegisterData"], None]
