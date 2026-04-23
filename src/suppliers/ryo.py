@@ -72,7 +72,7 @@ class RYOProcessor(SupplierProcessorBase):
   local_post_processing_folder = CWD / "RYO_files" / "post_processing"
 
   identifier_prefix = "RYO"
-  log_file_loc = CWD / "logs" / "ryo"
+  log_file_loc = SupplierProcessorBase.log_file_loc / supplier_name
   ctx_var_identifier = ContextVar("ryo_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("ryo_log_loc", default=log_file_loc)
 

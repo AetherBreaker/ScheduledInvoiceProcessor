@@ -64,7 +64,7 @@ class SASProcessor(SupplierProcessorBase):
   local_post_processing_folder = CWD / "SAS_files" / "post_processing"
 
   identifier_prefix: str = "SAS"
-  log_file_loc: Path = CWD / "logs" / "sas"
+  log_file_loc = SupplierProcessorBase.log_file_loc / supplier_name
   ctx_var_identifier = ContextVar("sas_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
 

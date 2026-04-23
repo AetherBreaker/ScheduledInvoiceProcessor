@@ -72,7 +72,7 @@ class CoremarkProcessor(SupplierProcessorBase):
   local_post_processing_folder = CWD / "Coremark_files" / "post_processing"
 
   identifier_prefix = "Coremark"
-  log_file_loc = CWD / "logs" / "coremark"
+  log_file_loc = SupplierProcessorBase.log_file_loc / supplier_name
   ctx_var_identifier = ContextVar("coremark_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("coremark_log_loc", default=log_file_loc)
 
