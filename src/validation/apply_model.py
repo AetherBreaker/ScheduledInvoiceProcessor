@@ -3,6 +3,7 @@ if __name__ == "__main__":
 
   configure_logging()
 
+from collections.abc import Sequence
 from logging import getLogger
 
 from numpy import nan
@@ -17,7 +18,7 @@ NULL_VALUES = ["NULL", "", " ", float("nan")]
 
 
 def build_typed_dataframe(
-  data: list[list[str | int | float | None]], columns: type[ColNameEnum], types_model: type[CustomBaseModel]
+  data: Sequence[Sequence[str | int | float | None]], columns: type[ColNameEnum], types_model: type[CustomBaseModel]
 ) -> DataFrame:
   # pad the data with columns of None to match the number of expected columns
   data = [[row[idx] if idx < len(row) else nan for idx in range(len(columns.all_columns()))] for row in data]

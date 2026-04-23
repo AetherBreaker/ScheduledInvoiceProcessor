@@ -1,15 +1,16 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
   configure_logging()
 
 from asyncio import get_running_loop, sleep, to_thread
-from collections.abc import AsyncIterator, Sequence
 from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime
 from logging import getLogger
-from typing import Any, ClassVar, Literal, overload
+from typing import TYPE_CHECKING, cast, overload
 
 from aiologic import Lock
 from aiorwlock import RWLock
@@ -19,29 +20,11 @@ from google.oauth2.service_account import Credentials
 from gspread import Client, authorize
 from gspread.http_client import BackOffHTTPClient
 from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption, finditem
-from pandas import DataFrame, Series, to_numeric
-from pydantic import TypeAdapter
-from typing_custom import (
-  AppendDimension,
-  BatchUpdateBody,
-  CustomerID,
-  InvoiceNum,
-  Request,
-  StoreNum,
-  ValueRange,
-  ValuesBatchUpdateBody,
-)
+from pandas import Series, to_numeric
+from typing_custom import AppendDimension, BatchUpdateBody, ValueRange, ValuesBatchUpdateBody
 from typing_custom.abc import SingletonType
-from typing_custom.dataframe_column_names import (
-  ColNameEnum,
-  DatabaseOrderLogColumns,
-  DatabaseOrderLogIndex,
-  DatabaseScheduleColumns,
-  DatabaseScheduleIndex,
-)
-from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
+from typing_custom.dataframe_column_names import DatabaseOrderLogColumns, DatabaseScheduleColumns
 from utils import today
-from validation import CustomBaseModel
 from validation.apply_model import build_typed_dataframe
 from validation.models.db_entries import (
   ORDER_LOG_TYPE_ADAPTERS,
@@ -49,6 +32,17 @@ from validation.models.db_entries import (
   OrderLogDBEntryModel,
   ScheduledOrderDBEntryModel,
 )
+
+if TYPE_CHECKING:
+  from collections.abc import AsyncIterator, Sequence
+  from typing import Any, Literal
+
+  from pandas import DataFrame
+  from pydantic import TypeAdapter
+  from typing_custom import CustomerID, InvoiceNum, Request, StoreNum
+  from typing_custom.dataframe_column_names import ColNameEnum, DatabaseOrderLogIndex, DatabaseScheduleIndex  # noqa: F401
+  from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
+  from validation import CustomBaseModel
 
 logger = getLogger(__name__)
 
@@ -98,13 +92,13 @@ class DatabaseCache(metaclass=SingletonType):
   reauth_interval = 2700
   api_call_min_interval = 1.1
 
-  schedule: "CacheViewschedule"
-  prev_week_schedule: "CacheViewschedule"
+  schedule: "CacheViewSchedule"
+  prev_week_schedule: "CacheViewSchedule"
   order_log: "CacheViewOrderLog"
 
   def __init__(self) -> None:
-    self.schedule: CacheViewschedule
-    self.prev_week_schedule: CacheViewschedule
+    self.schedule: CacheViewSchedule
+    self.prev_week_schedule: CacheViewSchedule
     self.order_log: CacheViewOrderLog
 
     self._read_write_lock = RWLock()
@@ -244,17 +238,15 @@ class DatabaseCache(metaclass=SingletonType):
       )
 
       schedule_data: list[list[str | int | float]] = result["valueRanges"][0]["values"]
-      self.schedule = CacheViewschedule(
+      self.schedule = CacheViewSchedule(
         raw_data=schedule_data,
-        types_model=ScheduledOrderDBEntryModel,
         cache_core=self,
         sheet_id=None,
       )
 
       prev_week_schedule_data: list[list[str | int | float]] = result["valueRanges"][1]["values"]
-      self.prev_week_schedule = CacheViewschedule(
+      self.prev_week_schedule = CacheViewSchedule(
         raw_data=prev_week_schedule_data,
-        types_model=ScheduledOrderDBEntryModel,
         cache_core=self,
         sheet_id=None,
       )
@@ -270,14 +262,12 @@ class DatabaseCache(metaclass=SingletonType):
         order_log_data: list[list[str | int | float]] = result["valueRanges"][2]["values"]
         self.order_log = CacheViewOrderLog(
           raw_data=order_log_data,
-          types_model=OrderLogDBEntryModel,
           cache_core=self,
           sheet_id=SETTINGS.database_order_log_id,
         )
       except KeyError:
         self.order_log = CacheViewOrderLog(
           raw_data=[],
-          types_model=OrderLogDBEntryModel,
           cache_core=self,
           sheet_id=SETTINGS.database_order_log_id,
         )
@@ -434,23 +424,17 @@ class DatabaseCache(metaclass=SingletonType):
     await self.refresh_cache()
 
 
-class CacheViewBase[ModelT: CustomBaseModel]:
+class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[Any, ...] | Any]:
   _range_format: str
   _range_format_single: str
   _field_type_adapters: dict[str, TypeAdapter]
-  columns: ClassVar[type[ColNameEnum]]
+  columns: type[ColsT]
+  model: type[ModelT]
 
-  def __init__(
-    self,
-    raw_data: list[list[str | int | float]],
-    types_model: type[ModelT],
-    cache_core: DatabaseCache,
-    sheet_id: int | None,
-  ) -> None:
-    self._cache = build_typed_dataframe(data=raw_data, columns=self.columns, types_model=types_model)  # type: ignore
+  def __init__(self, raw_data: list[list[str | int | float]], cache_core: DatabaseCache, sheet_id: int | None) -> None:
+    self._cache = build_typed_dataframe(data=raw_data, columns=self.columns, types_model=self.model)
     self._cache_index = self.columns.__index_items__
     self._core = cache_core
-    self._model = types_model
     self._sheet_id = sheet_id
 
   async def __aenter__(self) -> DataFrame:
@@ -460,24 +444,27 @@ class CacheViewBase[ModelT: CustomBaseModel]:
   async def __aexit__(self, exc_type, exc_value, traceback) -> None:
     self._core._read_write_lock.reader_lock.release()
 
-  async def read_typed_row(self, index, re_validate: bool = False) -> ModelT:
+  async def read_typed_row(self, index: IndexT, re_validate: bool = False) -> ModelT:
     async with self._core._read_write_lock.reader_lock:
       row = self._cache.iloc[await self.get_rownum(index)]
 
-    if re_validate:
-      return self._model(**row)
-    else:
-      return self._model.model_construct(**row)  # type: ignore
+    return self.model(**row) if re_validate else self.model.model_construct(**row)
 
   async def walk_typed_rows(self, re_validate: bool = False) -> AsyncIterator[ModelT]:
     async with self._core._read_write_lock.reader_lock:
       for _, row in self._cache.iterrows():
         if re_validate:
-          yield self._model(**row)
+          yield self.model(**row)
         else:
-          yield self._model.model_construct(**row)  # type: ignore
+          yield self.model.model_construct(**row)
 
-  async def read_value(self, index, col, validate: bool = False) -> tuple[TypeAdapter[Any], Any] | Any:
+  @overload
+  async def read_value(self, index: IndexT, col: ColsT, validate: Literal[False] = False) -> Any: ...
+
+  @overload
+  async def read_value(self, index: IndexT, col: ColsT, validate: Literal[True]) -> tuple[TypeAdapter[Any], Any]: ...
+
+  async def read_value(self, index: IndexT, col: ColsT, validate: bool = False) -> tuple[TypeAdapter[Any], Any] | Any:
     async with self._core._read_write_lock.reader_lock:
       value = self._cache.iat[await self.get_rownum(index), self._cache.columns.get_loc(col)]  # type: ignore
       if validate:
@@ -487,10 +474,10 @@ class CacheViewBase[ModelT: CustomBaseModel]:
         return (ta, value)
       return value
 
-  async def process_index(self, index):
+  async def process_index(self, index: IndexT) -> IndexT:
     return index
 
-  async def get_rownum(self, index) -> int:
+  async def get_rownum(self, index: IndexT) -> int:
     # default process index. Assume single index
     async with self._core._read_write_lock.reader_lock:
       # locate the row number of index
@@ -503,7 +490,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
 
     return row_number
 
-  async def write_value(self, index, column, value: Any, ta: TypeAdapter) -> None:
+  async def write_value(self, index: IndexT, column, value: Any, ta: TypeAdapter) -> None:
     row_number = await self.get_rownum(index)
 
     value = ta.dump_python(value)
@@ -524,17 +511,17 @@ class CacheViewBase[ModelT: CustomBaseModel]:
       )
     )
 
-  async def update_row(self, index, values: Sequence[Any] | ModelT, raw: bool = True) -> None:
+  async def update_row(self, index: IndexT, values: Sequence[Any] | ModelT, raw: bool = True) -> None:
     row_number = await self.get_rownum(index)
 
-    if isinstance(values, self._model):
+    if isinstance(values, self.model):
       row = Series(values.model_dump(), dtype=object)
       sheets_row = Series(values.model_dump(mode="json"), dtype=object)
     elif isinstance(values, Sequence):
       row = Series(values, dtype=object, index=self.columns.all_columns())
       sheets_row = row.copy()
     else:
-      raise TypeError(f"{type(values)} does not match the expected type of Sequence[Any] or {self._model}")
+      raise TypeError(f"{type(values)} does not match the expected type of Sequence[Any] or {self.model}")
 
     async with self._core._read_write_lock.writer_lock:
       self._cache.iloc[await self.get_rownum(index), :] = row
@@ -567,7 +554,7 @@ class CacheViewBase[ModelT: CustomBaseModel]:
     async with self._core._read_write_lock.writer_lock:
       self._cache.loc[index, :] = row
 
-    row_number = await self.get_rownum(index)
+    row_number = await self.get_rownum(cast(IndexT, index))
     row_number += 2  # add one to account for gsheets header
 
     # get column index
@@ -593,128 +580,40 @@ class CacheViewBase[ModelT: CustomBaseModel]:
     else:
       await self._core.queue_db_api_values_user_entered_update(update_data)
 
-  async def check_exists(self, index) -> bool:
+  async def check_exists(self, index: IndexT) -> bool:
     async with self._core._read_write_lock.reader_lock:
       return index in self._cache.index
 
 
-class CacheViewschedule(CacheViewBase[ScheduledOrderDBEntryModel]):
+class CacheViewSchedule(CacheViewBase["ScheduledOrderDBEntryModel", "DatabaseScheduleColumns", "DatabaseScheduleIndex"]):
   _range_format_single = "Current Week!{cell}"
   _range_format = "Current Week!{start}:{end}"
   _field_type_adapters = SCHEDULE_TYPE_ADAPTERS
   columns = DatabaseScheduleColumns
-
-  async def read_typed_row(self, index: DatabaseScheduleIndex, re_validate: bool = False) -> ScheduledOrderDBEntryModel:
-    return await super().read_typed_row(index, re_validate)
-
-  async def walk_typed_rows(self, re_validate: bool = False) -> AsyncIterator[ScheduledOrderDBEntryModel]:
-    async for item in super().walk_typed_rows(re_validate):
-      yield item
-
-  @overload
-  async def read_value(self, index: DatabaseScheduleIndex, col: DatabaseScheduleColumns, validate: Literal[False] = False) -> Any: ...
-
-  @overload
-  async def read_value(
-    self, index: DatabaseScheduleIndex, col: DatabaseScheduleColumns, validate: Literal[True]
-  ) -> tuple[TypeAdapter[Any], Any]: ...
-
-  async def read_value(
-    self, index: DatabaseScheduleIndex, col: DatabaseScheduleColumns, validate: bool = False
-  ) -> tuple[TypeAdapter[Any] | Any] | Any:
-    return await super().read_value(index, col, validate)
-
-  async def process_index(self, index: DatabaseScheduleIndex) -> DatabaseScheduleIndex:
-    return await super().process_index(index)
-
-  async def get_rownum(self, index: DatabaseScheduleIndex) -> int:
-    return await super().get_rownum(index)
-
-  async def write_value(self, index: DatabaseScheduleIndex, column: DatabaseScheduleColumns, value: Any, ta: TypeAdapter) -> None:
-    return await super().write_value(index, column, value, ta)
-
-  async def update_row(
-    self, index: DatabaseScheduleIndex, values: Sequence[Any] | ScheduledOrderDBEntryModel, raw: bool = True
-  ) -> None:
-    return await super().update_row(index, values, raw)
-
-  async def append_row(self, values: ScheduledOrderDBEntryModel, raw: bool = True) -> None:
-    return await super().append_row(values, raw)
-
-  async def check_exists(self, index: DatabaseScheduleIndex) -> bool:
-    return await super().check_exists(index)
+  model = ScheduledOrderDBEntryModel
 
   async def check_box(
-    self,
-    idx: DatabaseScheduleIndex,
-    col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied],
+    self, idx: DatabaseScheduleIndex, col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied]
   ) -> None:
-    await self.write_value(
-      index=idx,
-      column=col,
-      value=True,
-      ta=self._field_type_adapters[col],
-    )
+    await self.write_value(index=idx, column=col, value=True, ta=self._field_type_adapters[col])
 
   async def uncheck_box(
-    self,
-    idx: DatabaseScheduleIndex,
-    col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied],
+    self, idx: DatabaseScheduleIndex, col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied]
   ) -> None:
-    await self.write_value(
-      index=idx,
-      column=col,
-      value=False,
-      ta=self._field_type_adapters[col],
-    )
+    await self.write_value(index=idx, column=col, value=False, ta=self._field_type_adapters[col])
 
   async def check_toggled(
-    self,
-    idx: DatabaseScheduleIndex,
-    col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied],
+    self, idx: DatabaseScheduleIndex, col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied]
   ) -> bool:
     return await self.read_value(idx, col)
 
 
-class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
+class CacheViewOrderLog(CacheViewBase["OrderLogDBEntryModel", "DatabaseOrderLogColumns", "DatabaseOrderLogIndex"]):
   _range_format_single = "'Processing Log'!{cell}"
   _range_format = "'Processing Log'!{start}:{end}"
   _field_type_adapters = ORDER_LOG_TYPE_ADAPTERS
-  columns: ClassVar[type[DatabaseOrderLogColumns]] = DatabaseOrderLogColumns  # type: ignore
-
-  async def read_typed_row(self, index: DatabaseOrderLogIndex, re_validate: bool = False) -> OrderLogDBEntryModel:
-    return await super().read_typed_row(index, re_validate)
-
-  @overload
-  async def read_value(self, index: DatabaseOrderLogIndex, col: DatabaseOrderLogColumns, validate: Literal[False] = False) -> Any: ...
-
-  @overload
-  async def read_value(
-    self, index: DatabaseOrderLogIndex, col: DatabaseOrderLogColumns, validate: Literal[True]
-  ) -> tuple[TypeAdapter[Any], Any]: ...
-
-  async def read_value(
-    self, index: DatabaseOrderLogIndex, col: DatabaseOrderLogColumns, validate: bool = False
-  ) -> tuple[TypeAdapter[Any] | Any] | Any:
-    return await super().read_value(index, col, validate)
-
-  async def process_index(self, index: DatabaseOrderLogIndex) -> DatabaseOrderLogIndex:
-    return await super().process_index(index)
-
-  async def get_rownum(self, index: DatabaseOrderLogIndex) -> int:
-    return await super().get_rownum(index)
-
-  async def write_value(self, index: DatabaseOrderLogIndex, column: DatabaseOrderLogColumns, value: Any, ta: TypeAdapter) -> None:
-    return await super().write_value(index, column, value, ta)
-
-  async def update_row(self, index: DatabaseOrderLogIndex, values: Sequence[Any] | OrderLogDBEntryModel, raw: bool = True) -> None:
-    return await super().update_row(index, values, raw)
-
-  async def append_row(self, values: OrderLogDBEntryModel, raw: bool = True) -> None:
-    return await super().append_row(values, raw)
-
-  async def check_exists(self, index: DatabaseOrderLogIndex) -> bool:
-    return await super().check_exists(index)
+  columns = DatabaseOrderLogColumns
+  model = OrderLogDBEntryModel
 
   async def log_action(
     self,
@@ -742,7 +641,7 @@ class CacheViewOrderLog(CacheViewBase[OrderLogDBEntryModel]):
       "notes": note,
     }
 
-    validated_entry = self._model(**new_entry)
+    validated_entry = self.model(**new_entry)
 
     # assemble new index
     idx = tuple(getattr(validated_entry, col) for col in self._cache_index)
