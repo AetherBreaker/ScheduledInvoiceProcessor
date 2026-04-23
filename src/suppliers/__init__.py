@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 if __name__ == "__main__":
   from logging_config import configure_logging
 
@@ -10,9 +12,7 @@ from datetime import datetime
 from errno import EACCES
 from ftplib import all_errors
 from io import BytesIO
-from logging import LoggerAdapter, getLogger
-from pathlib import Path, PurePosixPath
-from re import Match, Pattern
+from logging import getLogger
 from socket import timeout as SocketTimeout
 from time import sleep
 from typing import cast
@@ -21,18 +21,29 @@ from aiologic import Lock
 from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, SU, relativedelta
 from environment_init_vars import SETTINGS
-from logging_config import LOG_LOC_FOLDER, add_log_context
+from logging_config import LOG_LOC_FOLDER, TYPE_CHECKING, add_log_context
 from paramiko import SSHException
 from pydantic import TypeAdapter
-from rich_custom import CustomTaskID, ProgressCustom
 from send_alert_email import send_alert_email
-from typing_custom import CustomerID, StoreNum, SupplierQueueKey
 from typing_custom.abc import SingletonType
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
-from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
+from typing_custom.enums import LogActionEnum, StatusCode
 
-from suppliers.ftp_adapter import AdaptedFTP, FTPAdapter, SFTFTPClient
-from suppliers.log_action import LogActionHandlerType, log_actions
+from suppliers.file_register_data import FileRegisterData
+from suppliers.ftp_adapter import FTPAdapter, SFTFTPClient
+from suppliers.log_action import log_actions
+
+if TYPE_CHECKING:
+  from logging import LoggerAdapter
+  from pathlib import Path, PurePosixPath
+  from re import Match, Pattern
+
+  from rich_custom import CustomTaskID, ProgressCustom
+  from typing_custom import CustomerID, StoreNum, SupplierQueueKey
+  from typing_custom.enums import SuppliersEnum
+
+  from suppliers.ftp_adapter import AdaptedFTP
+  from suppliers.log_action import LogActionHandlerType
 
 logger = getLogger(__name__)
 TRANSIENT_TRANSFER_ERROR_STRINGS = (
@@ -111,7 +122,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self.preprocess_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_preprocess_queue.json"
 
-    self.pbar = cast(ProgressCustom, pbar)
+    self.pbar = cast("ProgressCustom", pbar)
 
     self._load_queue_backups()
 
