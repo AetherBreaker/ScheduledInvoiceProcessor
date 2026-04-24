@@ -8,14 +8,10 @@ from typing import Annotated
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# from pydantic.networks import NameEmail
-
 logger = getLogger(__name__)
 
 
 CWD = Path(__file__).parent if getattr(sys, "frozen", False) else Path.cwd()
-
-testing = False
 
 
 class Settings(BaseSettings):
