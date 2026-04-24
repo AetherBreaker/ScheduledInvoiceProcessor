@@ -130,9 +130,11 @@ async def reschedule_all_tasks():
       f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}"
     )
 
+    processor = supplier_register[order.supplier]()
+
     if not picked_up:
       scheduler.add_job(
-        supplier_register[order.supplier]().register_pickup,
+        processor.register_pickup,
         CronTrigger(
           minute="0-59/10",
           start_date=order.invoice_pickup_time,
@@ -149,6 +151,7 @@ async def reschedule_all_tasks():
         replace_existing=True,
         jobstore="order_processing",
       )
+      logger.info(f"Scheduled {processor.__class__.__name__}.register_pickup for order: {reg_pickup_job_id}")
     else:
       try:
         scheduler.remove_job(reg_pickup_job_id, jobstore="order_processing")
@@ -158,7 +161,7 @@ async def reschedule_all_tasks():
         logger.info(f"Removed register_pickup because order was marked as picked up: {reg_pickup_job_id}")
     if not applied:
       scheduler.add_job(
-        supplier_register[order.supplier]().register_dropoff,
+        processor.register_dropoff,
         CronTrigger(
           minute="4-59/10",
           start_date=order.invoice_dropoff_time,
@@ -175,6 +178,7 @@ async def reschedule_all_tasks():
         replace_existing=True,
         jobstore="order_processing",
       )
+      logger.info(f"Scheduled {processor.__class__.__name__}.register_dropoff for order: {reg_dropoff_job_id}")
     else:
       try:
         scheduler.remove_job(reg_dropoff_job_id, jobstore="order_processing")
@@ -195,9 +199,11 @@ async def reschedule_all_tasks():
   #     f"{order.supplier}_register_dropoff_{order.store:0>3}_{order.customer}_{order.invoice_pickup_time.isoformat()}"
   #   )
 
+  #   processor = supplier_register[order.supplier]()
+
   #   if not picked_up:
   #     scheduler.add_job(
-  #       supplier_register[order.supplier]().register_pickup,
+  #       processor.register_pickup,
   #       CronTrigger(
   #         minute="0-59/10",
   #         start_date=order.invoice_pickup_time,
@@ -214,6 +220,7 @@ async def reschedule_all_tasks():
   #       replace_existing=True,
   #       jobstore="order_processing",
   #     )
+  #     logger.info(f"Removed register_pickup because order was marked as picked up: {reg_pickup_job_id}")
   #   else:
   #     try:
   #       scheduler.remove_job(reg_pickup_job_id, jobstore="order_processing")
@@ -224,7 +231,7 @@ async def reschedule_all_tasks():
 
   #   if not applied:
   #     scheduler.add_job(
-  #       supplier_register[order.supplier]().register_dropoff,
+  #       processor.register_dropoff,
   #       CronTrigger(
   #         minute="4-59/10",
   #         start_date=order.invoice_dropoff_time,
@@ -241,6 +248,7 @@ async def reschedule_all_tasks():
   #       replace_existing=True,
   #       jobstore="order_processing",
   #     )
+  #     logger.info(f"Scheduled {processor.__class__.__name__}.register_dropoff for order: {reg_dropoff_job_id}")
   #   else:
   #     try:
   #       scheduler.remove_job(reg_dropoff_job_id, jobstore="order_processing")
