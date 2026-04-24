@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 from logging import getLogger
 from pathlib import Path
@@ -12,8 +11,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # from pydantic.networks import NameEmail
 
 logger = getLogger(__name__)
-
-os.environ.setdefault("PYDANTIC_ERRORS_INCLUDE_URL", "false")
 
 
 CWD = Path(__file__).parent if getattr(sys, "frozen", False) else Path.cwd()

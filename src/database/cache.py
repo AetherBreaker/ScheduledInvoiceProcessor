@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-if __name__ == "__main__":
-  from logging_config import configure_logging
-
-  configure_logging()
-
 from asyncio import get_running_loop, sleep, to_thread
 from contextlib import suppress
 from copy import deepcopy

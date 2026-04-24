@@ -5,8 +5,7 @@ import logging
 from datetime import datetime
 from functools import wraps
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, TimedRotatingFileHandler
-from os import getcwd
-from pathlib import Path, PurePath
+from pathlib import Path
 from queue import Queue
 from secrets import token_urlsafe
 from sys import platform
@@ -24,18 +23,9 @@ if TYPE_CHECKING:
 
   from rich.console import ConsoleRenderable
   from rich.traceback import Traceback
+  from suppliers import SupplierProcessorBase
   from typing_custom.enums import LogActionEnum
 
-
-def without_cwd(self) -> str:
-  cwd = getcwd()
-  return str(self)[len(cwd) :] if str(self).startswith(cwd) else str(self)
-
-
-PurePath.without_cwd = without_cwd
-
-if TYPE_CHECKING:
-  from suppliers import SupplierProcessorBase
 
 RICH_CONSOLE = Console(
   width=None if platform == "win32" else 160,

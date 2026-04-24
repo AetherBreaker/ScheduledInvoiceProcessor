@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-if __name__ == "__main__":
-  from logging_config import configure_logging
-
-  configure_logging()
-
 from datetime import datetime
 from inspect import get_annotations
 from logging import getLogger

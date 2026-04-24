@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-if __name__ == "__main__":
-  from logging_config import configure_logging
-
-  configure_logging()
-
 from asyncio import set_event_loop, sleep
 from datetime import datetime
 from logging import getLogger

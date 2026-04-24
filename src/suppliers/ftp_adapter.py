@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-if __name__ == "__main__":
-  from logging_config import configure_logging
-
-  configure_logging()
-
 from abc import abstractmethod
 from contextlib import nullcontext
 from datetime import datetime

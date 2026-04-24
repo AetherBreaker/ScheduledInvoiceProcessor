@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if __name__ == "__main__":
-  from logging_config import configure_logging
-
-  configure_logging()
-
 from contextvars import ContextVar
 from datetime import datetime
 from json import loads
 from logging import getLogger
 from pathlib import PurePosixPath
 from re import compile
+from typing import TYPE_CHECKING
 
 from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
