@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from asyncio import set_event_loop, sleep
+from asyncio import run, sleep
 from datetime import datetime
 from logging import getLogger
 from typing import TYPE_CHECKING
@@ -421,12 +421,4 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
 
 
 if __name__ == "__main__":
-  from sys import platform
-
-  if platform in ("win32", "cygwin", "cli"):
-    from winloop import new_event_loop, run
-  else:
-    # if we're on apple or linux do this instead
-    from uvloop import new_event_loop, run  # type: ignore
-  set_event_loop(new_event_loop())
   run(main())

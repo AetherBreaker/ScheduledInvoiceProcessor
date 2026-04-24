@@ -415,13 +415,6 @@ async def main():
 
 
 if __name__ == "__main__":
-  from asyncio import set_event_loop
-  from sys import platform
+  from asyncio import run
 
-  if platform in ("win32", "cygwin", "cli"):
-    from winloop import new_event_loop, run
-  else:
-    # if we're on apple or linux do this instead
-    from uvloop import new_event_loop, run  # type: ignore
-  set_event_loop(new_event_loop())
   run(main())
