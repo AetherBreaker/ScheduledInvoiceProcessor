@@ -239,6 +239,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
         logger.warning(f"{self.__class__.__name__}: Removed stale queue entry {key} from pickup queue")
       elif await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
         (self.supplier_name, item.storenum), DatabaseScheduleColumns.invoice_grabbed
+      ) or await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
+        (self.supplier_name, item.storenum), DatabaseScheduleColumns.manually_moved
       ):
         entry = self._file_pickup_queue.pop(key)
         self._file_waiting_queue[key] = entry
@@ -253,8 +255,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
       "dropoff": self._file_dropoff_queue,
     }.items():
       for key, item in tuple(queue.copy().items()):
-        if item.stale or await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
-          (self.supplier_name, item.storenum), DatabaseScheduleColumns.invoice_applied
+        if (
+          item.stale
+          or await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
+            (self.supplier_name, item.storenum), DatabaseScheduleColumns.invoice_applied
+          )
+          or await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
+            (self.supplier_name, item.storenum), DatabaseScheduleColumns.manually_moved
+          )
         ):
           queue.pop(key)
           changed_entries += 1
@@ -612,6 +620,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
     applied = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
       (self.supplier_name, storenum), DatabaseScheduleColumns.invoice_applied
     )
+    manually_moved = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
+      (self.supplier_name, storenum), DatabaseScheduleColumns.manually_moved
+    )
 
     if picked_up:
       local_logger.info(
@@ -623,6 +634,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
       local_logger.info(
         f"{self.__class__.__name__}: "
         f"Attempted to register pickup for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
+      )
+      return
+    if manually_moved:
+      local_logger.info(
+        f"{self.__class__.__name__}: "
+        f"Attempted to register pickup for manually moved invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
       return
 
@@ -684,6 +701,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
     applied = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
       (self.supplier_name, storenum), DatabaseScheduleColumns.invoice_applied
     )
+    manually_moved = await (self.cache.schedule if current_week else self.cache.prev_week_schedule).check_toggled(
+      (self.supplier_name, storenum), DatabaseScheduleColumns.manually_moved
+    )
 
     if not picked_up:
       local_logger.debug(
@@ -695,6 +715,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
       local_logger.debug(
         f"{self.__class__.__name__}: {key}: "
         f"Attempted to register dropoff for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
+      )
+      return
+    if manually_moved:
+      local_logger.debug(
+        f"{self.__class__.__name__}: {key}: "
+        f"Attempted to register dropoff for manually moved invoice: {self.supplier_name}, {storenum}, {customer_id}"
       )
       return
 
@@ -945,10 +971,3 @@ class SupplierProcessorBase(metaclass=SingletonType):
       self._file_waiting_queue[key] = item
       self._file_pickup_queue.pop(key)
       local_logger.info(f"{self.__class__.__name__}: {key}: Moved {item.storenum} to waiting queue")
-
-
-if __name__ == "__main__":
-  from suppliers.sas import SASProcessor
-
-  processor = SASProcessor()
-  pass

@@ -18,7 +18,6 @@ from utils import get_now
 
 logger = getLogger(__name__)
 
-
 DO_NOT_LOG_PATTERNS = [
   compile(r".*?_register_dropoff_.*"),
   compile(r"submit_queued_writes_to_pool"),

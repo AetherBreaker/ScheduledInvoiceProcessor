@@ -80,6 +80,7 @@ class ScheduledOrderDBEntryModel(CustomBaseModel):
   invoice_dropoff_time: Annotated[datetime, BeforeValidator(process_formatted_time_pattern_str)]
   invoice_grabbed: bool = False
   invoice_applied: bool = False
+  manually_moved: bool = False
 
 
 def remove_tz_info_if_aware(dt: datetime) -> datetime:

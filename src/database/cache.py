@@ -598,7 +598,11 @@ class CacheViewSchedule(CacheViewBase["ScheduledOrderDBEntryModel", "DatabaseSch
     await self.write_value(index=idx, column=col, value=False, ta=self._field_type_adapters[col])
 
   async def check_toggled(
-    self, idx: DatabaseScheduleIndex, col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied]
+    self,
+    idx: DatabaseScheduleIndex,
+    col: Literal[
+      DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied, DatabaseScheduleColumns.manually_moved
+    ],
   ) -> bool:
     return await self.read_value(idx, col)
 

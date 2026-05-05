@@ -70,6 +70,7 @@ class DatabaseScheduleColumns(ColNameEnum):
   invoice_dropoff_time = "invoice_dropoff_time"
   invoice_grabbed = "invoice_grabbed"
   invoice_applied = "invoice_applied"
+  manually_moved = "manually_moved"
 
 
 type DatabaseScheduleIndex = tuple[SuppliersEnum, StoreNum]
