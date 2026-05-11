@@ -10,6 +10,8 @@ from pathlib import PurePosixPath
 from re import compile
 from typing import TYPE_CHECKING
 
+from dateutil.relativedelta import SA, SU, relativedelta
+from dateutil.rrule import DAILY, rrule
 from environment_init_vars import CWD, SETTINGS
 from logging_config import add_log_context
 from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
@@ -76,13 +78,49 @@ class RYOProcessor(SupplierProcessorBase):
       self.vendor_ftp.pbar = pbar
     super().__init__(pbar)
 
+  # def assemble_filename_pattern(
+  #   self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
+  # ) -> Pattern:
+  #   pattern = (
+  #     rf"^{customer_id}_"
+  #     r"(?P<invoice_num>[\d\-]+)"
+  #     r"\.txt$"
+  #   )
+  #   return compile(pattern)
+
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern:
+    dates = list(
+      rrule(
+        DAILY,
+        dtstart=(start_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0))
+        - relativedelta(weeks=1 if current_week else 0),
+        until=(end_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999))
+        - relativedelta(weeks=0 if current_week else 1),
+      )
+    )
+
+    years = {str(date.year) for date in dates}
+    months = {f"{date.month:02d}" for date in dates}
+    days = {f"{date.day:02d}" for date in dates}
+
+    years_part = "|".join(years)
+    months_part = "|".join(months)
+    days_part = "|".join(days)
+
     pattern = (
       rf"^{customer_id}_"
-      r"(?P<invoice_num>[\d\-]+)"
-      r"\.txt$"
+      r"(?P<invoice_num>[\d\-]+)_"
+      r"(?P<timestamp>"
+      rf"(?P<year>{years_part})"
+      rf"(?P<month>{months_part})"
+      rf"(?P<day>{days_part})"
+      r"(?P<hour>\d{2})"
+      r"(?P<minute>\d{2})"
+      r"(?P<second>\d{2})"
+      r"(?P<microsecond>\d{6})"
+      r")\.TXT$"
     )
     return compile(pattern)
 
