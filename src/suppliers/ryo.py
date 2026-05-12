@@ -120,7 +120,7 @@ class RYOProcessor(SupplierProcessorBase):
       r"(?P<minute>\d{2})"
       r"(?P<second>\d{2})"
       r"(?P<microsecond>\d{6})"
-      r")\.TXT$"
+      r")\.txt$"
     )
     return compile(pattern)
 
