@@ -91,15 +91,15 @@ class RYOProcessor(SupplierProcessorBase):
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern:
-    dates = list(
-      rrule(
-        DAILY,
-        dtstart=(start_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0))
-        - relativedelta(weeks=1 if current_week else 0),
-        until=(end_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999))
-        - relativedelta(weeks=0 if current_week else 1),
-      )
+    # sourcery skip: swap-if-expression
+    rng_start = (start_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - relativedelta(
+      weeks=1 if not current_week else 0
     )
+    rng_end = (end_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)) - relativedelta(
+      weeks=1 if not current_week else 0
+    )
+
+    dates = list(rrule(DAILY, dtstart=rng_start, until=rng_end))
 
     years = {str(date.year) for date in dates}
     months = {f"{date.month:02d}" for date in dates}
