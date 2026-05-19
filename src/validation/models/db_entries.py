@@ -70,6 +70,10 @@ def process_formatted_time_pattern_str(target_time) -> datetime:
   return result
 
 
+class ScheduleValidationError(ValueError):
+  pass
+
+
 class ScheduledOrderDBEntryModel(CustomBaseModel):
   supplier: SuppliersEnum
   store: StoreNum

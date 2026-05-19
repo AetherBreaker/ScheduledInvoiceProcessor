@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING
 
 from numpy import nan
 from pandas import DataFrame, Series, concat, isna
+from typing_custom.dataframe_column_names import DatabaseScheduleColumns
+
+from validation.models.db_entries import ScheduledOrderDBEntryModel, ScheduleValidationError
 
 if TYPE_CHECKING:
   from collections.abc import Sequence
@@ -65,5 +68,15 @@ def apply_model(row: Series, types_model: type[CustomBaseModel], typed_rows: lis
     model_dict = model.model_dump()
 
     typed_rows.append(Series(model_dict, name=row.name, dtype=object))
+  elif types_model is ScheduledOrderDBEntryModel:
+    logger.error(
+      f"Row with index {row.name} failed validation and could not be converted to ScheduledOrderDBEntryModel\n"
+      + "\n".join(f"{k}: {v}" for k, v in row_dict.items())
+    )
+    raise ScheduleValidationError(
+      f"Entry {row[DatabaseScheduleColumns.supplier]} SFT{row[DatabaseScheduleColumns.store]:0>3} failed validation and could not be converted to ScheduledOrderDBEntryModel",
+      row,
+      row_dict,
+    )
 
   return row
