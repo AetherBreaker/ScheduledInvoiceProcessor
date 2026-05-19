@@ -122,7 +122,7 @@ async def reschedule_all_tasks():
   current_week_orders = [order async for order in current_week.walk_typed_rows()]
 
   for order in current_week_orders:
-    if not order.customer or not order.store:
+    if not order.customer or not order.store or order.supplier not in supplier_register:
       continue
     picked_up = await cache.schedule.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_grabbed)
     applied = await cache.schedule.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_applied)
@@ -192,7 +192,7 @@ async def reschedule_all_tasks():
 
   # previous_week_orders = [order async for order in previous_week.walk_typed_rows()]
   # for order in previous_week_orders:
-  #   if not order.customer or not order.store:
+  #   if not order.customer or not order.store or order.supplier not in supplier_register:
   #     continue
   #   picked_up = await previous_week.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_grabbed)
   #   applied = await previous_week.check_toggled((order.supplier, order.store), DatabaseScheduleColumns.invoice_applied)
@@ -354,6 +354,8 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
 
       register_pickup_tasks = []
       for order in orders:
+        if order.supplier not in supplier_register:
+          continue
         task = create_task(
           supplier_register[order.supplier]().register_pickup(
             storenum=order.store,
@@ -374,6 +376,8 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
 
       register_dropoff_tasks = []
       for order in orders:
+        if order.supplier not in supplier_register:
+          continue
         task = create_task(
           supplier_register[order.supplier]().register_dropoff(
             storenum=order.store,
