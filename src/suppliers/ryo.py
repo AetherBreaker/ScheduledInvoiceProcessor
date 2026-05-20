@@ -50,7 +50,7 @@ class RYOProcessor(SupplierProcessorBase):
   )
 
   header_format = "{customer_num}|{invoice_num}|{po_num}|{invoice_date}"
-  file_name_format = "{customer_id}_{invoice_num}.txt"
+  file_name_format = "{customer_id}_{invoice_num}_{timestamp}.txt"
 
   supplier_name: SuppliersEnum = SuppliersEnum.RYO
 
@@ -276,6 +276,7 @@ class RYOProcessor(SupplierProcessorBase):
     body_lines: list[bytes] = []
 
     found_invoice_nums = set()
+    found_timestamps = set()
     file_hashes = set()
 
     for file in original_invoice_files:
@@ -290,6 +291,12 @@ class RYOProcessor(SupplierProcessorBase):
 
       with file.open("rb") as f:
         first_line = f.readline().decode().strip()
+        filename_match = old_file_meta.file_pattern.match(file.name)
+        assert filename_match is not None
+        file_extracted_timestamp = filename_match.group("timestamp")
+
+        file_timestamp = datetime.strptime(file_extracted_timestamp, "%Y%m%d%H%M%S%f")
+
         match = self.invoice_num_pattern.match(first_line)
         if not match:
           local_logger.error(
@@ -316,6 +323,7 @@ class RYOProcessor(SupplierProcessorBase):
             found_invoice_nums.add(attrs["invoice_num"])
 
         first_lines.append(attrs)
+        found_timestamps.add(file_timestamp)
 
         body_lines.extend(f.readlines())
 
@@ -339,7 +347,9 @@ class RYOProcessor(SupplierProcessorBase):
     header_result = self.header_format.format(**found_values, invoice_num=invoice_num_result).encode()
 
     new_file_name = self.file_name_format.format(
-      customer_id=found_values["customer_num"] or "unknown_customer", invoice_num=invoice_num_result
+      customer_id=found_values["customer_num"] or "unknown_customer",
+      invoice_num=invoice_num_result,
+      timestamp=max(found_timestamps).strftime("%Y%m%d%H%M%S%f"),
     )
 
     new_file_loc = self.local_post_processing_folder / new_file_name
