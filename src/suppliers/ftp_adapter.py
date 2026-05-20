@@ -114,6 +114,10 @@ class AdapterProtocol(Protocol):
     """
     raise NotImplementedError
 
+  def makedir(self, remote_path: str) -> None:
+    """Creates a directory on the FTP/SFTP server at the given absolute path."""
+    raise NotImplementedError
+
 
 class AdaptedFTP(AdapterProtocol):
   def __init__(self, ftp_protocol: FTPProtocol, container_cls: str, pbar: ProgressCustom | None = None):
@@ -354,6 +358,10 @@ class AdaptedFTP(AdapterProtocol):
         logger.exception(f"{self.container_cls}: Waiting FTP server is offline: {e}")
       return False
 
+  def makedir(self, remote_path: str) -> None:
+    assert self.handler is not None, "This can only be called while the adapter is opened as a context manager"
+    self.handler.mkd(remote_path)
+
 
 class AdaptedSFTP(AdapterProtocol):
   def __init__(self, ftp_protocol: SFTPProtocol, container_cls: str, pbar: ProgressCustom | None = None):
@@ -565,6 +573,10 @@ class AdaptedSFTP(AdapterProtocol):
       if logit:
         logger.exception(f"{self.container_cls}: Waiting SFTP server is offline: {e}")
       return False
+
+  def makedir(self, remote_path: str) -> None:
+    assert self.handler is not None, "This can only be called while the adapter is opened as a context manager"
+    self.handler.mkdir(remote_path)
 
 
 class FTPAdapter[HandlerType_T: AdaptedFTP | AdaptedSFTP]:
