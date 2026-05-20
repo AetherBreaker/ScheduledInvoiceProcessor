@@ -38,7 +38,7 @@ install(show_locals=True)
 CWD = Path.cwd()
 
 
-PROJECT_NAME = "ScheduledOrderMiddleman"
+PROJECT_NAME = "ScheduledInvoiceProcessor"
 
 max_width = 36
 
@@ -300,7 +300,7 @@ def add_log_context[**TP, TR](
   return add_log_context_under
 
 
-LOGGING_BASE_NAME = "ScheduledOrderMiddleman"
+LOGGING_BASE_NAME = "ScheduledInvoiceProcessor"
 
 
 DEBUG_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}_debug.txt"

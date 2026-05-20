@@ -1,9 +1,9 @@
 services:
-  scheduler:
+  scheduled-invoice-processor:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: scheduled-order-middleman
+    container_name: scheduled-invoice-processor
     restart: no
     # image: jogdensft/scheduledordermiddleman-scheduler:latest
     expose:
@@ -25,7 +25,7 @@ services:
     # Persist logs and queue backups
     volumes:
       - type: bind
-        source: /data/scheduler_files
+        source: /data/scheduled_invoice_processor_files
         target: /app/persisted_data
       # - type: bind
       #   source: /data/scheduler_files/secrets
