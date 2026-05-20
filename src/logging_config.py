@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import atexit
 import logging
 from datetime import datetime
 from functools import wraps
-from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, TimedRotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from queue import Queue
 from secrets import token_urlsafe
@@ -15,11 +14,9 @@ from typing import TYPE_CHECKING
 from environment_init_vars import SETTINGS
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.traceback import install
 
 if TYPE_CHECKING:
   from collections.abc import Awaitable, Callable
-  from typing import Literal
 
   from rich.console import ConsoleRenderable
   from rich.traceback import Traceback
@@ -29,22 +26,24 @@ if TYPE_CHECKING:
 
 RICH_CONSOLE = Console(
   width=None if platform == "win32" else 160,
-  # force_terminal=True,
   log_time=platform == "win32",
 )
 
-install(show_locals=True)
-
-CWD = Path.cwd()
-
 
 PROJECT_NAME = "ScheduledInvoiceProcessor"
+LOGGING_BASE_NAME = "ScheduledInvoiceProcessor"
 
-max_width = 36
+DEFAULT_MAX_WIDTH = 36
 
 
 LOG_LOC_FOLDER = SETTINGS.persisted_dir_loc / "logs"
-LOG_LOC_FOLDER.mkdir(exist_ok=True, parents=True)
+DEBUG_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}_debug.txt"
+INFO_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}.txt"
+
+SCHEDULER_LOG_LOC = LOG_LOC_FOLDER / "scheduler_logs"
+APSCHEDULER_DEBUG_LOG_LOC = SCHEDULER_LOG_LOC / "scheduler_debug.txt"
+APSCHEDULER_INFO_LOG_LOC = SCHEDULER_LOG_LOC / "scheduler.txt"
+
 
 MAX_WIDTH_FILE = LOG_LOC_FOLDER / "max_width.txt"
 
@@ -105,7 +104,7 @@ class FixedRichHandler(RichHandler):
 
 class FixedLogRecord(logging.LogRecord):
   def __init__(self, *args, **kwargs):
-    global max_width
+    global DEFAULT_MAX_WIDTH
     pathpath = Path(args[2])
 
     if "site-packages" in pathpath.parts:
@@ -128,10 +127,10 @@ class FixedLogRecord(logging.LogRecord):
 
     length = len(libpath)
 
-    if length > max_width:
-      max_width = length
+    if length > DEFAULT_MAX_WIDTH:
+      DEFAULT_MAX_WIDTH = length
       with MAX_WIDTH_FILE.open("w") as f:
-        f.write(str(max_width))
+        f.write(str(DEFAULT_MAX_WIDTH))
 
     self.libname = libname
     if "src." in libpath:
@@ -225,10 +224,87 @@ class CustomTimedRotatingFileHandler(TimedRotatingFileHandler):
 
 
 FILE_FORMATTER = FixedFormatter(
-  fmt=f"{{libpath: <{max_width}}} | [{{asctime}}] | {{levelname: >8}} | {{message}}",
+  fmt=f"{{libpath: <{DEFAULT_MAX_WIDTH}}} | [{{asctime}}] | {{levelname: >8}} | {{message}}",
   datefmt=LOGGING_TIMESTAMP_FORMAT,
   style="{",
 )
+
+
+ROOT = logging.getLogger()
+ROOT.setLevel(logging.DEBUG if __debug__ else logging.INFO)
+
+logging.setLogRecordFactory(FixedLogRecord)
+
+paramiko = logging.getLogger("paramiko")
+paramiko.setLevel(logging.WARNING)
+
+
+def configure_logging():
+  import atexit
+  from logging.handlers import QueueHandler, QueueListener
+
+  from rich.traceback import install
+
+  install(show_locals=True)
+
+  LOG_LOC_FOLDER.mkdir(exist_ok=True, parents=True)
+  SCHEDULER_LOG_LOC.mkdir(exist_ok=True, parents=True)
+
+  scheduler = logging.getLogger("apscheduler")
+  scheduler.propagate = False
+
+  debug_file_handler = CustomTimedRotatingFileHandler(DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
+  info_file_handler = CustomTimedRotatingFileHandler(INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
+  scheduler_debug_handler = CustomTimedRotatingFileHandler(APSCHEDULER_DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
+  scheduler_info_handler = CustomTimedRotatingFileHandler(APSCHEDULER_INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
+  console_info_handler = FixedRichHandler(
+    level=logging.DEBUG if __debug__ else logging.INFO,
+    show_time=platform == "win32",
+    console=RICH_CONSOLE,
+    rich_tracebacks=True,
+    log_time_format=LOGGING_TIMESTAMP_FORMAT,
+    # tracebacks_show_locals=True,
+  )
+
+  debug_file_handler.setLevel(logging.DEBUG)
+  info_file_handler.setLevel(logging.INFO)
+  console_info_handler.setLevel(logging.INFO)
+  scheduler_debug_handler.setLevel(logging.DEBUG)
+  scheduler_info_handler.setLevel(logging.INFO)
+
+  debug_file_handler.setFormatter(FILE_FORMATTER)
+  info_file_handler.setFormatter(FILE_FORMATTER)
+  scheduler_debug_handler.setFormatter(FILE_FORMATTER)
+  scheduler_info_handler.setFormatter(FILE_FORMATTER)
+
+  log_queue = Queue(-1)
+  scheduler_log_queue = Queue(-1)
+
+  queue_handler = QueueHandler(log_queue)
+  scheduler_queue_handler = QueueHandler(scheduler_log_queue)
+
+  queue_listener = QueueListener(
+    log_queue,
+    debug_file_handler,
+    info_file_handler,
+    respect_handler_level=True,
+  )
+  scheduler_queue_listener = QueueListener(
+    scheduler_log_queue,
+    scheduler_debug_handler,
+    scheduler_info_handler,
+    respect_handler_level=True,
+  )
+
+  ROOT.addHandler(queue_handler)
+  ROOT.addHandler(console_info_handler)
+  scheduler.addHandler(scheduler_queue_handler)
+
+  queue_listener.start()
+  scheduler_queue_listener.start()
+
+  atexit.register(queue_listener.stop)
+  atexit.register(scheduler_queue_listener.stop)
 
 
 def add_log_context[**TP, TR](
@@ -298,102 +374,3 @@ def add_log_context[**TP, TR](
     return add_log_context_wrapper
 
   return add_log_context_under
-
-
-LOGGING_BASE_NAME = "ScheduledInvoiceProcessor"
-
-
-DEBUG_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}_debug.txt"
-INFO_LOG_LOC = LOG_LOC_FOLDER / f"{LOGGING_BASE_NAME}.txt"
-
-SCHEDULER_LOG_LOC = LOG_LOC_FOLDER / "scheduler_logs"
-SCHEDULER_LOG_LOC.mkdir(exist_ok=True, parents=True)
-
-APSCHEDULER_DEBUG_LOG_LOC = SCHEDULER_LOG_LOC / "scheduler_debug.txt"
-APSCHEDULER_INFO_LOG_LOC = SCHEDULER_LOG_LOC / "scheduler.txt"
-
-
-LOGGING_TYPE: Literal["daily", "per_run"] = "daily"
-
-
-daily_debug_handler = CustomTimedRotatingFileHandler(DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
-daily_info_handler = CustomTimedRotatingFileHandler(INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
-
-per_run_debug_handler = RotatingFileHandler(DEBUG_LOG_LOC, maxBytes=0, backupCount=30, delay=True)
-per_run_info_handler = RotatingFileHandler(INFO_LOG_LOC, maxBytes=0, backupCount=30, delay=True)
-
-if LOGGING_TYPE == "per_run":
-  per_run_debug_handler.doRollover()
-  per_run_info_handler.doRollover()
-
-
-def configure_logging():
-  logging.setLogRecordFactory(FixedLogRecord)
-
-  paramiko = logging.getLogger("paramiko")
-  paramiko.setLevel(logging.WARNING)
-
-  scheduler = logging.getLogger("apscheduler")
-  scheduler.propagate = False
-
-  scheduler_log_queue = Queue(-1)
-
-  scheduler_queue_handler = QueueHandler(scheduler_log_queue)
-
-  scheduler_info_handler = CustomTimedRotatingFileHandler(APSCHEDULER_INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
-  scheduler_debug_handler = CustomTimedRotatingFileHandler(APSCHEDULER_DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
-  scheduler_info_handler.setLevel(logging.INFO)
-  scheduler_debug_handler.setLevel(logging.DEBUG)
-
-  scheduler_queue_listener = QueueListener(
-    scheduler_log_queue,
-    scheduler_debug_handler,
-    scheduler_info_handler,
-    respect_handler_level=True,
-  )
-
-  scheduler.addHandler(scheduler_queue_handler)
-
-  root = logging.getLogger()
-  root.setLevel(logging.DEBUG if __debug__ else logging.INFO)
-  # root.setLevel(logging.DEBUG)
-
-  debugging_file_handler = daily_debug_handler if LOGGING_TYPE == "daily" else per_run_debug_handler
-  debugging_file_handler.setLevel(logging.DEBUG)
-
-  info_file_handler = daily_info_handler if LOGGING_TYPE == "daily" else per_run_info_handler
-  info_file_handler.setLevel(logging.INFO)
-
-  console_info_handler = FixedRichHandler(
-    # level=logging.DEBUG if __debug__ else logging.INFO,
-    show_time=platform == "win32",
-    console=RICH_CONSOLE,
-    rich_tracebacks=True,
-    log_time_format=LOGGING_TIMESTAMP_FORMAT,
-    # tracebacks_show_locals=True,
-  )
-
-  console_info_handler.setLevel(logging.INFO)
-
-  debugging_file_handler.setFormatter(FILE_FORMATTER)
-  info_file_handler.setFormatter(FILE_FORMATTER)
-
-  log_queue = Queue(-1)
-
-  queue_handler = QueueHandler(log_queue)
-
-  queue_listener = QueueListener(
-    log_queue,
-    debugging_file_handler,
-    info_file_handler,
-    respect_handler_level=True,
-  )
-
-  root.addHandler(queue_handler)
-  root.addHandler(console_info_handler)
-
-  queue_listener.start()
-  scheduler_queue_listener.start()
-
-  atexit.register(queue_listener.stop)
-  atexit.register(scheduler_queue_listener.stop)

@@ -5,7 +5,6 @@ services:
       dockerfile: Dockerfile
     container_name: scheduled-invoice-processor
     restart: no
-    # image: jogdensft/scheduledordermiddleman-scheduler:latest
     expose:
       - "8080"
 
@@ -27,21 +26,9 @@ services:
       - type: bind
         source: /data/scheduled_invoice_processor_files
         target: /app/persisted_data
-      # - type: bind
-      #   source: /data/scheduler_files/secrets
-      #   target: /app/secrets
-      # - type: bind
-      #   source: /data/scheduler_files/logs
-      #   target: /app/src/logs
-      # - type: bind
-      #   source: /data/scheduler_files/queue_backups
-      #   target: /app/src/queue_backups
 
       # Environment variables (customize as needed)
     environment:
-      # - TZ=America/New_York
-      # Tell the program where to expect persisted data
-      - PERSISTED_DIR_LOC=/app/persisted_data
       # Database configuration (from production.env - optional overrides)
       # Uncomment and modify these to override production.env values
       - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
