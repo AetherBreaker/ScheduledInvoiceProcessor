@@ -1,8 +1,5 @@
 # syntax=docker/dockerfile:1
 
-
-
-
 # Use a Python image with uv pre-installed
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
 
