@@ -915,7 +915,7 @@ wheels = [
 ]
 
 [[package]]
-name = "scheduledordermiddleman"
+name = "scheduledinvoiceprocessor"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
@@ -930,7 +930,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dateutil" },
-    { name = "python-dotenv" },
     { name = "rich" },
     { name = "types-python-dateutil" },
     { name = "tzdata" },
@@ -951,7 +950,6 @@ requires-dist = [
     { name = "pydantic", specifier = "==2.*" },
     { name = "pydantic-settings", specifier = "==2.*" },
     { name = "python-dateutil", specifier = "==2.9.*" },
-    { name = "python-dotenv", specifier = "==1.*" },
     { name = "rich", specifier = "==14.*" },
     { name = "types-python-dateutil", specifier = "==2.9.*" },
     { name = "tzdata", specifier = ">=2025.3" },
