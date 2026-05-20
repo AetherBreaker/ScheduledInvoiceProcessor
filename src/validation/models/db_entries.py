@@ -107,7 +107,7 @@ def init_generic_datetime_str(dt: str) -> datetime:
 class OrderLogDBEntryModel(CustomBaseModel):
   supplier: SuppliersEnum | None
   store: StoreNum | None
-  invoice_number: InvoiceNum | None
+  invoice_number: InvoiceNum | None = None
   customer: CustomerID | None
   action: LogActionEnum | None
   status: StatusCode | None
