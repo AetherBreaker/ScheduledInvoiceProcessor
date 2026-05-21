@@ -328,6 +328,7 @@ class RYOProcessor(SupplierProcessorBase):
         body_lines.extend(f.readlines())
 
     invoice_nums = []
+    header_invoiced_dates = []
     found_values: dict[str, Any] = {
       "customer_num": None,
       "po_num": None,
@@ -340,8 +341,11 @@ class RYOProcessor(SupplierProcessorBase):
         found_values["customer_num"] = first_line_attrs["customer_num"]
       if found_values["po_num"] is None and first_line_attrs["po_num"] not in [None, ""]:
         found_values["po_num"] = first_line_attrs["po_num"]
-      if found_values["invoice_date"] is None and first_line_attrs["invoice_date"] not in [None, ""]:
-        found_values["invoice_date"] = first_line_attrs["invoice_date"]
+      if first_line_attrs["invoice_date"] is not None and first_line_attrs["invoice_date"] != "":
+        # 05/20/2026 11:44:55 AM
+        header_invoiced_dates.append(datetime.strptime(first_line_attrs["invoice_date"], "%m/%d/%Y %I:%M:%S %p"))
+
+    found_values["invoice_date"] = min(header_invoiced_dates).strftime("%m/%d/%Y %I:%M:%S %p") if header_invoiced_dates else "unknown"
 
     invoice_num_result = "-".join(invoice_nums)
     header_result = self.header_format.format(**found_values, invoice_num=invoice_num_result).encode()
