@@ -16,7 +16,7 @@ from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
 from suppliers import SupplierProcessorBase
 from suppliers.file_register_data import FileRegisterData
-from suppliers.ftp_adapter import CoremarkFTPClient, FTPAdapter
+from suppliers.ftp_adapter import AdaptedFTP, CoremarkFTPClient, FTPAdapter
 from suppliers.log_action import log_actions
 
 if TYPE_CHECKING:
@@ -29,14 +29,14 @@ if TYPE_CHECKING:
   from rich_custom import ProgressCustom
   from typing_custom import CustomerID, SupplierQueueKey
 
-  from suppliers.ftp_adapter import AdaptedSFTP
+  from suppliers.ftp_adapter import AdaptedFTP
   from suppliers.log_action import LogActionHandlerType
 
 logger = getLogger(__name__)
 
 
 class CoremarkProcessor(SupplierProcessorBase):
-  vendor_ftp: FTPAdapter[AdaptedSFTP] = FTPAdapter(CoremarkFTPClient, container_cls="CoremarkProcessor")
+  vendor_ftp: FTPAdapter[AdaptedFTP] = FTPAdapter(CoremarkFTPClient, container_cls="CoremarkProcessor")
 
   queue_backup_prefix: str = "coremark"
 
