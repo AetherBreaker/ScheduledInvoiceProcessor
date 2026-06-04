@@ -5,7 +5,7 @@ from datetime import datetime
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from aiohttp.web import Application, AppRunner, TCPSite
+from aiohttp.web import Application, AppRunner, FileResponse, Request, TCPSite
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
 from database.cache import DatabaseCache
@@ -340,7 +340,11 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
     scheduler.print_jobs()
 
     app = Application()
-    app.router.add_static("/", LOG_LOC_FOLDER, show_index=True, follow_symlinks=True, append_version=True)
+
+    async def favicon(request: Request):
+      return FileResponse(FAVICON_PATH)
+
+    app.router.add_get("/favicon.ico", favicon)
     runner = AppRunner(app)
     await runner.setup()
     site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
