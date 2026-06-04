@@ -1,44 +1,45 @@
-from __future__ import annotations
-
+# Standard library imports
 from asyncio import gather, to_thread
-from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime
 from errno import EACCES
 from ftplib import all_errors
 from io import BytesIO
 from logging import getLogger
-from socket import timeout as SocketTimeout
 from time import sleep
 from typing import TYPE_CHECKING, cast
 
+# Third party imports
 from aiologic import Lock
-from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, SU, relativedelta
-from environment_init_vars import SETTINGS
-from logging_config import LOG_LOC_FOLDER, add_log_context
 from paramiko import SSHException
 from pydantic import TypeAdapter
-from send_alert_email import send_alert_email
+
+# First party imports
+from database.cache import DatabaseCache
+from environment_init_vars import SETTINGS
+from ftp_configs import FTPAdapter, SFTFTPClient
+from logging_config import add_log_context
+from sft_ext.errors.send_alert_email import send_alert_email
+from suppliers.file_register_data import FileRegisterData
+from suppliers.log_action import log_actions
 from typing_custom.abc import SingletonType
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import LogActionEnum, StatusCode
 
-from suppliers.file_register_data import FileRegisterData
-from suppliers.ftp_adapter import FTPAdapter, SFTFTPClient
-from suppliers.log_action import log_actions
-
 if TYPE_CHECKING:
+  # Standard library imports
+  from sft_ext.ftp.adapter import AdaptedFTP
+  from contextvars import ContextVar
   from logging import LoggerAdapter
   from pathlib import Path, PurePosixPath
   from re import Match, Pattern
 
-  from rich_custom import CustomTaskID, ProgressCustom
+  # First party imports
+  from sft_ext.rich.progress import Progress, TaskID
+  from suppliers.log_action import LogActionHandlerType
   from typing_custom import CustomerID, StoreNum, SupplierQueueKey
   from typing_custom.enums import SuppliersEnum
-
-  from suppliers.ftp_adapter import AdaptedFTP
-  from suppliers.log_action import LogActionHandlerType
 
 logger = getLogger(__name__)
 TRANSIENT_TRANSFER_ERROR_STRINGS = (
@@ -87,13 +88,13 @@ class SupplierProcessorBase(metaclass=SingletonType):
   local_post_processing_folder: Path
 
   identifier_prefix: str = ""
-  log_file_loc: Path = LOG_LOC_FOLDER
+  log_file_loc: Path = SETTINGS.log_loc_folder
   ctx_var_identifier: ContextVar[str | None]
   ctx_var_log_loc: ContextVar[Path | None]
 
   errored: bool
 
-  def __init__(self, pbar: ProgressCustom = None) -> None:
+  def __init__(self, pbar: Progress = None) -> None:
     self._file_pickup_queue = {}
     self._file_preprocess_queue = {}
     self._file_waiting_queue = {}
@@ -117,7 +118,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self.preprocess_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_preprocess_queue.json"
 
-    self.pbar = cast("ProgressCustom", pbar)
+    self.pbar = cast("Progress", pbar)
 
     self._load_queue_backups()
 
@@ -271,7 +272,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     return changed_entries
 
   def _quarantine_corrupted_queue_backup(self, backup_file: Path, raw_backup: str) -> Path:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(tz=SETTINGS.tz).strftime("%Y%m%d_%H%M%S")
     quarantined_file = self._corrupted_queue_backup_folder / f"{backup_file.stem}_{timestamp}{backup_file.suffix}"
     quarantined_file.write_text(raw_backup)
     return quarantined_file
@@ -290,8 +291,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   async def register_pickup(
     self,
-    storenum: StoreNum,
-    customer_id: CustomerID,
+    storenum: "StoreNum",  # noqa: UP037
+    customer_id: "CustomerID",  # noqa: UP037
     pickup_date: datetime,
     dropoff_date: datetime,
     current_week: bool = True,
@@ -304,7 +305,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
     await self._register_pickup(storenum, customer_id, pickup_date, dropoff_date, current_week)
 
   async def register_dropoff(
-    self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime, dropoff_date: datetime, current_week: bool
+    self,
+    storenum: "StoreNum",  # noqa: UP037
+    customer_id: "CustomerID",  # noqa: UP037
+    pickup_date: datetime,
+    dropoff_date: datetime,
+    current_week: bool,
   ) -> None:
     if self.errored:
       logger.warning(
@@ -455,7 +461,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     self,
     send_path: PurePosixPath,
     recv_path: PurePosixPath,
-    move_files_task: CustomTaskID,
+    move_files_task: TaskID,
     file_meta: FileRegisterData,
     idx: int,
     key: str,
@@ -487,15 +493,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
         # update items to log with result of transfer and pickup success status
         getattr(file_meta, success_attr)[idx] = success
-        if log_action_handler is not None:
-          log_action_handler(key, result, file_meta)
 
         local_logger.info(
           f"{self.__class__.__name__}: Transferred {self.supplier_name} [yellow]{send_path}[/] to SFT FTP [yellow]{recv_path}[/]",
           extra={"markup": True},
         )
         self.extract_invoice_num(transient_file, file_meta, idx, adapted_logger=adapted_logger)
-        self.pbar.update(move_files_task, advance=1)
+        if log_action_handler is not None:
+          log_action_handler(key, result, file_meta)
+        self.pbar.update(move_files_task, advance=1, refresh=True)
         return success
       except Exception as e:
         if self._is_transient_transfer_error(e) and attempt <= self._transient_transfer_retries:
@@ -517,7 +523,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def _is_transient_transfer_error(self, exc: BaseException) -> bool:
     if isinstance(
       exc,
-      (TimeoutError, SocketTimeout, ConnectionError, BrokenPipeError, EOFError, SSHException),
+      (TimeoutError, ConnectionError, BrokenPipeError, EOFError, SSHException),
     ):
       return True
 
@@ -547,13 +553,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
             f"{self.__class__.__name__}: Failed to extract invoice number from file for {file_meta.storenum} using pattern {self.invoice_num_pattern.pattern}"
           )
     except Exception as e:
-      local_logger.error(f"{self.__class__.__name__}: Error extracting invoice number for {file_meta.storenum}: {e}")
+      local_logger.error(f"{self.__class__.__name__}: Error extracting invoice number for {file_meta.storenum}", exc_info=e)
+      pass
 
   def _transfer_file_main_to_main(
     self,
     send_path: PurePosixPath,
     recv_path: PurePosixPath,
-    move_files_task: CustomTaskID,
+    move_files_task: TaskID,
     file_meta: FileRegisterData,
     idx: int,
     key: str,
@@ -580,11 +587,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
             f"{self.__class__.__name__}: Moved [yellow]{send_path}[/] to [yellow]{recv_path}[/]", extra={"markup": True}
           )
         except (*all_errors, OSError) as e:
-          local_logger.warning(f"{self.__class__.__name__}: Failed to verify move of {send_path.name}: {e}")
+          local_logger.warning(f"{self.__class__.__name__}: Failed to verify move of {send_path.name}", exc_info=e)
           result = StatusCode.FAILURE
         getattr(file_meta, success_attr)[idx] = success
 
-      self.pbar.update(move_files_task, advance=1)
+      self.pbar.update(move_files_task, advance=1, refresh=True)
       if log_action_handler is not None:
         log_action_handler(key, result, file_meta)
     # Ensure that exceptions actually get logged while executing off main thread
@@ -605,8 +612,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
   async def _register_pickup(
     self,
-    storenum: StoreNum,
-    customer_id: CustomerID,
+    storenum: "StoreNum",  # noqa: UP037
+    customer_id: "CustomerID",  # noqa: UP037
     pickup_date: datetime,
     dropoff_date: datetime,
     current_week: bool = True,
@@ -684,8 +691,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF)
   async def _register_dropoff(
     self,
-    storenum: StoreNum,
-    customer_id: CustomerID,
+    storenum: "StoreNum",  # noqa: UP037
+    customer_id: "CustomerID",  # noqa: UP037
     pickup_date: datetime,
     dropoff_date: datetime,
     current_week: bool,
@@ -861,7 +868,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     except FileNotFoundError as e:
       local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving", exc_info=e)
     # Ensure that exceptions actually get logged while executing off main thread
-    except IOError as e:
+    except OSError as e:
       if e.args and e.args[0] is EACCES:
         local_logger.error(f"{self.__class__.__name__}: Permission denied archiving file {remote_file} at {source_folder}", exc_info=e)
       else:
@@ -874,7 +881,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)
-  async def _pickup_files(
+  async def _pickup_files(  # noqa: C901, PLR0912
     self,
     adapted_logger: LoggerAdapter | None = None,
     log_action_handler: LogActionHandlerType | None = None,

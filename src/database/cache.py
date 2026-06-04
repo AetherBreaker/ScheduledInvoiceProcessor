@@ -1,25 +1,27 @@
-from __future__ import annotations
-
+# Standard library imports
 from asyncio import get_running_loop, sleep, to_thread
+from collections.abc import Sequence
 from contextlib import suppress
 from copy import deepcopy
-from datetime import datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, cast, overload
 
+# Third party imports
 from aiologic import Lock
 from aiorwlock import RWLock
 from dateutil.relativedelta import SA, relativedelta
-from environment_init_vars import SETTINGS
 from google.oauth2.service_account import Credentials
 from gspread import Client, authorize
 from gspread.http_client import BackOffHTTPClient
 from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption, finditem
 from pandas import Series, to_numeric
+
+# First party imports
+from environment_init_vars import SETTINGS
+from sft_ext.utils import today
 from typing_custom import AppendDimension, BatchUpdateBody, ValueRange, ValuesBatchUpdateBody
 from typing_custom.abc import SingletonType
 from typing_custom.dataframe_column_names import DatabaseOrderLogColumns, DatabaseScheduleColumns
-from utils import today
 from validation.apply_model import build_typed_dataframe
 from validation.models.db_entries import (
   ORDER_LOG_TYPE_ADAPTERS,
@@ -29,11 +31,17 @@ from validation.models.db_entries import (
 )
 
 if TYPE_CHECKING:
-  from collections.abc import AsyncIterator, Sequence
+  # Standard library imports
+  from collections.abc import AsyncIterator
+  from datetime import datetime
+  from types import TracebackType
   from typing import Any, Literal
 
+  # Third party imports
   from pandas import DataFrame
   from pydantic import TypeAdapter
+
+  # First party imports
   from typing_custom import CustomerID, InvoiceNum, Request, StoreNum
   from typing_custom.dataframe_column_names import ColNameEnum, DatabaseOrderLogIndex, DatabaseScheduleIndex  # noqa: F401
   from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
@@ -87,9 +95,9 @@ class DatabaseCache(metaclass=SingletonType):
   reauth_interval = 2700
   api_call_min_interval = 1.1
 
-  schedule: "CacheViewSchedule"
-  prev_week_schedule: "CacheViewSchedule"
-  order_log: "CacheViewOrderLog"
+  schedule: CacheViewSchedule
+  prev_week_schedule: CacheViewSchedule
+  order_log: CacheViewOrderLog
 
   def __init__(self) -> None:
     self.schedule: CacheViewSchedule
@@ -150,7 +158,7 @@ class DatabaseCache(metaclass=SingletonType):
 
   @property
   def get_week_ending_name(self) -> str:
-    last_saturday = today() + relativedelta(weekday=SA(-2))
+    last_saturday = today(tzinfo=SETTINGS.tz) + relativedelta(weekday=SA(-2))
     return f"Week Ending {last_saturday.year:0>4}/{last_saturday.month:0>2}/{last_saturday.day:0>2}"
 
   async def queue_db_api_values_raw_update(self, value: ValueRange) -> None:
@@ -436,7 +444,9 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     await self._core._read_write_lock.reader_lock.acquire()
     return self._cache
 
-  async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+  async def __aexit__(
+    self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None
+  ) -> None:
     self._core._read_write_lock.reader_lock.release()
 
   async def read_typed_row(self, index: IndexT, re_validate: bool = False) -> ModelT:
@@ -485,7 +495,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
 
     return row_number
 
-  async def write_value(self, index: IndexT, column, value: Any, ta: TypeAdapter) -> None:
+  async def write_value(self, index: IndexT, column: ColsT, value: Any, ta: TypeAdapter) -> None:
     row_number = await self.get_rownum(index)
 
     value = ta.dump_python(value)
@@ -539,6 +549,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
   async def append_row(self, values: ModelT, raw: bool = True) -> None:
     if self._sheet_id is None:
       raise RuntimeError("This cache view does not support appending rows")
+    assert len(self._cache_index) > 0, "Cache view must have at least one column in index to append rows"
     index = (
       tuple(getattr(values, col) for col in self._cache_index) if len(self._cache_index) > 1 else getattr(values, self._cache_index[0])
     )
@@ -549,7 +560,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     async with self._core._read_write_lock.writer_lock:
       self._cache.loc[index, :] = row
 
-    row_number = await self.get_rownum(cast(IndexT, index))
+    row_number = await self.get_rownum(cast("IndexT", index))
     row_number += 2  # add one to account for gsheets header
 
     # get column index

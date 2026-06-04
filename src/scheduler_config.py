@@ -1,9 +1,11 @@
-from __future__ import annotations
-
-from datetime import timedelta, timezone
+# Standard library imports
+from datetime import timedelta
 from logging import getLogger
 from re import compile
+from typing import TYPE_CHECKING, TextIO
+from zoneinfo import ZoneInfo
 
+# Third party imports
 import apscheduler.executors.base as exec_base
 from apscheduler.events import EVENT_JOB_ADDED, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED, JobEvent, JobExecutionEvent
 from apscheduler.executors.asyncio import AsyncIOExecutor
@@ -12,9 +14,21 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.schedulers.base import STATE_RUNNING, STATE_STOPPED
 from apscheduler.util import iscoroutinefunction_partial
-from environment_init_vars import TZ
-from err_handling import handle_fatal_exc
-from utils import get_now
+
+# First party imports
+from environment_init_vars import SETTINGS
+from err_handling import extract_exc_details
+from sft_ext.errors.err_handling import handle_fatal_exc_sync
+from sft_ext.utils import get_now
+
+if TYPE_CHECKING:
+  # Standard library imports
+  from concurrent.futures import Future
+  from datetime import datetime
+
+  # Third party imports
+  from apscheduler.job import Job
+
 
 logger = getLogger(__name__)
 
@@ -27,7 +41,7 @@ DO_NOT_LOG_PATTERNS = [
 ]
 
 
-def run_job(job, jobstore_alias, run_times, logger_name):
+def run_job(job: Job, jobstore_alias: str, run_times: list[datetime], logger_name: str):
   """
   Called by executors to run the job. Returns a list of scheduler events to be dispatched by the
   scheduler.
@@ -39,7 +53,7 @@ def run_job(job, jobstore_alias, run_times, logger_name):
     # See if the job missed its run time window, and handle
     # possible misfires accordingly
     if job.misfire_grace_time is not None:
-      now = get_now(timezone.utc)
+      now = get_now(ZoneInfo("UTC"))
 
       difference = now - run_time
       grace_time = timedelta(seconds=job.misfire_grace_time)
@@ -64,14 +78,14 @@ def run_job(job, jobstore_alias, run_times, logger_name):
   return events
 
 
-async def run_coroutine_job(job, jobstore_alias, run_times, logger_name):
+async def run_coroutine_job(job: Job, jobstore_alias: str, run_times: list[datetime], logger_name: str):
   """Coroutine version of run_job()."""
   events = []
   local_logger = getLogger(logger_name)
   for run_time in run_times:
     # See if the job missed its run time window, and handle possible misfires accordingly
     if job.misfire_grace_time is not None:
-      now = get_now(timezone.utc)
+      now = get_now(ZoneInfo("UTC"))
 
       difference = now - run_time
       grace_time = timedelta(seconds=job.misfire_grace_time)
@@ -101,9 +115,9 @@ exec_base.run_coroutine_job = run_coroutine_job
 
 
 class CustomAsyncIOExecutor(AsyncIOExecutor):
-  def _do_submit_job(self, job, run_times):
-    @handle_fatal_exc
-    def callback(f):
+  def _do_submit_job(self, job: Job, run_times: list[datetime]):
+    @handle_fatal_exc_sync(extract_details_callable=extract_exc_details)
+    def callback(f: Future):
       self._pending_futures.discard(f)
       # try:
       events = f.result()
@@ -125,7 +139,7 @@ class CustomAsyncIOExecutor(AsyncIOExecutor):
 
 class OrderProcessingScheduler(AsyncIOScheduler):
   @classmethod
-  def init_scheduler(cls) -> "OrderProcessingScheduler":
+  def init_scheduler(cls) -> OrderProcessingScheduler:
     # engine = create_engine(r"sqlite:///scheduler.db")
 
     job_stores = {
@@ -148,10 +162,10 @@ class OrderProcessingScheduler(AsyncIOScheduler):
       jobstores=job_stores,
       job_defaults=job_defaults,
       daemon=False,
-      timezone=TZ,
+      timezone=SETTINGS.tz,
     )
 
-  def _real_add_job(self, job, jobstore_alias, replace_existing):
+  def _real_add_job(self, job: Job, jobstore_alias: str, replace_existing: bool):
     """
     :param Job job: the job to add
     :param bool replace_existing: ``True`` to use update_job() in case the job already exists
@@ -191,7 +205,7 @@ class OrderProcessingScheduler(AsyncIOScheduler):
     if self.state == STATE_RUNNING:
       self.wakeup()
 
-  def print_jobs(self, jobstore=None, out=None):
+  def print_jobs(self, jobstore: str | None = None, out: TextIO | None = None):
     """
     print_jobs(jobstore=None, out=sys.stdout)
 

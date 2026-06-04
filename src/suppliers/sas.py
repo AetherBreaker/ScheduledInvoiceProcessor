@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+# Standard library imports
 from contextvars import ContextVar
 from datetime import datetime
 from json import loads
@@ -8,21 +7,24 @@ from pathlib import PurePosixPath
 from re import compile
 from typing import TYPE_CHECKING
 
+# Third party imports
 from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
+
+# First party imports
 from environment_init_vars import CWD, SETTINGS
+from ftp_configs import FTPAdapter, SASSFTPClient
+from suppliers import SupplierProcessorBase
 from typing_custom.enums import SuppliersEnum
 
-from suppliers import SupplierProcessorBase
-from suppliers.ftp_adapter import FTPAdapter, SASSFTPClient
-
 if TYPE_CHECKING:
+  # Standard library imports
   from re import Pattern
 
-  from rich_custom import ProgressCustom
+  # First party imports
+  from ftp_configs import AdaptedSFTP
+  from sft_ext.rich.progress import Progress
   from typing_custom import CustomerID
-
-  from suppliers.ftp_adapter import AdaptedSFTP
 
 logger = getLogger(__name__)
 
@@ -62,7 +64,7 @@ class SASProcessor(SupplierProcessorBase):
   ctx_var_identifier = ContextVar("sas_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
 
-  def __init__(self, pbar: ProgressCustom = None) -> None:
+  def __init__(self, pbar: Progress = None) -> None:
     if pbar is not None:
       self.vendor_ftp.pbar = pbar
     super().__init__(pbar)
@@ -117,15 +119,18 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 
 async def main():
+  # Third party imports
+  from rich import get_console
+
+  # First party imports
   from database.cache import DatabaseCache
-  from logging_config import RICH_CONSOLE
-  from rich_custom import ProgressCustom
+  from sft_ext.rich.progress import Progress
 
   cache = DatabaseCache()
   await cache.refresh_cache()
-  now = datetime.now()
+  now = datetime.now(SETTINGS.tz)
 
-  with ProgressCustom(refresh_per_second=10, console=RICH_CONSOLE) as pbar:
+  with Progress(console=get_console(), auto_refresh=False) as pbar:
     sas = SASProcessor(pbar)
     orders = []
 
@@ -167,6 +172,7 @@ async def main():
 
 
 if __name__ == "__main__":
+  # Standard library imports
   from asyncio import run
 
   run(main())

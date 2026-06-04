@@ -1,9 +1,9 @@
-from __future__ import annotations
-
+# Standard library imports
 from enum import StrEnum, auto
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+  # Standard library imports
   from typing import Any
 
 
@@ -13,7 +13,7 @@ class CustomStrEnum(StrEnum):
   """
 
   @staticmethod
-  def _generate_next_value_(name, start, count, last_values) -> Any:
+  def _generate_next_value_(name: str, start: int, count: int, last_values: list) -> Any:
     """
     Return the member name.
     """

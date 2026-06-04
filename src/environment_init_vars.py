@@ -1,12 +1,9 @@
-from __future__ import annotations
-
+# Standard library imports
 import os
-import sys
 from logging import getLogger
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
-from aiologic import Event
+# First party imports
 from environment_settings import Settings
 
 logger = getLogger(__name__)
@@ -21,11 +18,6 @@ SETTINGS = Settings.model_validate({})
 # Folder paths
 CWD = Path.cwd()
 
-SPEC_CWD = Path(__file__).parent if getattr(sys, "frozen", False) else Path.cwd()
-
-FATAL_EVENT = Event()
-
-TZ = ZoneInfo("US/Eastern")
 
 HOST_NAME = (
   f"{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}"

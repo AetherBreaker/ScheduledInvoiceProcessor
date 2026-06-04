@@ -1,12 +1,13 @@
-from __future__ import annotations
-
+# Standard library imports
 from logging import getLogger
 from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
+  # Standard library imports
   from collections.abc import Mapping, Sequence
   from typing import Any, NotRequired
 
+  # Third party imports
   from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption
 
 logger = getLogger(__name__)

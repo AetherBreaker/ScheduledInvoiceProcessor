@@ -1,28 +1,58 @@
-from __future__ import annotations
+if __name__ == "__main__":
+  # Standard library imports
+  from sys import platform
 
+  # Third party imports
+  from rich.console import Console
+
+  # First party imports
+  from sft_ext.logging.init_logging import init_logging
+
+  RICH_CONSOLE = Console(
+    width=None if platform == "win32" else 165,
+    log_time=platform == "win32",
+  )
+  PROJECT_NAME = "ScheduledInvoiceProcessor"
+  LOGGING_TYPE = "daily"
+  DEFAULT_MAX_WIDTH = 36
+
+  init_logging()
+else:
+  # Third party imports
+  from rich import get_console
+
+  RICH_CONSOLE = get_console()
+
+# Standard library imports
+import sys
 from asyncio import run, sleep
 from datetime import datetime
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+# Third party imports
 from aiohttp.web import Application, AppRunner, FileResponse, Request, TCPSite
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
-from database.cache import DatabaseCache
 from dateutil.relativedelta import SA, relativedelta
-from environment_init_vars import FATAL_EVENT, SETTINGS
+
+# First party imports
+from database.cache import DatabaseCache
+from environment_init_vars import CWD, SETTINGS
 from err_handling import get_last_fatal_details
-from logging_config import LOG_LOC_FOLDER, RICH_CONSOLE
-from rich_custom import ProgressCustom
 from scheduler_config import OrderProcessingScheduler
+from sft_ext.errors.err_handling import FATAL_EVENT
+from sft_ext.rich.progress import Progress
 from suppliers.ryo import RYOProcessor
 from suppliers.sas import SASProcessor
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import SuppliersEnum
 
 if TYPE_CHECKING:
+  # Standard library imports
   from typing import NoReturn
 
+  # First party imports
   from suppliers import SupplierProcessorBase
 
 logger = getLogger(__name__)
@@ -30,12 +60,12 @@ logger = getLogger(__name__)
 
 if not __debug__:
   # Heartbeat file for health checks
-  HEARTBEAT_FILE = LOG_LOC_FOLDER / "heartbeat.txt"
+  HEARTBEAT_FILE = SETTINGS.log_loc_folder / "heartbeat.txt"
 
   def write_heartbeat():
     """Write current timestamp to heartbeat file for health monitoring."""
     try:
-      HEARTBEAT_FILE.write_text(datetime.now().isoformat())
+      HEARTBEAT_FILE.write_text(datetime.now(tz=SETTINGS.tz).isoformat())
     except Exception as e:
       logger.error(f"Failed to write heartbeat: {e}")
 else:
@@ -58,7 +88,10 @@ supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
 scheduler = OrderProcessingScheduler.init_scheduler()
 
 
-async def bootstrap_runtime(pbar: ProgressCustom) -> DatabaseCache:
+FAVICON_PATH = CWD / "favicon.ico"
+
+
+async def bootstrap_runtime(pbar: Progress) -> DatabaseCache:
   try:
     cache = DatabaseCache()
   except Exception:
@@ -277,9 +310,9 @@ async def flip_week():
   scheduler.resume()
 
 
-async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
+async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block  # noqa: C901, PLR0912, PLR0915
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
-  with ProgressCustom(refresh_per_second=10, console=RICH_CONSOLE) as pbar:
+  with Progress(console=RICH_CONSOLE, auto_refresh=False) as pbar:
     cache = await bootstrap_runtime(pbar)
 
     scheduler.add_job(
@@ -345,6 +378,7 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
       return FileResponse(FAVICON_PATH)
 
     app.router.add_get("/favicon.ico", favicon)
+    app.router.add_static("/", SETTINGS.log_loc_folder, show_index=True, follow_symlinks=True, append_version=True)
     runner = AppRunner(app)
     await runner.setup()
     site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
@@ -352,6 +386,7 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
 
     if __debug__:
       # force run immediately for testing
+      # Standard library imports
       from asyncio import create_task, gather
 
       orders = [order async for order in cache.schedule.walk_typed_rows()]
@@ -435,7 +470,7 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
         except Exception as e:
           logger.error(f"Fatal shutdown: final Google Sheets flush failed: {e}", exc_info=True)
 
-      exit(1)
+      sys.exit(1)
 
   raise RuntimeError("How did we get here? The main function should never exit normally.")
 

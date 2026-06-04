@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from typing_custom.enums import CustomStrEnum, LogActionEnum, SuppliersEnum
 
@@ -14,9 +12,9 @@ logger = getLogger(__name__)
 
 
 class ColNameEnum(CustomStrEnum):
-  __exclude__: list[str] = []
-  __init_include__: list[str] = []
-  __index_items__: list[str] = []
+  __exclude__: ClassVar[list[str]] = []
+  __init_include__: ClassVar[list[str]] = []
+  __index_items__: ClassVar[list[str]] = []
 
   @classmethod
   def ordered_column_names(cls, *columns: str) -> list[str]:
@@ -59,7 +57,7 @@ class ColNameEnum(CustomStrEnum):
 
 
 class DatabaseScheduleColumns(ColNameEnum):
-  __index_items__ = ["supplier", "store"]
+  __index_items__: ClassVar[list[str]] = ["supplier", "store"]
 
   supplier = "supplier"
   store = "store"
@@ -77,7 +75,7 @@ type DatabaseScheduleIndex = tuple[SuppliersEnum, StoreNum]
 
 
 class DatabaseOrderLogColumns(ColNameEnum):
-  __index_items__ = ["supplier", "store", "invoice_number", "customer", "action", "status", "action_datetime"]
+  __index_items__: ClassVar[list[str]] = ["supplier", "store", "invoice_number", "customer", "action", "status", "action_datetime"]
 
   supplier = "supplier"
   store = "store"

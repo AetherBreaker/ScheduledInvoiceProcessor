@@ -1,18 +1,19 @@
-from __future__ import annotations
-
+# Standard library imports
 from datetime import datetime
 from inspect import get_annotations
 from logging import getLogger
 from re import compile
 from typing import Annotated, TypeAliasType
 
+# Third party imports
 from dateutil.relativedelta import FR, MO, SA, SU, TH, TU, WE, relativedelta
-from environment_init_vars import TZ
 from pydantic import BeforeValidator, TypeAdapter
-from typing_custom import CustomerID, InvoiceNum, StoreNum
-from typing_custom.enums import LogActionEnum, StateEnum, StatusCode, SuppliersEnum, WeekdayEnum
-from utils import today
 
+# First party imports
+from environment_init_vars import SETTINGS
+from sft_ext.utils import today
+from typing_custom import CustomerID, InvoiceNum, StoreNum  # noqa: TC001
+from typing_custom.enums import LogActionEnum, StateEnum, StatusCode, SuppliersEnum, WeekdayEnum  # noqa: TC001
 from validation import PYDANTIC_CONFIG, CustomBaseModel, CustomRootModel
 
 logger = getLogger(__name__)
@@ -22,7 +23,7 @@ BASE_TIMESTAMP = datetime(
   year=1899,
   month=12,
   day=30,
-  tzinfo=TZ,
+  tzinfo=SETTINGS.tz,
 )
 
 
@@ -39,14 +40,14 @@ weekday_lookup = {
 TIMESTAMP_PATTERN = compile(r"(?P<Weekday>\w*?) (?P<Hour>\d{1,2}):(?P<Minute>\d{2})(?P<Period>AM|PM)")
 
 
-def process_formatted_time_pattern_str(target_time) -> datetime:
+def process_formatted_time_pattern_str(target_time: str) -> datetime:
   if isinstance(target_time, (datetime, int, float)):
     raise ValueError("Expected a string for time pattern, got datetime")
   match = TIMESTAMP_PATTERN.match(target_time) if target_time else None
 
   if not match:
-    return target_time
-  now = today(tzinfo=TZ)
+    raise ValueError(f"Time string '{target_time}' does not match expected format 'Weekday HH:MM(AM/PM)'")
+  now = today(tzinfo=SETTINGS.tz)
 
   next_sunday = now + relativedelta(weekday=SU)
 
@@ -57,9 +58,9 @@ def process_formatted_time_pattern_str(target_time) -> datetime:
   hour = int(match.group("Hour"))
   period = match.group("Period")
   # Convert 12-hour format to 24-hour format
-  if period == "PM" and hour != 12:
+  if period == "PM" and hour != 12:  # noqa: PLR2004
     hour += 12
-  elif period == "AM" and hour == 12:
+  elif period == "AM" and hour == 12:  # noqa: PLR2004
     hour = 0
   minute = int(match.group("Minute"))
 
@@ -99,7 +100,7 @@ def init_generic_datetime_str(dt: str) -> datetime:
   if not isinstance(dt, str):
     raise ValueError("Expected a string for datetime initialization")
   try:
-    return datetime.strptime(dt, "%m/%d/%Y %H:%M:%S")
+    return datetime.strptime(dt, "%m/%d/%Y %H:%M:%S")  # noqa: DTZ007
   except ValueError as e:
     raise ValueError(f"Invalid datetime format: {dt}. Expected 'MM/DD/YYYY HH:MM:SS'") from e
 

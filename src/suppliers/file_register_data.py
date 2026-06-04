@@ -1,14 +1,16 @@
-from __future__ import annotations
-
+# Standard library imports
 from datetime import datetime
-from pathlib import Path, PurePosixPath
-from re import Pattern
+from pathlib import Path, PurePosixPath  # noqa: TC003
+from re import Pattern  # noqa: TC003
 
+# Third party imports
 from dateutil.relativedelta import SU, relativedelta
-from environment_init_vars import TZ
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass
-from typing_custom import CustomerID, StoreNum
+
+# First party imports
+from environment_init_vars import SETTINGS
+from typing_custom import CustomerID, StoreNum  # noqa: TC001
 
 
 @dataclass
@@ -39,7 +41,7 @@ class FileRegisterData:
   @property
   def current_week(self) -> bool:
     if self._current_week:
-      now = datetime.now(TZ)
+      now = datetime.now(SETTINGS.tz)
       window_start = self.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0)
       window_end = self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0)
 
@@ -56,4 +58,4 @@ class FileRegisterData:
 
   @property
   def stale(self) -> bool:
-    return datetime.now(TZ) > (self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0))
+    return datetime.now(SETTINGS.tz) > (self.dropoff_date + relativedelta(weekday=SU(+1), hour=0, minute=0, second=0))

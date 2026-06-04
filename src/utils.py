@@ -1,67 +1,12 @@
-from __future__ import annotations
-
-from datetime import datetime, timedelta
-from os import sep, walk
-from os.path import abspath, basename
+# Standard library imports
 from re import compile
 from typing import TYPE_CHECKING
 
-from dateutil.relativedelta import SA, relativedelta
-from dateutil.utils import today as _today
+# Third party imports
 from gspread import IncorrectCellLabel
 
 if TYPE_CHECKING:
   type IntOrInf = int | float
-  from pathlib import Path
-
-shift = timedelta()
-
-
-def today(tzinfo=None):
-  """
-  Returns a :py:class:`datetime` representing the current day at midnight
-
-  :param tzinfo:
-      The time zone to attach (also used to determine the current day).
-
-  :return:
-      A :py:class:`datetime.datetime` object representing the current day
-      at midnight.
-  """
-
-  result = _today(tzinfo=tzinfo)
-
-  result += shift
-
-  return result
-
-
-def get_now(tzinfo=None):
-  """
-  Returns a :py:class:`datetime` representing the current date and time
-
-  :param tzinfo:
-      The time zone to attach (also used to determine the current date and time).
-
-  :return:
-      A :py:class:`datetime.datetime` object representing the current date and time.
-  """
-
-  result = datetime.now(tz=tzinfo)
-
-  result += shift
-
-  return result
-
-
-def get_last_sat(dt: datetime | None = None, tzinfo=None):
-  now = get_now(tzinfo=tzinfo) if dt is None else dt
-  return now + relativedelta(weekday=SA(-1))
-
-
-def get_next_sat(dt: datetime | None = None, tzinfo=None):
-  now = get_now(tzinfo=tzinfo) if dt is None else dt
-  return now + relativedelta(weekday=SA(+1))
 
 
 R1C1_ADDR_ROW_COL_RE = compile(r"([rR](?P<rownum>[1-9]\d*))?([cC](?P<colnum>[1-9]\d*))?$")
@@ -122,17 +67,3 @@ def r1c1_range_to_grid_range(name: str, sheet_id: int | None = None) -> dict[str
     filtered_grid_range["sheetId"] = sheet_id
 
   return filtered_grid_range
-
-
-def print_directory_tree(root_dir: Path):
-  print(f"Current Working Directory: {abspath(root_dir)}")
-  for each_dir_path, each_dir_name, dir_files in walk(root_dir):
-    base = basename(each_dir_path)
-    if base in {".git", "__pycache__", "venv", "env", ".venv"}:
-      continue
-    level = each_dir_path.replace(str(root_dir), "").count(sep)
-    indent = " " * 4 * level
-    print(f"{indent}[{basename(each_dir_path)}/]")
-    sub_indent = " " * 4 * (level + 1)
-    for f in dir_files:
-      print(f"{sub_indent}{f}")

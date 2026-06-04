@@ -1,8 +1,5 @@
 [project]
-name = "scheduledinvoiceprocessor"
-version = "0.1.0"
-requires-python = ">=3.14"
-dependencies = [
+  dependencies = [
     "aiohttp==3.*",
     "aiologic==0.16.*",
     "aiorwlock==1.*",
@@ -10,13 +7,42 @@ dependencies = [
     "gspread==6.*",
     "pandas-stubs==3.*",
     "pandas[performance]==3.*",
-    "paramiko==4.*",
-    "pydantic==2.*",
+    "paramiko==5.*",
     "pydantic-settings==2.*",
+    "pydantic==2.*",
     "python-dateutil==2.9.*",
-    "rich==14.*",
+    "rich==15.*",
+    "sft-ext==0.5.2",
     "types-python-dateutil==2.9.*",
     "tzdata>=2025.3",
     "uvloop>=0.22.1 ; sys_platform == 'linux'",
     "winloop>=0.6.0 ; sys_platform == 'win32'",
-]
+  ]
+  name = "scheduledinvoiceprocessor"
+  requires-python = ">=3.14"
+  version = "0.1.0"
+
+
+[tool.uv]
+  environments = [
+    "sys_platform == 'linux'",
+    "sys_platform == 'win32'",
+  ]
+
+  [tool.uv.sources]
+    sft-ext = [
+      { git = "https://github.com/AetherBreaker/sft_ext", marker = "sys_platform == 'linux'", tag = "v0.5.2" },
+      { path = "D:\\SFT Software Projects\\sft_ext", editable = true, marker = "sys_platform == 'win32'" },
+    ]
+
+[tool.ruff]
+  extend = "../pyproject.toml"
+
+  src = [
+    "./src",
+  ]
+
+[dependency-groups]
+  dev = [
+    "mypy>=2.1.0",
+  ]

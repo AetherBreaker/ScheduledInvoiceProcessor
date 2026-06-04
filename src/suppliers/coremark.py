@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+# Standard library imports
 from asyncio import as_completed, to_thread
 from contextvars import ContextVar
 from datetime import datetime
@@ -10,27 +9,28 @@ from pathlib import PurePosixPath
 from re import compile
 from typing import TYPE_CHECKING
 
+# First party imports
 from environment_init_vars import CWD, SETTINGS
+from ftp_configs import AdaptedFTP, CoremarkFTPClient, FTPAdapter
 from logging_config import add_log_context
-from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
-
 from suppliers import SupplierProcessorBase
 from suppliers.file_register_data import FileRegisterData
-from suppliers.ftp_adapter import AdaptedFTP, CoremarkFTPClient, FTPAdapter
 from suppliers.log_action import log_actions
+from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
 if TYPE_CHECKING:
+  # Standard library imports
   from collections.abc import Coroutine
   from logging import LoggerAdapter
   from pathlib import Path
   from re import Pattern
   from typing import Any
 
-  from rich_custom import ProgressCustom
-  from typing_custom import CustomerID, SupplierQueueKey
-
-  from suppliers.ftp_adapter import AdaptedFTP
+  # First party imports
+  from ftp_configs import AdaptedFTP
+  from sft_ext.rich.progress import Progress
   from suppliers.log_action import LogActionHandlerType
+  from typing_custom import CustomerID, SupplierQueueKey
 
 logger = getLogger(__name__)
 
@@ -71,7 +71,7 @@ class CoremarkProcessor(SupplierProcessorBase):
   ctx_var_identifier = ContextVar("coremark_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("coremark_log_loc", default=log_file_loc)
 
-  def __init__(self, pbar: ProgressCustom = None) -> None:
+  def __init__(self, pbar: Progress = None) -> None:
     if pbar is not None:
       self.vendor_ftp.pbar = pbar
     super().__init__(pbar)
@@ -87,7 +87,7 @@ class CoremarkProcessor(SupplierProcessorBase):
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
-  async def _preprocess_files(
+  async def _preprocess_files(  # noqa: C901
     self,
     adapted_logger: LoggerAdapter | None = None,
     log_action_handler: LogActionHandlerType | None = None,
@@ -133,7 +133,7 @@ class CoremarkProcessor(SupplierProcessorBase):
 
             if log_action_handler is not None:
               log_action_handler(key, StatusCode.SUCCESS, file_meta)
-            self.pbar.update(files_preprocessing_task, advance=1)
+            self.pbar.update(files_preprocessing_task, advance=1, refresh=True)
 
           except Exception as e:
             matched_results = [k for k, v in futures.items() if result is v]
@@ -164,7 +164,7 @@ class CoremarkProcessor(SupplierProcessorBase):
       # Create the merged filed
       new_file_meta = self._create_new_merged_file(key, old_file_meta, adapted_logger)
       local_logger.info(
-        f"{self.__class__.__name__}: {key}: Created merged file at location [yellow]{new_file_meta.local_copy_loc[0].without_cwd}[/]",
+        f"{self.__class__.__name__}: {key}: Created merged file at location [yellow]{new_file_meta.local_copy_loc[0].without_cwd()}[/]",
         extra={"markup": True},
       )
 
@@ -188,9 +188,11 @@ class CoremarkProcessor(SupplierProcessorBase):
       for local_file_loc in old_file_meta.local_copy_loc.values():
         try:
           local_file_loc.unlink()
-          local_logger.info(f"{self.__class__.__name__}: {key}: Deleted local file {local_file_loc.without_cwd}")
+          local_logger.info(f"{self.__class__.__name__}: {key}: Deleted local file {local_file_loc.without_cwd()}")
         except Exception as e:
-          local_logger.error(f"{self.__class__.__name__}: {key}: Failed to delete local file {local_file_loc.without_cwd}", exc_info=e)
+          local_logger.error(
+            f"{self.__class__.__name__}: {key}: Failed to delete local file {local_file_loc.without_cwd()}", exc_info=e
+          )
 
       # Uploaded the new file to the remote waiting folder, replacing the old invoice files.
       for new_file_loc in new_file_meta.local_copy_loc.values():
@@ -204,9 +206,9 @@ class CoremarkProcessor(SupplierProcessorBase):
 
         try:
           new_file_loc.unlink()
-          local_logger.info(f"{self.__class__.__name__}: {key}: Deleted local merged file {new_file_loc.without_cwd}")
+          local_logger.info(f"{self.__class__.__name__}: {key}: Deleted local merged file {new_file_loc.without_cwd()}")
         except Exception as e:
-          local_logger.error(f"{self.__class__.__name__}: {key}: Failed to delete local merged file {new_file_loc.without_cwd}: {e}")
+          local_logger.error(f"{self.__class__.__name__}: {key}: Failed to delete local merged file {new_file_loc.without_cwd()}: {e}")
 
       # return the new file meta and queue key to be updated in the logging list
       return key, new_file_meta
@@ -214,21 +216,23 @@ class CoremarkProcessor(SupplierProcessorBase):
       logger.error(f"{self.__class__.__name__}: {key}: Unexpected error in preprocessing off thread: {e}")
       raise e
 
-  def _create_new_merged_file(
+  def _create_new_merged_file(  # noqa: C901
     self, key: SupplierQueueKey, old_file_meta: FileRegisterData, adapted_logger: LoggerAdapter | None = None
   ) -> FileRegisterData:
     local_logger = adapted_logger or logger
     original_invoice_files: list[Path] = []
 
     with self.waiting_ftp.start_session() as waiting_client:
-      for remote_file_loc, local_file_loc in zip(old_file_meta.remote_file_locs.values(), old_file_meta.local_copy_loc.values()):
+      for remote_file_loc, local_file_loc in zip(
+        old_file_meta.remote_file_locs.values(), old_file_meta.local_copy_loc.values(), strict=False
+      ):
         with local_file_loc.open("wb") as local_file:
           waiting_client.download_file(
             remote_file_loc.as_posix(), callback=local_file.write, task_msg=f"Downloading {remote_file_loc.name}"
           )
         original_invoice_files.append(local_file_loc)
         local_logger.info(
-          f"{self.__class__.__name__}: {key}: Downloaded original invoice file from\n[yellow]{remote_file_loc}[/] to\n[yellow]{local_file_loc.without_cwd}[/]",
+          f"{self.__class__.__name__}: {key}: Downloaded original invoice file from\n[yellow]{remote_file_loc}[/] to\n[yellow]{local_file_loc.without_cwd()}[/]",
           extra={"markup": True},
         )
 
@@ -287,7 +291,7 @@ class CoremarkProcessor(SupplierProcessorBase):
       "invoice_date": None,
     }
 
-    for first_line_attrs, body in zip(first_lines, body_lines):
+    for first_line_attrs in first_lines:
       invoice_nums.append(first_line_attrs["invoice_num"] or "unknown")
       if found_values["customer_num"] is None and first_line_attrs["customer_num"] not in [None, ""]:
         found_values["customer_num"] = first_line_attrs["customer_num"]
@@ -312,7 +316,7 @@ class CoremarkProcessor(SupplierProcessorBase):
       new_file.writelines(body_lines)
 
     local_logger.info(
-      f"{self.__class__.__name__}: {key}: Created new merged file at location [yellow]{new_file_loc.without_cwd}[/] with header\n[blue]{header_result.decode()}[/]",
+      f"{self.__class__.__name__}: {key}: Created new merged file at location [yellow]{new_file_loc.without_cwd()}[/] with header\n[blue]{header_result.decode()}[/]",
       extra={"markup": True},
     )
 
@@ -346,15 +350,18 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 
 async def main():
+  # Third party imports
+  from rich import get_console
+
+  # First party imports
   from database.cache import DatabaseCache
-  from logging_config import RICH_CONSOLE
-  from rich_custom import ProgressCustom
+  from sft_ext.rich.progress import Progress
 
   cache = DatabaseCache()
   await cache.refresh_cache()
-  now = datetime.now()
+  now = datetime.now(SETTINGS.tz)
 
-  with ProgressCustom(refresh_per_second=10, console=RICH_CONSOLE) as pbar:
+  with Progress(console=get_console(), auto_refresh=False) as pbar:
     coremark = CoremarkProcessor(pbar)
 
     # inp = FileRegisterData(
@@ -415,6 +422,7 @@ async def main():
 
 
 if __name__ == "__main__":
+  # Standard library imports
   from asyncio import run
 
   run(main())
