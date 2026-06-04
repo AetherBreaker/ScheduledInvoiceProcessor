@@ -179,7 +179,7 @@ class ContextFilter(logging.Filter):
 
   def filter(self, record):
     try:
-      return record.ctx == self.identifier  # pyright: ignore[reportAttributeAccessIssue]
+      return record.ctx.get() == self.identifier  # pyright: ignore[reportAttributeAccessIssue]
     except AttributeError:
       return False
 

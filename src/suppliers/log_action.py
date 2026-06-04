@@ -45,10 +45,10 @@ def log_actions[**TP, TR](
       self_obj: "SupplierProcessorBase" = args[0]  # type: ignore
       adapted_logger: LoggerAdapter = kwargs["adapted_logger"]  # type: ignore
 
-      identifier = self_obj.ctx_var_identifier.get()
-      log_loc = self_obj.ctx_var_log_loc.get()
+      # identifier = self_obj.ctx_var_identifier.get()
+      log_file_loc = self_obj.ctx_var_log_loc.get()
 
-      log_file_loc = log_loc / f"{identifier}.txt" if identifier is not None and log_loc is not None else None
+      # log_file_loc = log_file_loc / f"{identifier}.txt" if identifier is not None and log_file_loc is not None else None
 
       items_to_log: dict[SupplierQueueKey, tuple[StatusCode, "FileRegisterData"]] = {}
 
