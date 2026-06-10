@@ -122,6 +122,15 @@ wheels = [
 ]
 
 [[package]]
+name = "apscheduler-stubs"
+version = "0.1.0.dev2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ce/f7/f7e4eea2abbf330bbc0ba2e684018881e20ce995afd85f639d181f4b777c/apscheduler_stubs-0.1.0.dev2.tar.gz", hash = "sha256:6fd5b3db269d7fe7c2b01f91d41c969a03da05522858401734acd5d438401ec8", size = 8176, upload-time = "2026-06-10T14:44:21.457Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/58/02e729326ca42096255682ff97c112cbb4eb4872b2f99ef5a4070250cddb/apscheduler_stubs-0.1.0.dev2-py3-none-any.whl", hash = "sha256:460478813eef922cc1fb13df2de9989a4f9ae086d050f90f21e882f620a9c982", size = 23125, upload-time = "2026-06-10T14:44:20.44Z" },
+]
+
+[[package]]
 name = "ast-serialize"
 version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -977,7 +986,6 @@ dependencies = [
     { name = "apscheduler", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "gspread", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pandas", extra = ["performance"], marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pandas-stubs", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "paramiko", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pydantic", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pydantic-settings", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -985,7 +993,6 @@ dependencies = [
     { name = "rich", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "sft-ext", version = "0.5.2", source = { git = "https://github.com/AetherBreaker/sft_ext?tag=v0.5.2#223f8ca135ee7144f7c008ffb0c5ae077c1d54b5" }, marker = "sys_platform == 'linux'" },
     { name = "sft-ext", version = "0.5.2", source = { editable = "D:/SFT Software Projects/sft_ext" }, marker = "sys_platform == 'win32'" },
-    { name = "types-python-dateutil", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "tzdata", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "uvloop", marker = "sys_platform == 'linux'" },
     { name = "winloop", marker = "sys_platform == 'win32'" },
@@ -993,7 +1000,10 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "apscheduler-stubs", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "mypy", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pandas-stubs", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "types-python-dateutil", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [package.metadata]
@@ -1004,7 +1014,6 @@ requires-dist = [
     { name = "apscheduler", specifier = "==3.*" },
     { name = "gspread", specifier = "==6.*" },
     { name = "pandas", extras = ["performance"], specifier = "==3.*" },
-    { name = "pandas-stubs", specifier = "==3.*" },
     { name = "paramiko", specifier = "==5.*" },
     { name = "pydantic", specifier = "==2.*" },
     { name = "pydantic-settings", specifier = "==2.*" },
@@ -1013,14 +1022,18 @@ requires-dist = [
     { name = "sft-ext", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = "==0.5.2" },
     { name = "sft-ext", marker = "sys_platform == 'linux'", git = "https://github.com/AetherBreaker/sft_ext?tag=v0.5.2" },
     { name = "sft-ext", marker = "sys_platform == 'win32'", editable = "D:/SFT Software Projects/sft_ext" },
-    { name = "types-python-dateutil", specifier = "==2.9.*" },
     { name = "tzdata", specifier = ">=2025.3" },
     { name = "uvloop", marker = "sys_platform == 'linux'", specifier = ">=0.22.1" },
     { name = "winloop", marker = "sys_platform == 'win32'", specifier = ">=0.6.0" },
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "mypy", specifier = ">=2.1.0" }]
+dev = [
+    { name = "apscheduler-stubs", specifier = ">=0.1.0.dev2" },
+    { name = "mypy", specifier = ">=2.1.0" },
+    { name = "pandas-stubs", specifier = ">=3.0.0.260204" },
+    { name = "types-python-dateutil", specifier = ">=2.9.0.20260323" },
+]
 
 [[package]]
 name = "sft-ext"
