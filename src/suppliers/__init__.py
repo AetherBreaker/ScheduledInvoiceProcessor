@@ -29,13 +29,13 @@ from typing_custom.enums import LogActionEnum, StatusCode
 
 if TYPE_CHECKING:
   # Standard library imports
-  from sft_ext.ftp.adapter import AdaptedFTP
   from contextvars import ContextVar
   from logging import LoggerAdapter
   from pathlib import Path, PurePosixPath
   from re import Match, Pattern
 
   # First party imports
+  from sft_ext.ftp.adapter import AdaptedFTP
   from sft_ext.rich.progress import Progress, TaskID
   from suppliers.log_action import LogActionHandlerType
   from typing_custom import CustomerID, StoreNum, SupplierQueueKey
@@ -94,7 +94,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   errored: bool
 
-  def __init__(self, pbar: Progress = None) -> None:
+  def __init__(self, pbar: Progress = None) -> None:  # type: ignore
     self._file_pickup_queue = {}
     self._file_preprocess_queue = {}
     self._file_waiting_queue = {}

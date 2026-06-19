@@ -64,7 +64,7 @@ class SASProcessor(SupplierProcessorBase):
   ctx_var_identifier = ContextVar("sas_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
 
-  def __init__(self, pbar: Progress = None) -> None:
+  def __init__(self, pbar: Progress = None) -> None:  # type: ignore
     if pbar is not None:
       self.vendor_ftp.pbar = pbar
     super().__init__(pbar)
