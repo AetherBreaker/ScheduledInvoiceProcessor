@@ -18,7 +18,7 @@
   ]
   name = "scheduledinvoiceprocessor"
   requires-python = ">=3.14"
-  version = "0.1.0"
+  version = "1.0.0"
 
 
 [tool.uv]
@@ -46,4 +46,16 @@
     "mypy>=2.1.0",
     "pandas-stubs>=3.0.0.260204",
     "types-python-dateutil>=2.9.0.20260323",
+  ]
+
+[tool.pyright]
+  extraPaths = [
+    "src",
+  ]
+  typeCheckingMode = "standard"
+
+  executionEnvironments = [
+    { root = "src", extraPaths = [
+      "src",
+    ] },
   ]
