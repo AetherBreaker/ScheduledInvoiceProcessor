@@ -1,6 +1,8 @@
+# Standard library imports
 from logging import getLogger
 from typing import Any, Self
 
+# Third party imports
 from pydantic import (
   BaseModel,
   ConfigDict,

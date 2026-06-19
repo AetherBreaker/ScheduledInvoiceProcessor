@@ -1,17 +1,21 @@
+# Standard library imports
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+# Third party imports
 from numpy import nan
 from pandas import DataFrame, Series, concat, isna
-from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 
+# First party imports
+from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from validation.models.db_entries import ScheduledOrderDBEntryModel, ScheduleValidationError
 
 if TYPE_CHECKING:
+  # Standard library imports
   from collections.abc import Sequence
 
+  # First party imports
   from typing_custom.dataframe_column_names import ColNameEnum
-
   from validation import CustomBaseModel
 
 logger = getLogger(__name__)

@@ -1,11 +1,15 @@
+# Standard library imports
 from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
 
+# First party imports
 from typing_custom.enums import CustomStrEnum, LogActionEnum, SuppliersEnum
 
 if TYPE_CHECKING:
+  # Standard library imports
   from typing import Self
 
+  # First party imports
   from typing_custom import CustomerID, InvoiceNum, StoreNum
 
 logger = getLogger(__name__)
