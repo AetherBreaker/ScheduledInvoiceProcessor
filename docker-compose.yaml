@@ -7,7 +7,6 @@ services:
     restart: no
     expose:
       - "8080"
-
     healthcheck:
       test:
         - CMD-SHELL
@@ -43,5 +42,3 @@ services:
       - ALERTS_EMAIL=info@sweetfiretobacco.com
       - ALERTS_EMAIL_PWD=${ALERTS_EMAIL_PWD:?}
       - ALERTS_RECIPIENTS=["jacob.ogden@sweetfiretobacco.com"]
-      # TZ
-      - TZ=America/New_York
