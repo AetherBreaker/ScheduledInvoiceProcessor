@@ -1,5 +1,8 @@
 [project]
-  dependencies = [
+  name            = "scheduledinvoiceprocessor"
+  version         = "1.1.0"
+  requires-python = ">=3.14"
+  dependencies    = [
     "aiohttp==3.*",
     "aiologic==0.16.*",
     "aiorwlock==1.*",
@@ -7,8 +10,8 @@
     "gspread==6.*",
     "pandas[performance]==3.*",
     "paramiko==5.*",
-    "pydantic-settings==2.*",
     "pydantic==2.*",
+    "pydantic-settings==2.*",
     "python-dateutil==2.9.*",
     "rich==15.*",
     "sft-ext==0.7.3",
@@ -16,10 +19,65 @@
     "uvloop>=0.22.1 ; sys_platform == 'linux'",
     "winloop>=0.6.0 ; sys_platform == 'win32'",
   ]
-  name = "scheduledinvoiceprocessor"
-  requires-python = ">=3.14"
-  version = "1.1.0"
 
+[dependency-groups]
+  dev = [
+    "apscheduler-stubs>=0.1.0.dev2",
+    "mypy>=2.1.0",
+    "pandas-stubs>=3.0.0.260204",
+    "types-python-dateutil>=2.9.0.20260323",
+  ]
+
+[tool.pyright]
+  verboseOutput          = true
+  useLibraryCodeForTypes = true
+
+  enableReachabilityAnalysis  = true
+  analyzeUnannotatedFunctions = true
+  deprecateTypingAliases      = true
+
+  typeCheckingMode = "standard"
+
+  reportPropertyTypeMismatch          = true
+  reportMissingTypeStubs              = true
+  reportImportCycles                  = true
+  reportUntypedFunctionDecorator      = true
+  reportUntypedClassDecorator         = true
+  reportUntypedNamedTuple             = true
+  reportPrivateUsage                  = true
+  # reportConstantRedefinition          = true
+  reportDeprecated                    = true
+  reportMissingSuperCall              = true
+  reportUninitializedInstanceVariable = true
+  reportMissingParameterType          = true
+  reportMissingTypeArgument           = true
+  reportUnnecessaryIsInstance         = true
+  reportUnnecessaryCast               = true
+  reportUnnecessaryComparison         = true
+  reportUnnecessaryContains           = true
+  reportInvalidStubStatement          = true
+  reportUnnecessaryTypeIgnoreComment  = true
+  reportMatchNotExhaustive            = true
+  reportUnreachable                   = true
+  reportImplicitOverride              = true
+
+  executionEnvironments = [{ root = "src", extraPaths = ["src"] }]
+
+[tool.ruff]
+  extend = "../pyproject.toml"
+
+  src = [
+    "./src",
+  ]
+
+[tool.tombi]
+  toml-version = "v1.1.0"
+
+  [tool.tombi.format.rules]
+    indent-sub-tables               = true
+    indent-table-key-value-pairs    = true
+    key-value-equals-sign-alignment = true
+    trailing-comment-alignment      = true
 
 [tool.uv]
   environments = [
@@ -32,30 +90,3 @@
       { git = "https://github.com/AetherBreaker/sft_ext", marker = "sys_platform == 'linux'", tag = "v0.7.3" },
       { path = "D:\\SFT Software Projects\\sft_ext", editable = true, marker = "sys_platform == 'win32'" },
     ]
-
-[tool.ruff]
-  extend = "../pyproject.toml"
-
-  src = [
-    "./src",
-  ]
-
-[dependency-groups]
-  dev = [
-    "apscheduler-stubs>=0.1.0.dev2",
-    "mypy>=2.1.0",
-    "pandas-stubs>=3.0.0.260204",
-    "types-python-dateutil>=2.9.0.20260323",
-  ]
-
-[tool.pyright]
-  extraPaths = [
-    "src",
-  ]
-  typeCheckingMode = "standard"
-
-  executionEnvironments = [
-    { root = "src", extraPaths = [
-      "src",
-    ] },
-  ]
