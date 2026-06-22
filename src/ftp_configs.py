@@ -3,6 +3,7 @@ from ftplib import FTP
 from json import loads
 from logging import getLogger
 from socket import gaierror
+from typing import override
 
 # Third party imports
 from paramiko import AutoAddPolicy, SFTPClient, SSHClient
@@ -20,6 +21,7 @@ class SFTFTPClient(FTPProtocol):
   creds = loads(SETTINGS.sft_website_creds_file.read_text())
   KIND = ProtocolEnum.FTP
 
+  @override
   def get_conn_handler(self) -> FTP:
     try:
       self.handler = FTP()
@@ -39,6 +41,7 @@ class SFTFTPClient(FTPProtocol):
       raise ServerNotAvailableError(f"FTP server hostname {self.creds['HOST']} could not be resolved.\n DNS has likely failed") from e
     return self.handler
 
+  @override
   def close_conn_handler(self) -> None:
     self.handler.quit()
 
@@ -47,6 +50,7 @@ class CoremarkFTPClient(FTPProtocol):
   creds = loads(SETTINGS.coremark_ftp_creds_file.read_text())
   KIND = ProtocolEnum.FTP
 
+  @override
   def get_conn_handler(self) -> FTP:
     try:
       self.handler = FTP()
@@ -68,6 +72,7 @@ class CoremarkFTPClient(FTPProtocol):
 
     return self.handler
 
+  @override
   def close_conn_handler(self) -> None:
     self.handler.quit()
 
@@ -77,6 +82,7 @@ class SASSFTPClient(SFTPProtocol):
   creds = loads(SETTINGS.sas_ftp_creds_file.read_text())
   KIND = ProtocolEnum.SFTP
 
+  @override
   def get_conn_handler(self) -> SFTPClient:
     try:
       self.ssh_client = SSHClient()
@@ -106,6 +112,7 @@ class SASSFTPClient(SFTPProtocol):
 
     return self.handler
 
+  @override
   def close_conn_handler(self) -> None:
     self.handler.close()
     self.ssh_client.close()
@@ -116,6 +123,7 @@ class RYOSFTPClient(SFTPProtocol):
   creds = loads(SETTINGS.ryo_ftp_creds_file.read_text())
   KIND = ProtocolEnum.SFTP
 
+  @override
   def get_conn_handler(self) -> SFTPClient:
     try:
       self.ssh_client = SSHClient()
@@ -144,6 +152,7 @@ class RYOSFTPClient(SFTPProtocol):
       ) from e
     return self.handler
 
+  @override
   def close_conn_handler(self) -> None:
     self.handler.close()
     self.ssh_client.close()

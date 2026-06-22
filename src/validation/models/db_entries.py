@@ -1,3 +1,5 @@
+# pyright: reportUnnecessaryIsInstance=false
+# pyright: reportUnreachable=false
 # Standard library imports
 from datetime import datetime
 from inspect import get_annotations

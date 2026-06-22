@@ -1,3 +1,5 @@
+# pyright: reportImportCycles=false
+# pyright: reportUninitializedInstanceVariable=false
 # Standard library imports
 from asyncio import gather, to_thread
 from copy import deepcopy
@@ -7,7 +9,7 @@ from ftplib import all_errors
 from io import BytesIO
 from logging import getLogger
 from time import sleep
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any
 
 # Third party imports
 from aiologic import Lock
@@ -21,9 +23,9 @@ from environment_init_vars import SETTINGS
 from ftp_configs import FTPAdapter, SFTFTPClient
 from logging_config import add_log_context
 from sft_ext.errors.send_alert_email import send_alert_email
+from sft_ext.types.abc import SingletonType
 from suppliers.file_register_data import FileRegisterData
 from suppliers.log_action import log_actions
-from typing_custom.abc import SingletonType
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from typing_custom.enums import LogActionEnum, StatusCode
 
@@ -66,7 +68,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _transient_transfer_retries = 3
   _lock: Lock = Lock()
 
-  vendor_ftp: FTPAdapter
+  vendor_ftp: FTPAdapter  # pyright: ignore[reportMissingTypeArgument]
   waiting_ftp: FTPAdapter[AdaptedFTP] = FTPAdapter(SFTFTPClient, container_cls="SupplierProcessorBase")
 
   queue_backup_prefix: str
@@ -102,7 +104,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self.errored = False
 
-    if pbar is not None:
+    if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
       self.waiting_ftp.pbar = pbar
 
     self._file_queue_backup_folder.mkdir(exist_ok=True, parents=True)
@@ -118,7 +120,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self.preprocess_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_preprocess_queue.json"
 
-    self.pbar = cast("Progress", pbar)
+    self.pbar = pbar
 
     self._load_queue_backups()
 
@@ -335,7 +337,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
   async def _preprocess_files(
     self,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
@@ -385,7 +387,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
       for key, file_meta in tuple(self._file_preprocess_queue.items()):
         if all(file_meta.preprocess_success.values()):
-          file_meta._waiting_folder = self.post_processing_waiting_folder
+          file_meta._waiting_folder = self.post_processing_waiting_folder  # pyright: ignore[reportPrivateUsage]
           self._file_preprocess_queue.pop(key)
           self._file_dropoff_queue[key] = file_meta
 
@@ -393,7 +395,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_DROPPED_OFF)
   async def _dropoff_files(
     self,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
@@ -466,7 +468,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     idx: int,
     key: str,
     success_attr: str,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
@@ -536,7 +538,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     )
 
   def extract_invoice_num(
-    self, bytestream: BytesIO, file_meta: FileRegisterData, idx: int, adapted_logger: LoggerAdapter | None = None
+    self, bytestream: BytesIO, file_meta: FileRegisterData, idx: int, adapted_logger: LoggerAdapter[Any] | None = None
   ):
     # convert transient file to string
     # extract first line from transient file and apply regex pattern to extract invoice number, then store in file_meta.invoice_nums[idx]
@@ -565,7 +567,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     idx: int,
     key: str,
     success_attr: str,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
@@ -606,7 +608,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
-  ) -> Pattern: ...
+  ) -> Pattern[str]: ...
 
   @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
   @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
@@ -617,7 +619,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     pickup_date: datetime,
     dropoff_date: datetime,
     current_week: bool = True,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
@@ -696,7 +698,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     pickup_date: datetime,
     dropoff_date: datetime,
     current_week: bool,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
@@ -785,7 +787,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     source_folder: PurePosixPath,
     remote_file: str,
     archive_folder: PurePosixPath,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     debug: bool = False,
   ) -> None:
     local_logger = adapted_logger or logger
@@ -831,7 +833,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     source_folder: PurePosixPath,
     remote_file: str,
     archive_folder: PurePosixPath,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     debug: bool = False,
   ) -> None:
     local_logger = adapted_logger or logger
@@ -883,7 +885,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)
   async def _pickup_files(  # noqa: C901, PLR0912
     self,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger

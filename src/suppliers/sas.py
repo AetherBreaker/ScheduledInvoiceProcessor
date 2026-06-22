@@ -5,7 +5,7 @@ from json import loads
 from logging import getLogger
 from pathlib import PurePosixPath
 from re import compile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 # Third party imports
 from dateutil.relativedelta import SA, SU, relativedelta
@@ -45,7 +45,7 @@ class SASProcessor(SupplierProcessorBase):
     r"(?P<customer_num>\d{6})\s*$"
   )
 
-  pickup_ftp_creds: dict = loads(SETTINGS.sas_ftp_creds_file.read_text())
+  pickup_ftp_creds: dict[str, str] = loads(SETTINGS.sas_ftp_creds_file.read_text())
 
   checks_date_in_filename = True
 
@@ -65,13 +65,14 @@ class SASProcessor(SupplierProcessorBase):
   ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
 
   def __init__(self, pbar: Progress = None) -> None:  # type: ignore
-    if pbar is not None:
+    if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
       self.vendor_ftp.pbar = pbar
     super().__init__(pbar)
 
+  @override
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
-  ) -> Pattern:
+  ) -> Pattern[str]:
     dates = list(
       rrule(
         DAILY,

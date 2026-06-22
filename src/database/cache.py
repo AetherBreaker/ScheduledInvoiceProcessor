@@ -1,3 +1,5 @@
+# pyright: reportUninitializedInstanceVariable=false
+# pyright: reportPrivateUsage=false
 # Standard library imports
 from asyncio import get_running_loop, sleep, to_thread
 from collections.abc import Sequence
@@ -18,9 +20,9 @@ from pandas import Series, to_numeric
 
 # First party imports
 from environment_init_vars import SETTINGS
+from sft_ext.types.abc import SingletonType
 from sft_ext.utils import today
 from typing_custom import AppendDimension, BatchUpdateBody, ValueRange, ValuesBatchUpdateBody
-from typing_custom.abc import SingletonType
 from typing_custom.dataframe_column_names import DatabaseOrderLogColumns, DatabaseScheduleColumns
 from validation.apply_model import build_typed_dataframe
 from validation.models.db_entries import (
@@ -123,6 +125,7 @@ class DatabaseCache(metaclass=SingletonType):
     self.loop = get_running_loop()
 
     self.update_db_header()
+    super().__init__()
 
   @property
   def client(self) -> Client:
@@ -430,7 +433,7 @@ class DatabaseCache(metaclass=SingletonType):
 class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[Any, ...] | Any]:
   _range_format: str
   _range_format_single: str
-  _field_type_adapters: dict[str, TypeAdapter]
+  _field_type_adapters: dict[str, TypeAdapter[Any]]
   columns: type[ColsT]
   model: type[ModelT]
 
@@ -439,6 +442,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     self._cache_index = self.columns.__index_items__
     self._core = cache_core
     self._sheet_id = sheet_id
+    super().__init__()
 
   async def __aenter__(self) -> DataFrame:
     await self._core._read_write_lock.reader_lock.acquire()
@@ -495,7 +499,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
 
     return row_number
 
-  async def write_value(self, index: IndexT, column: ColsT, value: Any, ta: TypeAdapter) -> None:
+  async def write_value(self, index: IndexT, column: ColsT, value: Any, ta: TypeAdapter[Any]) -> None:
     row_number = await self.get_rownum(index)
 
     value = ta.dump_python(value)

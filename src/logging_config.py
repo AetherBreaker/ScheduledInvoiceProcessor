@@ -1,3 +1,4 @@
+# pyright: reportImportCycles=false
 # Standard library imports
 import logging
 from datetime import datetime

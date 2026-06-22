@@ -36,7 +36,7 @@ def build_typed_dataframe(
     # Ensure all None-like objects within the dataframe are replaced with None prior to validation
     df = df.infer_objects(copy=False).replace(NULL_VALUES, value=nan)
 
-    newly_typed_rows = []
+    newly_typed_rows: list[Series] = []
 
     df.apply(
       apply_model,
@@ -48,6 +48,7 @@ def build_typed_dataframe(
     df = concat(
       newly_typed_rows,
       axis=1,
+      ignore_index=False,
     ).T
 
     # Ensure columns are in the order defined in their column names enumeration
@@ -66,7 +67,7 @@ def apply_model(row: Series, types_model: type[CustomBaseModel], typed_rows: lis
   row_dict = {k: v for k, v in row.to_dict().items() if not isna(v) or v is None}
   model = types_model.model_validate(row_dict)
 
-  if model is not None:
+  if model is not None:  # pyright: ignore[reportUnnecessaryComparison]
     model_dict = model.model_dump()
 
     typed_rows.append(Series(model_dict, name=row.name, dtype=object))

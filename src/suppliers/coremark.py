@@ -7,7 +7,7 @@ from json import loads
 from logging import getLogger
 from pathlib import PurePosixPath
 from re import compile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 # First party imports
 from environment_init_vars import CWD, SETTINGS
@@ -52,7 +52,7 @@ class CoremarkProcessor(SupplierProcessorBase):
 
   supplier_name: SuppliersEnum = SuppliersEnum.COREMARK
 
-  pickup_ftp_creds: dict = loads(SETTINGS.coremark_ftp_creds_file.read_text())
+  pickup_ftp_creds: dict[str, str] = loads(SETTINGS.coremark_ftp_creds_file.read_text())
 
   checks_date_in_filename: bool = False
 
@@ -72,13 +72,14 @@ class CoremarkProcessor(SupplierProcessorBase):
   ctx_var_log_loc = ContextVar("coremark_log_loc", default=log_file_loc)
 
   def __init__(self, pbar: Progress = None) -> None:  # type: ignore
-    if pbar is not None:
+    if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
       self.vendor_ftp.pbar = pbar
     super().__init__(pbar)
 
+  @override
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
-  ) -> Pattern:  # sourcery skip: simplify-fstring-formatting
+  ) -> Pattern[str]:  # sourcery skip: simplify-fstring-formatting
     pattern = (
       rf"^CV{customer_id}[\d]{2}"
       r"\.TXT$"
@@ -89,7 +90,7 @@ class CoremarkProcessor(SupplierProcessorBase):
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
   async def _preprocess_files(  # noqa: C901
     self,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
     local_logger = adapted_logger or logger
@@ -136,7 +137,7 @@ class CoremarkProcessor(SupplierProcessorBase):
             self.pbar.update(files_preprocessing_task, advance=1, refresh=True)
 
           except Exception as e:
-            matched_results = [k for k, v in futures.items() if result is v]
+            matched_results = [k for k, v in futures.items() if result is v]  # pyright: ignore[reportUnnecessaryComparison]
             if not matched_results:
               local_logger.error(f"{self.__class__.__name__}: Could not find matching key for result {result} in futures")
               raise RuntimeError(f"Could not find matching key for result {result} in futures") from e
@@ -156,7 +157,7 @@ class CoremarkProcessor(SupplierProcessorBase):
     self,
     key: SupplierQueueKey,
     old_file_meta: FileRegisterData,
-    adapted_logger: LoggerAdapter | None = None,
+    adapted_logger: LoggerAdapter[Any] | None = None,
   ) -> tuple[SupplierQueueKey, FileRegisterData]:
     try:
       local_logger = adapted_logger or logger
@@ -217,7 +218,7 @@ class CoremarkProcessor(SupplierProcessorBase):
       raise e
 
   def _create_new_merged_file(  # noqa: C901
-    self, key: SupplierQueueKey, old_file_meta: FileRegisterData, adapted_logger: LoggerAdapter | None = None
+    self, key: SupplierQueueKey, old_file_meta: FileRegisterData, adapted_logger: LoggerAdapter[Any] | None = None
   ) -> FileRegisterData:
     local_logger = adapted_logger or logger
     original_invoice_files: list[Path] = []
@@ -327,7 +328,7 @@ class CoremarkProcessor(SupplierProcessorBase):
       pickup_date=old_file_meta.pickup_date,
       dropoff_date=old_file_meta.dropoff_date,
       file_pattern=old_file_meta.file_pattern,
-      _current_week=old_file_meta._current_week,
+      _current_week=old_file_meta._current_week,  # pyright: ignore[reportPrivateUsage]
       _waiting_folder=self.post_processing_waiting_folder,
       _local_copy_folder=self.local_post_processing_folder,
       file_names={0: new_file_name},
