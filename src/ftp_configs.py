@@ -11,8 +11,8 @@ from rich import get_console
 
 # First party imports
 from environment_init_vars import SETTINGS
-from sft_ext.ftp.adapter import AdaptedFTP, AdaptedSFTP, FTPAdapter, FTPProtocol, ProtocolEnum, ServerNotAvailableError, SFTPProtocol
-from sft_ext.rich.progress import Progress
+from sft_ext.ftp import AdaptedFTP, AdaptedSFTP, FTPAdapter, FTPProtocol, ProtocolEnum, ServerNotAvailableError, SFTPProtocol
+from sft_ext.rich import Progress
 
 logger = getLogger(__name__)
 

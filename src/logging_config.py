@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, override
 
 # First party imports
 from environment_init_vars import SETTINGS
-from sft_ext.logging.logging_bases import CustomTimedRotatingFileHandler, FixedLogRecord
-from sft_ext.logging.logging_config import get_preferred_logrecord_formatter
+from sft_ext.logging.bases import CustomTimedRotatingFileHandler, FixedLogRecord
+from sft_ext.logging.config import get_preferred_logrecord_formatter
 
 if TYPE_CHECKING:
   # Standard library imports
