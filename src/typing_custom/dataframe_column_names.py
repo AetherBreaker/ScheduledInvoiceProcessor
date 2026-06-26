@@ -3,7 +3,8 @@ from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
 
 # First party imports
-from typing_custom.enums import CustomStrEnum, LogActionEnum, SuppliersEnum
+from sft_ext.types import StrEnum
+from typing_custom.enums import LogActionEnum, SuppliersEnum
 
 if TYPE_CHECKING:
   # Standard library imports
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-class ColNameEnum(CustomStrEnum):
+class ColNameEnum(StrEnum):
   __exclude__: ClassVar[list[str]] = []
   __init_include__: ClassVar[list[str]] = []
   __index_items__: ClassVar[list[str]] = []

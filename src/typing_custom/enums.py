@@ -1,33 +1,17 @@
 # Standard library imports
-from enum import StrEnum, auto
-from typing import TYPE_CHECKING, override
+from enum import auto
 
-if TYPE_CHECKING:
-  # Standard library imports
-  from typing import Any
+# First party imports
+from sft_ext.types import StrEnum
 
 
-class CustomStrEnum(StrEnum):
-  """
-  Custom string enum that returns the member name as the value.
-  """
-
-  @override
-  @staticmethod
-  def _generate_next_value_(name: str, start: int, count: int, last_values: list[Any]) -> Any:
-    """
-    Return the member name.
-    """
-    return name
-
-
-class SuppliersEnum(CustomStrEnum):
+class SuppliersEnum(StrEnum):
   SAS = "SAS"
   RYO = "RYO"
   COREMARK = "COREMARK"
 
 
-class StateEnum(CustomStrEnum):
+class StateEnum(StrEnum):
   AL = auto()
   AK = auto()
   AZ = auto()
@@ -87,7 +71,7 @@ class StateEnum(CustomStrEnum):
   VI = auto()
 
 
-class WeekdayEnum(CustomStrEnum):
+class WeekdayEnum(StrEnum):
   Monday = auto()
   Tuesday = auto()
   Wednesday = auto()
@@ -97,7 +81,7 @@ class WeekdayEnum(CustomStrEnum):
   Sunday = auto()
 
 
-class LogActionEnum(CustomStrEnum):
+class LogActionEnum(StrEnum):
   REGISTERED_PICKUP = auto()
   FILE_PICKED_UP = auto()
   FILE_PREPROCESSED = auto()
@@ -105,7 +89,7 @@ class LogActionEnum(CustomStrEnum):
   FILE_DROPPED_OFF = auto()
 
 
-class StatusCode(CustomStrEnum):
+class StatusCode(StrEnum):
   UNKNOWN = auto()
   FAILURE = auto()
   SUCCESS = auto()

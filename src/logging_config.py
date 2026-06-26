@@ -5,21 +5,23 @@ from datetime import datetime
 from functools import wraps
 from queue import Queue
 from secrets import token_urlsafe
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Literal, override
 
 # First party imports
 from environment_init_vars import SETTINGS
 from sft_ext.logging.bases import CustomTimedRotatingFileHandler, FixedLogRecord
-from sft_ext.logging.config import get_preferred_logrecord_formatter
+from sft_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
 
 if TYPE_CHECKING:
   # Standard library imports
-  from collections.abc import Awaitable, Callable
+  from collections.abc import Awaitable, Callable, Sequence
+
+  # Third party imports
+  from rich.console import Console
 
   # First party imports
   from suppliers import SupplierProcessorBase
   from typing_custom.enums import LogActionEnum
-
 
 SCHEDULER_LOG_LOC = SETTINGS.log_loc_folder / "scheduler_logs"
 APSCHEDULER_DEBUG_LOG_LOC = SETTINGS.log_loc_folder / "scheduler_debug.txt"
@@ -39,48 +41,74 @@ class ContextFilter(logging.Filter):
       return False
 
 
-def configure_logging_extra():
-  # Standard library imports
-  import atexit
-  from logging.handlers import QueueHandler, QueueListener
+class LoggingConfig(BaseLoggingConfig):
+  @override
+  @classmethod
+  def configure_logging_main(
+    cls,
+    rich_console: Console,
+    project_name: str,
+    logging_type: Literal["daily", "per_run"] = "daily",
+    logging_base_name: str | None = None,
+    default_max_width: int | None = None,
+    timestamp_format: str = "%b, %d %a %I:%M %p",
+    log_to_console: bool | Literal["rich"] = "rich",
+    queue_console_handler: bool = False,
+    logging_queues: Sequence[QueueCatchall] | None = None,
+  ):
+    super().configure_logging_main(
+      rich_console=rich_console,
+      project_name=project_name,
+      logging_type=logging_type,
+      logging_base_name=logging_base_name,
+      default_max_width=default_max_width,
+      timestamp_format=timestamp_format,
+      log_to_console=log_to_console,
+      queue_console_handler=queue_console_handler,
+      logging_queues=logging_queues,
+    )
 
-  SCHEDULER_LOG_LOC.mkdir(exist_ok=True, parents=True)
+    # Standard library imports
+    import atexit
+    from logging.handlers import QueueHandler, QueueListener
 
-  root = logging.getLogger()
+    SCHEDULER_LOG_LOC.mkdir(exist_ok=True, parents=True)
 
-  scheduler = logging.getLogger("apscheduler")
-  scheduler.propagate = False
+    root = logging.getLogger()
 
-  scheduler_debug_handler = CustomTimedRotatingFileHandler(APSCHEDULER_DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
-  scheduler_info_handler = CustomTimedRotatingFileHandler(APSCHEDULER_INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
+    scheduler = logging.getLogger("apscheduler")
+    scheduler.propagate = False
 
-  scheduler_debug_handler.setLevel(logging.DEBUG)
-  scheduler_info_handler.setLevel(logging.INFO)
+    scheduler_debug_handler = CustomTimedRotatingFileHandler(APSCHEDULER_DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
+    scheduler_info_handler = CustomTimedRotatingFileHandler(APSCHEDULER_INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
 
-  formatter = get_preferred_logrecord_formatter()
+    scheduler_debug_handler.setLevel(logging.DEBUG)
+    scheduler_info_handler.setLevel(logging.INFO)
 
-  scheduler_debug_handler.setFormatter(formatter)
-  scheduler_info_handler.setFormatter(formatter)
+    formatter = get_preferred_logrecord_formatter()
 
-  log_queue = Queue(-1)
-  scheduler_log_queue = Queue(-1)
+    scheduler_debug_handler.setFormatter(formatter)
+    scheduler_info_handler.setFormatter(formatter)
 
-  queue_handler = QueueHandler(log_queue)
-  scheduler_queue_handler = QueueHandler(scheduler_log_queue)
+    log_queue = Queue(-1)
+    scheduler_log_queue = Queue(-1)
 
-  scheduler_queue_listener = QueueListener(
-    scheduler_log_queue,
-    scheduler_debug_handler,
-    scheduler_info_handler,
-    respect_handler_level=True,
-  )
+    queue_handler = QueueHandler(log_queue)
+    scheduler_queue_handler = QueueHandler(scheduler_log_queue)
 
-  root.addHandler(queue_handler)
-  scheduler.addHandler(scheduler_queue_handler)
+    scheduler_queue_listener = QueueListener(
+      scheduler_log_queue,
+      scheduler_debug_handler,
+      scheduler_info_handler,
+      respect_handler_level=True,
+    )
 
-  scheduler_queue_listener.start()
+    root.addHandler(queue_handler)
+    scheduler.addHandler(scheduler_queue_handler)
 
-  atexit.register(scheduler_queue_listener.stop)
+    scheduler_queue_listener.start()
+
+    atexit.register(scheduler_queue_listener.stop)
 
 
 def add_log_context[**TP, TR](
