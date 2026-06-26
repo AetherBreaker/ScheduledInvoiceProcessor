@@ -12,6 +12,8 @@ from time import sleep
 from typing import TYPE_CHECKING, Any
 
 # Third party imports
+from aeth_ext.errors.send_alert_email import send_alert_email
+from aeth_ext.types.abc import SingletonType
 from aiologic import Lock
 from dateutil.relativedelta import SA, SU, relativedelta
 from paramiko import SSHException
@@ -22,8 +24,6 @@ from database.cache import DatabaseCache
 from environment_init_vars import SETTINGS
 from ftp_configs import FTPAdapter, SFTFTPClient
 from logging_config import add_log_context
-from sft_ext.errors.send_alert_email import send_alert_email
-from sft_ext.types.abc import SingletonType
 from suppliers.file_register_data import FileRegisterData
 from suppliers.log_action import log_actions
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns
@@ -36,9 +36,11 @@ if TYPE_CHECKING:
   from pathlib import Path, PurePosixPath
   from re import Match, Pattern
 
+  # Third party imports
+  from aeth_ext.ftp.adapter import AdaptedFTP
+  from aeth_ext.rich.progress import Progress, TaskID
+
   # First party imports
-  from sft_ext.ftp.adapter import AdaptedFTP
-  from sft_ext.rich.progress import Progress, TaskID
   from suppliers.log_action import LogActionHandlerType
   from typing_custom import CustomerID, StoreNum, SupplierQueueKey
   from typing_custom.enums import SuppliersEnum

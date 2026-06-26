@@ -3,10 +3,8 @@ if __name__ == "__main__":
   from sys import platform
 
   # Third party imports
+  from aeth_ext import initialize
   from rich.console import Console
-
-  # First party imports
-  from sft_ext import initialize
 
   RICH_CONSOLE = Console(
     width=None if platform == "win32" else 165,
@@ -31,6 +29,8 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 # Third party imports
+from aeth_ext.errors.err_handling import FATAL_EVENT
+from aeth_ext.rich.progress import Progress
 from aiohttp.web import Application, AppRunner, FileResponse, Request, TCPSite
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
@@ -41,8 +41,6 @@ from database.cache import DatabaseCache
 from environment_init_vars import CWD, SETTINGS
 from err_handling import get_last_fatal_details
 from scheduler_config import OrderProcessingScheduler
-from sft_ext.errors.err_handling import FATAL_EVENT
-from sft_ext.rich.progress import Progress
 from suppliers.ryo import RYOProcessor
 from suppliers.sas import SASProcessor
 from typing_custom.dataframe_column_names import DatabaseScheduleColumns

@@ -4,9 +4,11 @@ from functools import partial, wraps
 from itertools import zip_longest
 from typing import TYPE_CHECKING
 
+# Third party imports
+from aeth_ext.utils import get_last_sat, get_next_sat
+
 # First party imports
 from environment_init_vars import HOST_NAME, SETTINGS
-from sft_ext.utils import get_last_sat, get_next_sat
 from typing_custom.enums import LogActionEnum, StatusCode
 
 if TYPE_CHECKING:

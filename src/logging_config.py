@@ -7,10 +7,12 @@ from queue import Queue
 from secrets import token_urlsafe
 from typing import TYPE_CHECKING, Literal, override
 
+# Third party imports
+from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, FixedLogRecord
+from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
+
 # First party imports
 from environment_init_vars import SETTINGS
-from sft_ext.logging.bases import CustomTimedRotatingFileHandler, FixedLogRecord
-from sft_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
 
 if TYPE_CHECKING:
   # Standard library imports

@@ -6,13 +6,13 @@ from socket import gaierror
 from typing import override
 
 # Third party imports
+from aeth_ext.ftp import AdaptedFTP, AdaptedSFTP, FTPAdapter, FTPProtocol, ProtocolEnum, ServerNotAvailableError, SFTPProtocol
+from aeth_ext.rich import Progress
 from paramiko import AutoAddPolicy, SFTPClient, SSHClient
 from rich import get_console
 
 # First party imports
 from environment_init_vars import SETTINGS
-from sft_ext.ftp import AdaptedFTP, AdaptedSFTP, FTPAdapter, FTPProtocol, ProtocolEnum, ServerNotAvailableError, SFTPProtocol
-from sft_ext.rich import Progress
 
 logger = getLogger(__name__)
 

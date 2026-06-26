@@ -26,9 +26,11 @@ if TYPE_CHECKING:
   from re import Pattern
   from typing import Any
 
+  # Third party imports
+  from aeth_ext.rich.progress import Progress
+
   # First party imports
   from ftp_configs import AdaptedFTP
-  from sft_ext.rich.progress import Progress
   from suppliers.log_action import LogActionHandlerType
   from typing_custom import CustomerID, SupplierQueueKey
 
@@ -352,11 +354,11 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 async def main():
   # Third party imports
+  from aeth_ext.rich.progress import Progress
   from rich import get_console
 
   # First party imports
   from database.cache import DatabaseCache
-  from sft_ext.rich.progress import Progress
 
   cache = DatabaseCache()
   await cache.refresh_cache()

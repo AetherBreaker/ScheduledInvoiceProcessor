@@ -3,10 +3,8 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Annotated
 
 # Third party imports
+from aeth_ext.settings import BaseSettings
 from pydantic import Field
-
-# First party imports
-from sft_ext.settings import BaseSettings
 
 if TYPE_CHECKING:
   # Standard library imports

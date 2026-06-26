@@ -2,8 +2,8 @@
 from os import getcwd
 from typing import TYPE_CHECKING
 
-# First party imports
-from sft_ext.monkey_patcher import MonkeyPatcher
+# Third party imports
+from aeth_ext.monkey_patcher import MonkeyPatcher
 
 if TYPE_CHECKING:
   # Standard library imports

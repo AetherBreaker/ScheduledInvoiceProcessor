@@ -21,9 +21,11 @@ if TYPE_CHECKING:
   # Standard library imports
   from re import Pattern
 
+  # Third party imports
+  from aeth_ext.rich.progress import Progress
+
   # First party imports
   from ftp_configs import AdaptedSFTP
-  from sft_ext.rich.progress import Progress
   from typing_custom import CustomerID
 
 logger = getLogger(__name__)
@@ -121,11 +123,11 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 async def main():
   # Third party imports
+  from aeth_ext.rich.progress import Progress
   from rich import get_console
 
   # First party imports
   from database.cache import DatabaseCache
-  from sft_ext.rich.progress import Progress
 
   cache = DatabaseCache()
   await cache.refresh_cache()

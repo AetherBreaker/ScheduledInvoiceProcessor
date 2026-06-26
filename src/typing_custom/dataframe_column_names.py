@@ -2,8 +2,10 @@
 from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
 
+# Third party imports
+from aeth_ext.types import StrEnum
+
 # First party imports
-from sft_ext.types import StrEnum
 from typing_custom.enums import LogActionEnum, SuppliersEnum
 
 if TYPE_CHECKING:

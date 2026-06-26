@@ -1,8 +1,8 @@
 # Standard library imports
 from enum import auto
 
-# First party imports
-from sft_ext.types import StrEnum
+# Third party imports
+from aeth_ext.types import StrEnum
 
 
 class SuppliersEnum(StrEnum):
