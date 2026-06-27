@@ -22,7 +22,7 @@
     "apscheduler-stubs>=0.1.0.dev2",
     "mypy>=2.1.0",
     "pandas-stubs>=3.0.0.260204",
-    "poe-tasks>=1.0.1",
+    "poe-tasks>=3.0.0",
     "poethepoet>=0.46.0",
     "pytest>=9.0.3",
     "types-python-dateutil>=2.9.0.20260323",
