@@ -81,8 +81,6 @@ def log_actions[**TP, TR](
         raise e
 
       for status, file_meta in items_to_log.values():
-        if file_meta.storenum == 40:
-          pass
         if status == StatusCode.SKIPPED:
           continue  # Skip logging for items marked as SKIPPED
         params = {
