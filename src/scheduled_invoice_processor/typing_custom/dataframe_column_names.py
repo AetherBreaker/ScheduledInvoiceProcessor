@@ -2,18 +2,18 @@
 from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
 
-# Third party imports
+# First party imports
 from aeth_ext.types import StrEnum
 
-# First party imports
-from typing_custom.enums import LogActionEnum, SuppliersEnum
+# Local folder imports
+from .enums import LogActionEnum, SuppliersEnum
 
 if TYPE_CHECKING:
   # Standard library imports
   from typing import Self
 
-  # First party imports
-  from typing_custom import CustomerID, InvoiceNum, StoreNum
+  # Local folder imports
+  from . import CustomerID, InvoiceNum, StoreNum
 
 logger = getLogger(__name__)
 

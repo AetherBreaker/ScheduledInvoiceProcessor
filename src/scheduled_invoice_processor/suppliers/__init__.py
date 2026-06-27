@@ -20,14 +20,14 @@ from paramiko import SSHException
 from pydantic import TypeAdapter
 
 # First party imports
-from database.cache import DatabaseCache
-from environment_init_vars import SETTINGS
-from ftp_configs import FTPAdapter, SFTFTPClient
-from logging_config import add_log_context
-from suppliers.file_register_data import FileRegisterData
-from suppliers.log_action import log_actions
-from typing_custom.dataframe_column_names import DatabaseScheduleColumns
-from typing_custom.enums import LogActionEnum, StatusCode
+from scheduled_invoice_processor.database.cache import DatabaseCache
+from scheduled_invoice_processor.environment_init_vars import SETTINGS
+from scheduled_invoice_processor.ftp_configs import FTPAdapter, SFTFTPClient
+from scheduled_invoice_processor.logging_config import add_log_context
+from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
+from scheduled_invoice_processor.suppliers.log_action import log_actions
+from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseScheduleColumns
+from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode
 
 if TYPE_CHECKING:
   # Standard library imports
@@ -41,9 +41,9 @@ if TYPE_CHECKING:
   from aeth_ext.rich.progress import Progress, TaskID
 
   # First party imports
-  from suppliers.log_action import LogActionHandlerType
-  from typing_custom import CustomerID, StoreNum, SupplierQueueKey
-  from typing_custom.enums import SuppliersEnum
+  from scheduled_invoice_processor.suppliers.log_action import LogActionHandlerType
+  from scheduled_invoice_processor.typing_custom import CustomerID, StoreNum, SupplierQueueKey
+  from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
 
 logger = getLogger(__name__)
 TRANSIENT_TRANSFER_ERROR_STRINGS = (

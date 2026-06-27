@@ -1,7 +1,7 @@
 # Standard library imports
 from enum import auto
 
-# Third party imports
+# First party imports
 from aeth_ext.types import StrEnum
 
 

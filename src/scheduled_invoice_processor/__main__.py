@@ -3,8 +3,10 @@ if __name__ == "__main__":
   from sys import platform
 
   # Third party imports
-  from aeth_ext import initialize
   from rich.console import Console
+
+  # First party imports
+  from aeth_ext import initialize
 
   RICH_CONSOLE = Console(
     width=None if platform == "win32" else 165,
@@ -29,29 +31,29 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 # Third party imports
-from aeth_ext.errors.err_handling import FATAL_EVENT
-from aeth_ext.rich.progress import Progress
 from aiohttp.web import Application, AppRunner, FileResponse, Request, TCPSite
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
 from dateutil.relativedelta import SA, relativedelta
 
 # First party imports
-from database.cache import DatabaseCache
-from environment_init_vars import CWD, SETTINGS
-from err_handling import get_last_fatal_details
-from scheduler_config import OrderProcessingScheduler
-from suppliers.ryo import RYOProcessor
-from suppliers.sas import SASProcessor
-from typing_custom.dataframe_column_names import DatabaseScheduleColumns
-from typing_custom.enums import SuppliersEnum
+from aeth_ext.errors.err_handling import FATAL_EVENT
+from aeth_ext.rich.progress import Progress
+from scheduled_invoice_processor.database.cache import DatabaseCache
+from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
+from scheduled_invoice_processor.err_handling import get_last_fatal_details
+from scheduled_invoice_processor.scheduler_config import OrderProcessingScheduler
+from scheduled_invoice_processor.suppliers.ryo import RYOProcessor
+from scheduled_invoice_processor.suppliers.sas import SASProcessor
+from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseScheduleColumns
+from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
 
 if TYPE_CHECKING:
   # Standard library imports
   from typing import NoReturn
 
   # First party imports
-  from suppliers import SupplierProcessorBase
+  from scheduled_invoice_processor.suppliers import SupplierProcessorBase
 
 logger = getLogger(__name__)
 

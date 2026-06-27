@@ -21,11 +21,11 @@ from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRend
 from pandas import Series, to_numeric
 
 # First party imports
-from environment_init_vars import SETTINGS
-from typing_custom import AppendDimension, BatchUpdateBody, ValueRange, ValuesBatchUpdateBody
-from typing_custom.dataframe_column_names import DatabaseOrderLogColumns, DatabaseScheduleColumns
-from validation.apply_model import build_typed_dataframe
-from validation.models.db_entries import (
+from scheduled_invoice_processor.environment_init_vars import SETTINGS
+from scheduled_invoice_processor.typing_custom import AppendDimension, BatchUpdateBody, ValueRange, ValuesBatchUpdateBody
+from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseOrderLogColumns, DatabaseScheduleColumns
+from scheduled_invoice_processor.validation.apply_model import build_typed_dataframe
+from scheduled_invoice_processor.validation.models.db_entries import (
   ORDER_LOG_TYPE_ADAPTERS,
   SCHEDULE_TYPE_ADAPTERS,
   OrderLogDBEntryModel,
@@ -44,10 +44,14 @@ if TYPE_CHECKING:
   from pydantic import TypeAdapter
 
   # First party imports
-  from typing_custom import CustomerID, InvoiceNum, Request, StoreNum
-  from typing_custom.dataframe_column_names import ColNameEnum, DatabaseOrderLogIndex, DatabaseScheduleIndex  # noqa: F401
-  from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
-  from validation import CustomBaseModel
+  from scheduled_invoice_processor.typing_custom import CustomerID, InvoiceNum, Request, StoreNum
+  from scheduled_invoice_processor.typing_custom.dataframe_column_names import (  # noqa: F401
+    ColNameEnum,
+    DatabaseOrderLogIndex,
+    DatabaseScheduleIndex,
+  )
+  from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
+  from scheduled_invoice_processor.validation import CustomBaseModel
 
 logger = getLogger(__name__)
 

@@ -6,13 +6,15 @@ from socket import gaierror
 from typing import override
 
 # Third party imports
-from aeth_ext.ftp import AdaptedFTP, AdaptedSFTP, FTPAdapter, FTPProtocol, ProtocolEnum, ServerNotAvailableError, SFTPProtocol
-from aeth_ext.rich import Progress
 from paramiko import AutoAddPolicy, SFTPClient, SSHClient
 from rich import get_console
 
 # First party imports
-from environment_init_vars import SETTINGS
+from aeth_ext.ftp import AdaptedFTP, AdaptedSFTP, FTPAdapter, FTPProtocol, ProtocolEnum, ServerNotAvailableError, SFTPProtocol
+from aeth_ext.rich import Progress
+
+# Local folder imports
+from .environment_init_vars import SETTINGS
 
 logger = getLogger(__name__)
 
@@ -164,7 +166,7 @@ if __name__ == "__main__":
   from pathlib import PurePosixPath
 
   # First party imports
-  from environment_init_vars import CWD
+  from scheduled_invoice_processor.environment_init_vars import CWD
 
   local_testing_file = CWD / "test.txt"
   local_testing_file.write_text("This is a test file for FTP/SFTP upload and download testing.\n" * 1000)

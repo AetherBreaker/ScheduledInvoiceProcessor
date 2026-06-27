@@ -14,13 +14,15 @@ from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
 
 # First party imports
-from environment_init_vars import CWD, SETTINGS
-from ftp_configs import FTPAdapter, RYOSFTPClient
-from logging_config import add_log_context
-from suppliers import SupplierProcessorBase
-from suppliers.file_register_data import FileRegisterData
-from suppliers.log_action import log_actions
-from typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
+from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
+from scheduled_invoice_processor.ftp_configs import FTPAdapter, RYOSFTPClient
+from scheduled_invoice_processor.logging_config import add_log_context
+from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
+
+# Local folder imports
+from . import SupplierProcessorBase
+from .file_register_data import FileRegisterData
+from .log_action import log_actions
 
 if TYPE_CHECKING:
   # Standard library imports
@@ -30,13 +32,13 @@ if TYPE_CHECKING:
   from re import Pattern
   from typing import Any
 
-  # Third party imports
-  from aeth_ext.rich.progress import Progress
-
   # First party imports
-  from ftp_configs import AdaptedSFTP
-  from suppliers.log_action import LogActionHandlerType
-  from typing_custom import CustomerID, SupplierQueueKey
+  from aeth_ext.rich import Progress
+  from scheduled_invoice_processor.ftp_configs import AdaptedSFTP
+  from scheduled_invoice_processor.typing_custom import CustomerID, SupplierQueueKey
+
+  # Local folder imports
+  from .log_action import LogActionHandlerType
 
 logger = getLogger(__name__)
 
@@ -409,11 +411,11 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 async def main():
   # Third party imports
-  from aeth_ext.rich.progress import Progress
   from rich import get_console
 
   # First party imports
-  from database.cache import DatabaseCache
+  from aeth_ext.rich.progress import Progress
+  from scheduled_invoice_processor.database.cache import DatabaseCache
 
   cache = DatabaseCache()
   await cache.refresh_cache()

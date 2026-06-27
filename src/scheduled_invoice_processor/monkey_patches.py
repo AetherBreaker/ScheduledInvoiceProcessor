@@ -2,7 +2,7 @@
 from os import getcwd
 from typing import TYPE_CHECKING
 
-# Third party imports
+# First party imports
 from aeth_ext.monkey_patcher import MonkeyPatcher
 
 if TYPE_CHECKING:

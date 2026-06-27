@@ -4,8 +4,8 @@ from traceback import extract_tb
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-  # First party imports
-  from typing_custom import FatalDetails
+  # Local folder imports
+  from .typing_custom import FatalDetails
 
 logger = getLogger(__name__)
 

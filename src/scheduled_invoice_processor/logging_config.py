@@ -7,12 +7,12 @@ from queue import Queue
 from secrets import token_urlsafe
 from typing import TYPE_CHECKING, Literal, override
 
-# Third party imports
+# First party imports
 from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, FixedLogRecord
 from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
 
-# First party imports
-from environment_init_vars import SETTINGS
+# Local folder imports
+from .environment_init_vars import SETTINGS
 
 if TYPE_CHECKING:
   # Standard library imports
@@ -21,9 +21,9 @@ if TYPE_CHECKING:
   # Third party imports
   from rich.console import Console
 
-  # First party imports
-  from suppliers import SupplierProcessorBase
-  from typing_custom.enums import LogActionEnum
+  # Local folder imports
+  from .suppliers import SupplierProcessorBase
+  from .typing_custom.enums import LogActionEnum
 
 SCHEDULER_LOG_LOC = SETTINGS.log_loc_folder / "scheduler_logs"
 APSCHEDULER_DEBUG_LOG_LOC = SETTINGS.log_loc_folder / "scheduler_debug.txt"

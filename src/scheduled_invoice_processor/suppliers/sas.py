@@ -12,21 +12,21 @@ from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
 
 # First party imports
-from environment_init_vars import CWD, SETTINGS
-from ftp_configs import FTPAdapter, SASSFTPClient
-from suppliers import SupplierProcessorBase
-from typing_custom.enums import SuppliersEnum
+from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
+from scheduled_invoice_processor.ftp_configs import FTPAdapter, SASSFTPClient
+from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
+
+# Local folder imports
+from . import SupplierProcessorBase
 
 if TYPE_CHECKING:
   # Standard library imports
   from re import Pattern
 
-  # Third party imports
-  from aeth_ext.rich.progress import Progress
-
   # First party imports
-  from ftp_configs import AdaptedSFTP
-  from typing_custom import CustomerID
+  from aeth_ext.rich.progress import Progress
+  from scheduled_invoice_processor.ftp_configs import AdaptedSFTP
+  from scheduled_invoice_processor.typing_custom import CustomerID
 
 logger = getLogger(__name__)
 
@@ -123,11 +123,11 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 async def main():
   # Third party imports
-  from aeth_ext.rich.progress import Progress
   from rich import get_console
 
   # First party imports
-  from database.cache import DatabaseCache
+  from aeth_ext.rich.progress import Progress
+  from scheduled_invoice_processor.database.cache import DatabaseCache
 
   cache = DatabaseCache()
   await cache.refresh_cache()

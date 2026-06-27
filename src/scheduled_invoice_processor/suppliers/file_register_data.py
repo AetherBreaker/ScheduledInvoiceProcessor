@@ -1,7 +1,7 @@
 # Standard library imports
 from datetime import datetime
-from pathlib import Path, PurePosixPath  # noqa: TC003
-from re import Pattern  # noqa: TC003
+from pathlib import Path, PurePosixPath
+from re import Pattern
 
 # Third party imports
 from dateutil.relativedelta import SU, relativedelta
@@ -9,12 +9,15 @@ from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass
 
 # First party imports
-from environment_init_vars import SETTINGS
-from typing_custom import CustomerID, StoreNum  # noqa: TC001
+from scheduled_invoice_processor.environment_init_vars import SETTINGS
+from scheduled_invoice_processor.typing_custom import CustomerID, StoreNum
+
+
+class FixRuffTC001: ...
 
 
 @dataclass
-class FileRegisterData:
+class FileRegisterData(FixRuffTC001):
   __pydantic_config__ = ConfigDict(
     populate_by_name=True,
     use_enum_values=True,

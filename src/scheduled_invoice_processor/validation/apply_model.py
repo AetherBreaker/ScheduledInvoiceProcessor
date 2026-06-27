@@ -7,16 +7,20 @@ from numpy import nan
 from pandas import DataFrame, Series, concat, isna
 
 # First party imports
-from typing_custom.dataframe_column_names import DatabaseScheduleColumns
-from validation.models.db_entries import ScheduledOrderDBEntryModel, ScheduleValidationError
+from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseScheduleColumns
+
+# Local folder imports
+from .models.db_entries import ScheduledOrderDBEntryModel, ScheduleValidationError
 
 if TYPE_CHECKING:
   # Standard library imports
   from collections.abc import Sequence
 
   # First party imports
-  from typing_custom.dataframe_column_names import ColNameEnum
-  from validation import CustomBaseModel
+  from scheduled_invoice_processor.typing_custom.dataframe_column_names import ColNameEnum
+
+  # Local folder imports
+  from . import CustomBaseModel
 
 logger = getLogger(__name__)
 

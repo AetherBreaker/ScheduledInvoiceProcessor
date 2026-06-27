@@ -4,12 +4,10 @@ from functools import partial, wraps
 from itertools import zip_longest
 from typing import TYPE_CHECKING
 
-# Third party imports
-from aeth_ext.utils import get_last_sat, get_next_sat
-
 # First party imports
-from environment_init_vars import HOST_NAME, SETTINGS
-from typing_custom.enums import LogActionEnum, StatusCode
+from aeth_ext.utils import get_last_sat, get_next_sat
+from scheduled_invoice_processor.environment_init_vars import HOST_NAME, SETTINGS
+from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode
 
 if TYPE_CHECKING:
   # Standard library imports
@@ -17,9 +15,11 @@ if TYPE_CHECKING:
   from logging import LoggerAdapter
 
   # First party imports
-  from suppliers import SupplierProcessorBase
-  from suppliers.file_register_data import FileRegisterData
-  from typing_custom import SupplierQueueKey
+  from scheduled_invoice_processor.typing_custom import SupplierQueueKey
+
+  # Local folder imports
+  from . import SupplierProcessorBase
+  from .file_register_data import FileRegisterData
 
 type LogActionHandlerType = Callable[[SupplierQueueKey, StatusCode, "FileRegisterData"], None]
 
