@@ -10,7 +10,7 @@ from re import compile
 from typing import TYPE_CHECKING, override
 
 # First party imports
-from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
+from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.ftp_configs import AdaptedFTP, CoremarkFTPClient, FTPAdapter
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
@@ -29,7 +29,6 @@ if TYPE_CHECKING:
   from typing import Any
 
   # First party imports
-  from aeth_ext.rich.progress import Progress
   from scheduled_invoice_processor.ftp_configs import AdaptedFTP
   from scheduled_invoice_processor.typing_custom import CustomerID, SupplierQueueKey
 
@@ -67,18 +66,16 @@ class CoremarkProcessor(SupplierProcessorBase):
   post_processing_waiting_folder = PurePosixPath("/Processed/Coremark")
   destination_ftp_folder = PurePosixPath("/Coremark")
 
-  local_pre_processing_folder = CWD / "Coremark_files" / "pre_processing"
-  local_post_processing_folder = CWD / "Coremark_files" / "post_processing"
-
   identifier_prefix = "Coremark"
   log_file_loc = SupplierProcessorBase.log_file_loc / supplier_name
   ctx_var_identifier = ContextVar("coremark_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("coremark_log_loc", default=log_file_loc)
 
-  def __init__(self, pbar: Progress = None) -> None:  # type: ignore
-    if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
-      self.vendor_ftp.pbar = pbar
-    super().__init__(pbar)
+  def __post_init__(self) -> None:
+    self.local_pre_processing_folder = self.job_holding_folder / "Coremark_files" / "pre_processing"
+    self.local_post_processing_folder = self.job_holding_folder / "Coremark_files" / "post_processing"
+    self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
+    self.local_post_processing_folder.mkdir(exist_ok=True, parents=True)
 
   @override
   def assemble_filename_pattern(

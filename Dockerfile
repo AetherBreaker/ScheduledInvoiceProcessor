@@ -53,8 +53,8 @@ ENV PYTHONOPTIMIZE=1
 COPY --from=builder /app/.venv /app/.venv
 
 # Create runtime writable directories and grant ownership to the non-root user.
-RUN mkdir -p /app/persisted_data /app/file_holding /app/timeclock_playground \
-    && chown -R 999:999 /app/persisted_data /app/file_holding /app/timeclock_playground
+RUN mkdir -p /app/persisted_data /app/file_holding \
+    && chown -R 999:999 /app/persisted_data /app/file_holding
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"

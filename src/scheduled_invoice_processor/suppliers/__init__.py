@@ -9,7 +9,7 @@ from ftplib import all_errors
 from io import BytesIO
 from logging import getLogger
 from time import sleep
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 # Third party imports
 from aiologic import Lock
@@ -21,7 +21,7 @@ from pydantic import TypeAdapter
 from aeth_ext.errors.send_alert_email import send_alert_email
 from aeth_ext.types.abc import SingletonType
 from scheduled_invoice_processor.database import DatabaseCache
-from scheduled_invoice_processor.environment_init_vars import SETTINGS
+from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
 from scheduled_invoice_processor.ftp_configs import FTPAdapter, SFTFTPClient
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
@@ -57,6 +57,9 @@ TRANSIENT_TRANSFER_ERROR_STRINGS = (
 )
 
 
+HOLDING_FOLDER = CWD / "file_holding"
+
+
 class SupplierProcessorBase(metaclass=SingletonType):
   _file_pickup_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_preprocess_queue: dict[SupplierQueueKey, FileRegisterData]
@@ -75,7 +78,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   supplier_name: SuppliersEnum
 
-  invoice_num_pattern: Pattern[str] | None
+  invoice_num_pattern: ClassVar[Pattern[str] | None]
 
   checks_date_in_filename: bool = False
 
@@ -96,7 +99,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   errored: bool
 
-  def __init__(self, pbar: Progress = None) -> None:  # type: ignore
+  def __init__(self, pbar: Progress = None) -> None:  # pyright: ignore[reportMissingSuperCall, reportArgumentType]
     self._file_pickup_queue = {}
     self._file_preprocess_queue = {}
     self._file_waiting_queue = {}
@@ -106,13 +109,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
       self.waiting_ftp.pbar = pbar
+      if vendor_ftp := cast("FTPAdapter", getattr(self, "vendor_ftp", None)):  # pyright: ignore[reportMissingTypeArgument]
+        vendor_ftp.pbar = pbar
 
     self._file_queue_backup_folder.mkdir(exist_ok=True, parents=True)
     self._corrupted_queue_backup_folder.mkdir(exist_ok=True, parents=True)
-    self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
-    if self.local_post_processing_folder:
-      self.local_post_processing_folder.mkdir(exist_ok=True, parents=True)
     self.log_file_loc.mkdir(exist_ok=True, parents=True)
+
+    self.job_holding_folder = HOLDING_FOLDER / self.__class__.__name__.lower()
+    self.job_holding_folder.mkdir(parents=True, exist_ok=True)
 
     self.pickup_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_pickup_queue.json"
     self.waiting_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_waiting_queue.json"
@@ -125,6 +130,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
     self._load_queue_backups()
 
     self.cache: DatabaseCache = DatabaseCache()
+
+    self.__post_init__()
+
+  def __post_init__(self) -> None:
+    pass
 
   def __del__(self) -> None:
     self._save_backups()

@@ -12,7 +12,7 @@ from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
 
 # First party imports
-from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
+from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.ftp_configs import FTPAdapter, SASSFTPClient
 from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
 
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
   from re import Pattern
 
   # First party imports
-  from aeth_ext.rich.progress import Progress
   from scheduled_invoice_processor.ftp_configs import AdaptedSFTP
   from scheduled_invoice_processor.typing_custom import CustomerID
 
@@ -58,18 +57,16 @@ class SASProcessor(SupplierProcessorBase):
   post_processing_waiting_folder = PurePosixPath("/Processed/SAS")
   destination_ftp_folder = PurePosixPath("/SAS")
 
-  local_pre_processing_folder = CWD / "SAS_files" / "pre_processing"
-  local_post_processing_folder = CWD / "SAS_files" / "post_processing"
-
   identifier_prefix: str = "SAS"
   log_file_loc = SupplierProcessorBase.log_file_loc / supplier_name
   ctx_var_identifier = ContextVar("sas_log_identifier", default=None)
   ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
 
-  def __init__(self, pbar: Progress = None) -> None:  # type: ignore
-    if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
-      self.vendor_ftp.pbar = pbar
-    super().__init__(pbar)
+  def __post_init__(self) -> None:
+    self.local_pre_processing_folder = self.job_holding_folder / "SAS_files" / "pre_processing"
+    self.local_post_processing_folder = self.job_holding_folder / "SAS_files" / "post_processing"
+    self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
+    self.local_post_processing_folder.mkdir(exist_ok=True, parents=True)
 
   @override
   def assemble_filename_pattern(
