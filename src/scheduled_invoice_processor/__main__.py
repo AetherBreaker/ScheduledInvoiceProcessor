@@ -39,7 +39,7 @@ from dateutil.relativedelta import SA, relativedelta
 # First party imports
 from aeth_ext.errors.err_handling import FATAL_EVENT
 from aeth_ext.rich.progress import Progress
-from scheduled_invoice_processor.database.cache import DatabaseCache
+from scheduled_invoice_processor.database import DatabaseCache
 from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
 from scheduled_invoice_processor.err_handling import get_last_fatal_details
 from scheduled_invoice_processor.scheduler_config import OrderProcessingScheduler

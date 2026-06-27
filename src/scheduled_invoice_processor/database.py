@@ -1,6 +1,6 @@
-# pyright: reportUninitializedInstanceVariable=false
 # pyright: reportPrivateUsage=false
 # Standard library imports
+from abc import ABC
 from asyncio import get_running_loop, sleep, to_thread
 from collections.abc import Sequence
 from contextlib import suppress
@@ -21,11 +21,13 @@ from pandas import Series, to_numeric
 # First party imports
 from aeth_ext.types.abc import SingletonType
 from aeth_ext.utils import today
-from scheduled_invoice_processor.environment_init_vars import SETTINGS
-from scheduled_invoice_processor.typing_custom import AppendDimension, BatchUpdateBody, ValueRange, ValuesBatchUpdateBody
-from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseOrderLogColumns, DatabaseScheduleColumns
-from scheduled_invoice_processor.validation.apply_model import build_typed_dataframe
-from scheduled_invoice_processor.validation.models.db_entries import (
+
+# Local folder imports
+from .environment_init_vars import SETTINGS
+from .typing_custom import AppendDimension, BatchUpdateBody, ValueRange, ValuesBatchUpdateBody
+from .typing_custom.dataframe_column_names import DatabaseOrderLogColumns, DatabaseScheduleColumns
+from .validation.apply_model import build_typed_dataframe
+from .validation.models.db_entries import (
   ORDER_LOG_TYPE_ADAPTERS,
   SCHEDULE_TYPE_ADAPTERS,
   OrderLogDBEntryModel,
@@ -43,15 +45,11 @@ if TYPE_CHECKING:
   from pandas import DataFrame
   from pydantic import TypeAdapter
 
-  # First party imports
-  from scheduled_invoice_processor.typing_custom import CustomerID, InvoiceNum, Request, StoreNum
-  from scheduled_invoice_processor.typing_custom.dataframe_column_names import (  # noqa: F401
-    ColNameEnum,
-    DatabaseOrderLogIndex,
-    DatabaseScheduleIndex,
-  )
-  from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
-  from scheduled_invoice_processor.validation import CustomBaseModel
+  # Local folder imports
+  from .typing_custom import CustomerID, InvoiceNum, Request, StoreNum
+  from .typing_custom.dataframe_column_names import ColNameEnum, DatabaseOrderLogIndex, DatabaseScheduleIndex  # noqa: F401
+  from .typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
+  from .validation import CustomBaseModel
 
 logger = getLogger(__name__)
 
@@ -282,14 +280,14 @@ class DatabaseCache(metaclass=SingletonType):
           sheet_id=SETTINGS.database_order_log_id,
         )
 
-      self._original_sizes = {
-        self.schedule._range_format: (len(self.schedule._cache), len(self.schedule.columns)),
-        self.prev_week_schedule._range_format: (
-          len(self.prev_week_schedule._cache),
-          len(self.prev_week_schedule.columns),
-        ),
-        self.order_log._range_format: (len(self.order_log._cache), len(self.order_log.columns)),
-      }
+      # self._original_sizes = {
+      #   self.schedule._range_format: (len(self.schedule._cache), len(self.schedule.columns)),
+      #   self.prev_week_schedule._range_format: (
+      #     len(self.prev_week_schedule._cache),
+      #     len(self.prev_week_schedule.columns),
+      #   ),
+      #   self.order_log._range_format: (len(self.order_log._cache), len(self.order_log.columns)),
+      # }
 
       # self.schedule._cache.to_csv("debug_schedule.csv")
       # self.prev_week_schedule._cache.to_csv("debug_prev_week_schedule.csv")
@@ -434,7 +432,7 @@ class DatabaseCache(metaclass=SingletonType):
     await self.refresh_cache()
 
 
-class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[Any, ...] | Any]:
+class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[Any, ...] | Any](ABC):
   _range_format: str
   _range_format_single: str
   _field_type_adapters: dict[str, TypeAdapter[Any]]

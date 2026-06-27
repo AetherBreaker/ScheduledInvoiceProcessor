@@ -415,7 +415,7 @@ async def main():
 
   # First party imports
   from aeth_ext.rich.progress import Progress
-  from scheduled_invoice_processor.database.cache import DatabaseCache
+  from scheduled_invoice_processor.database import DatabaseCache
 
   cache = DatabaseCache()
   await cache.refresh_cache()

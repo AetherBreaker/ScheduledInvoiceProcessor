@@ -12,15 +12,15 @@ from time import sleep
 from typing import TYPE_CHECKING, Any
 
 # Third party imports
-from aeth_ext.errors.send_alert_email import send_alert_email
-from aeth_ext.types.abc import SingletonType
 from aiologic import Lock
 from dateutil.relativedelta import SA, SU, relativedelta
 from paramiko import SSHException
 from pydantic import TypeAdapter
 
 # First party imports
-from scheduled_invoice_processor.database.cache import DatabaseCache
+from aeth_ext.errors.send_alert_email import send_alert_email
+from aeth_ext.types.abc import SingletonType
+from scheduled_invoice_processor.database import DatabaseCache
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.ftp_configs import FTPAdapter, SFTFTPClient
 from scheduled_invoice_processor.logging_config import add_log_context
@@ -36,11 +36,9 @@ if TYPE_CHECKING:
   from pathlib import Path, PurePosixPath
   from re import Match, Pattern
 
-  # Third party imports
+  # First party imports
   from aeth_ext.ftp.adapter import AdaptedFTP
   from aeth_ext.rich.progress import Progress, TaskID
-
-  # First party imports
   from scheduled_invoice_processor.suppliers.log_action import LogActionHandlerType
   from scheduled_invoice_processor.typing_custom import CustomerID, StoreNum, SupplierQueueKey
   from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
