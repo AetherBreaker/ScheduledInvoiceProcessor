@@ -5,6 +5,12 @@ FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
 
 WORKDIR /app
 
+ARG PACKAGE_NAME
+ARG PACKAGE_VERSION
+ARG SFTPYPI_INDEX_URL=https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple
+ARG PYPI_INDEX_URL=https://pypi.org/simple
+ARG UV_INDEX_STRATEGY=unsafe-best-match
+
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
 
@@ -15,11 +21,16 @@ ENV UV_LINK_MODE=copy
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install the project's dependencies using the lockfile and settings
+# Use the repository pyproject to resolve and install dependencies into the builder venv.
+COPY pyproject.toml /app/pyproject.toml
+
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project
+    uv venv /app/.venv \
+    && uv pip install --python /app/.venv/bin/python \
+    --index-url ${SFTPYPI_INDEX_URL} \
+    --extra-index-url ${PYPI_INDEX_URL} \
+    --index-strategy ${UV_INDEX_STRATEGY} \
+    ${PACKAGE_NAME}==${PACKAGE_VERSION}
 
 # ---- Final stage ----
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
@@ -41,27 +52,23 @@ ENV PYTHONOPTIMIZE=1
 # Copy the virtual environment from the builder stage
 COPY --from=builder /app/.venv /app/.venv
 
-# Copy the source code into the container.
-COPY --chown=nonroot:nonroot ./src ./src
-
-# create /app/persisted_data if it doesn't exist and set ownership to the non-root user
-RUN mkdir -p /app/persisted_data && chown -R 999:999 /app/persisted_data
-
-# Ensure the non-root user owns all the contents of the persisted_data folder
-RUN chown -R 999:999 /app/persisted_data
-
-# Set PYTHONPATH so imports work correctly
-ENV PYTHONPATH=/app/src
+# Create runtime writable directories and grant ownership to the non-root user.
+RUN mkdir -p /app/persisted_data /app/file_holding /app/timeclock_playground \
+    && chown -R 999:999 /app/persisted_data /app/file_holding /app/timeclock_playground
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Reset the entrypoint, don't invoke `uv`
+# Re-declare build arg and persist as ENV so it is available at runtime
+ARG PACKAGE_NAME
+ENV PACKAGE_NAME=${PACKAGE_NAME}
+
+# Reset the image entrypoint so we can explicitly invoke uv in CMD
 ENTRYPOINT []
 
 # Use the non-root user to run our application
 USER nonroot
 
 # Run the application.
-WORKDIR /app/src
-CMD ["uv", "run", "./__main__.py"]
+WORKDIR /app
+CMD ["sh", "-c", "MODULE_NAME=$(printf '%s' \"$PACKAGE_NAME\" | tr '-' '_'); exec uv run -m \"$MODULE_NAME\""]
