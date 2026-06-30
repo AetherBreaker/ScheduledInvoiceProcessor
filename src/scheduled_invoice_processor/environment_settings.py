@@ -31,20 +31,20 @@ class Settings(BaseSettings):
 
   @property
   def google_api_key_file(self) -> Path:
-    return self.creds_file_reusable("Google API key file not found at expected location", "secrets", "db-key.json")
+    return self._creds_file_reusable("Google API key file not found at expected location", "secrets", "db-key.json")
 
   @property
   def sft_website_creds_file(self) -> Path:
-    return self.creds_file_reusable("SFT website creds file not found at expected location", "secrets", "sft_creds.json")
+    return self._creds_file_reusable("SFT website creds file not found at expected location", "secrets", "sft_creds.json")
 
   @property
   def sas_ftp_creds_file(self) -> Path:
-    return self.creds_file_reusable("SAS FTP creds file not found at expected location", "secrets", "sas_ftp_creds.json")
+    return self._creds_file_reusable("SAS FTP creds file not found at expected location", "secrets", "sas_ftp_creds.json")
 
   @property
   def ryo_ftp_creds_file(self) -> Path:
-    return self.creds_file_reusable("RYO FTP creds file not found at expected location", "secrets", "ryo_ftp_creds.json")
+    return self._creds_file_reusable("RYO FTP creds file not found at expected location", "secrets", "ryo_ftp_creds.json")
 
   @property
   def coremark_ftp_creds_file(self) -> Path:
-    return self.creds_file_reusable("Coremark FTP creds file not found at expected location", "secrets", "coremark_ftp_creds.json")
+    return self._creds_file_reusable("Coremark FTP creds file not found at expected location", "secrets", "coremark_ftp_creds.json")
