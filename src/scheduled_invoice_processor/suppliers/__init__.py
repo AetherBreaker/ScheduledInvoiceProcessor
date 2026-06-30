@@ -99,7 +99,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   errored: bool
 
-  def __init__(self, pbar: Progress = None) -> None:  # pyright: ignore[reportMissingSuperCall, reportArgumentType]
+  def __init__(self, pbar: Progress = None) -> None:  # pyright: ignore[reportArgumentType]
     self._file_pickup_queue = {}
     self._file_preprocess_queue = {}
     self._file_waiting_queue = {}
