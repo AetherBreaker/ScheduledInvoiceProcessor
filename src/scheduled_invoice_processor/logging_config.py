@@ -8,7 +8,7 @@ from secrets import token_urlsafe
 from typing import TYPE_CHECKING, Literal, override
 
 # First party imports
-from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, FixedLogRecord
+from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, NamedLogRecord
 from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
 
 # Local folder imports
@@ -36,7 +36,7 @@ class ContextFilter(logging.Filter):
     self.identifier = identifier
 
   @override
-  def filter(self, record: FixedLogRecord) -> bool:  # pyright: ignore[reportIncompatibleMethodOverride]
+  def filter(self, record: NamedLogRecord) -> bool:  # pyright: ignore[reportIncompatibleMethodOverride]
     try:
       return record.ctx.get() == self.identifier  # pyright: ignore[reportAttributeAccessIssue]
     except AttributeError:
