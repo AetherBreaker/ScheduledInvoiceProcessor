@@ -141,7 +141,7 @@ class RYOProcessor(SupplierProcessorBase):
 
     # check that the waiting ftp is online before continuing
     if not self.waiting_ftp.test_connection():
-      local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling preprocessing step.")
+      local_logger.warning("%s: Waiting FTP server is not online. Cancelling preprocessing step.", self.__class__.__name__)
       return
 
     async with self._lock:
@@ -150,7 +150,7 @@ class RYOProcessor(SupplierProcessorBase):
       if not items_to_advance:
         return
 
-      local_logger.info(f"{self.__class__.__name__}: Beginning preprocessing for {len(items_to_advance)} files")
+      local_logger.info("%s: Beginning preprocessing for %s files", self.__class__.__name__, len(items_to_advance))
 
       errors = []
 
@@ -172,7 +172,7 @@ class RYOProcessor(SupplierProcessorBase):
           try:
             key, file_meta = await result
 
-            local_logger.info(f"{self.__class__.__name__}: {key}: Successfully preprocessed files")
+            local_logger.info("%s: %s: Successfully preprocessed files", self.__class__.__name__, key)
 
             if log_action_handler is not None:
               log_action_handler(key, StatusCode.SUCCESS, file_meta)
@@ -181,19 +181,19 @@ class RYOProcessor(SupplierProcessorBase):
           except Exception as e:
             matched_results = [k for k, v in futures.items() if result is v]  # pyright: ignore[reportUnnecessaryComparison]
             if not matched_results:
-              local_logger.error(f"{self.__class__.__name__}: Could not find matching key for result {result} in futures")
+              local_logger.error("%s: Could not find matching key for result %s in futures", self.__class__.__name__, result)
               raise RuntimeError(f"Could not find matching key for result {result} in futures") from e
 
             key = matched_results[0]
 
-            local_logger.error(f"{self.__class__.__name__}: {key}: Error preprocessing files {e}")
+            local_logger.exception("%s: %s: Error preprocessing files", self.__class__.__name__, key)
             errors.append((key, e))
 
             if log_action_handler is not None:
               log_action_handler(key, StatusCode.FAILURE, items_to_advance[key])
 
       if errors:
-        local_logger.error(f"{self.__class__.__name__}: Completed preprocessing with {len(errors)} errors")
+        local_logger.error("%s: Completed preprocessing with %s errors", self.__class__.__name__, len(errors))
 
   def _preprocess_off_thread(
     self,
@@ -207,7 +207,10 @@ class RYOProcessor(SupplierProcessorBase):
       # Create the merged filed
       new_file_meta = self._create_new_merged_file(key, old_file_meta, adapted_logger)
       local_logger.info(
-        f"{self.__class__.__name__}: {key}: Created merged file at location [yellow]{new_file_meta.local_copy_loc[0].without_cwd()}[/]",
+        "%s: %s: Created merged file at location [yellow]%s[/]",
+        self.__class__.__name__,
+        key,
+        new_file_meta.local_copy_loc[0].without_cwd(),
         extra={"markup": True},
       )
 
@@ -217,7 +220,7 @@ class RYOProcessor(SupplierProcessorBase):
       # Update the queues with the new file meta
       self._file_dropoff_queue[key] = new_file_meta
       old_file_meta = self._file_preprocess_queue.pop(key)
-      local_logger.info(f"{self.__class__.__name__}: {key}: Updated queues")
+      local_logger.info("%s: %s: Updated queues", self.__class__.__name__, key)
 
       # Then we clean up the old invoice files left on the remote waiting folder
       for remote_file_loc in old_file_meta.remote_file_locs.values():
@@ -231,10 +234,13 @@ class RYOProcessor(SupplierProcessorBase):
       for local_file_loc in old_file_meta.local_copy_loc.values():
         try:
           local_file_loc.unlink()
-          local_logger.info(f"{self.__class__.__name__}: {key}: Deleted local file {local_file_loc.without_cwd()}")
-        except Exception as e:
-          local_logger.error(
-            f"{self.__class__.__name__}: {key}: Failed to delete local file {local_file_loc.without_cwd()}", exc_info=e
+          local_logger.info("%s: %s: Deleted local file %s", self.__class__.__name__, key, local_file_loc.without_cwd())
+        except Exception:
+          local_logger.exception(
+            "%s: %s: Failed to delete local file %s",
+            self.__class__.__name__,
+            key,
+            local_file_loc.without_cwd(),
           )
 
       # Uploaded the new file to the remote waiting folder, replacing the old invoice files.
@@ -245,18 +251,20 @@ class RYOProcessor(SupplierProcessorBase):
             waiting_client.upload_file(
               send_path.as_posix(), callback=f.read, file_size=new_file_loc.stat().st_size, task_msg=f"Uploading {send_path.name}"
             )
-        local_logger.info(f"{self.__class__.__name__}: {key}: Uploaded merged file to remote location {send_path}")
+        local_logger.info("%s: %s: Uploaded merged file to remote location %s", self.__class__.__name__, key, send_path)
 
         try:
           new_file_loc.unlink()
-          local_logger.info(f"{self.__class__.__name__}: {key}: Deleted local merged file {new_file_loc.without_cwd()}")
-        except Exception as e:
-          local_logger.error(f"{self.__class__.__name__}: {key}: Failed to delete local merged file {new_file_loc.without_cwd()}: {e}")
+          local_logger.info("%s: %s: Deleted local merged file %s", self.__class__.__name__, key, new_file_loc.without_cwd())
+        except Exception:
+          local_logger.exception(
+            "%s: %s: Failed to delete local merged file %s", self.__class__.__name__, key, new_file_loc.without_cwd()
+          )
 
       # return the new file meta and queue key to be updated in the logging list
       return key, new_file_meta
     except Exception as e:
-      logger.error(f"{self.__class__.__name__}: {key}: Unexpected error in preprocessing off thread: {e}")
+      logger.exception("%s: %s: Unexpected error in preprocessing off thread", self.__class__.__name__, key)
       raise e
 
   def _create_new_merged_file(  # noqa: C901, PLR0915
@@ -275,8 +283,11 @@ class RYOProcessor(SupplierProcessorBase):
           )
         original_invoice_files.append(local_file_loc)
         local_logger.info(
-          f"{self.__class__.__name__}: {key}: Downloaded original invoice file from\n[yellow]{remote_file_loc}[/] to\n[yellow]{local_file_loc.without_cwd()}[/]",
-          extra={"markup": True},
+          "%s: %s: Downloaded original invoice file from\n[yellow]%s[/] to\n[yellow]%s[/]",
+          self.__class__.__name__,
+          key,
+          remote_file_loc,
+          local_file_loc.without_cwd(),
         )
 
     # grab the contents of all the files
@@ -292,7 +303,7 @@ class RYOProcessor(SupplierProcessorBase):
       with file.open("rb") as fb:
         digest = file_digest(fb, "sha256")
         if digest in file_hashes:
-          local_logger.error(f"{self.__class__.__name__}: {key}: Duplicate file hash found for file {file.name}: {digest}")
+          local_logger.error("%s: %s: Duplicate file hash found for file %s: %s", self.__class__.__name__, key, file.name, digest)
           continue  # skip this file since it has a duplicate hash
         else:
           file_hashes.add(digest.hexdigest())
@@ -308,7 +319,11 @@ class RYOProcessor(SupplierProcessorBase):
         match = self.invoice_num_pattern.match(first_line)
         if not match:
           local_logger.error(
-            f"{self.__class__.__name__}: {key}: First line of file {file.name} did not match expected format:\n{first_line}"
+            "%s: %s: First line of file %s did not match expected format:\n%s",
+            self.__class__.__name__,
+            key,
+            file.name,
+            first_line,
           )
         attrs = (
           match.groupdict()
@@ -324,7 +339,11 @@ class RYOProcessor(SupplierProcessorBase):
         if attrs["invoice_num"] not in [None, ""]:
           if attrs["invoice_num"] in found_invoice_nums:
             local_logger.error(
-              f"{self.__class__.__name__}: {key}: Duplicate invoice number found in file {file.name}: {attrs['invoice_num']}"
+              "%s: %s: Duplicate invoice number found in file %s: %s",
+              self.__class__.__name__,
+              key,
+              file.name,
+              attrs["invoice_num"],
             )
             continue  # skip this file since it has a duplicate invoice number
           else:
@@ -373,7 +392,11 @@ class RYOProcessor(SupplierProcessorBase):
       new_file.writelines(body_lines)
 
     local_logger.info(
-      f"{self.__class__.__name__}: {key}: Created new merged file at location [yellow]{new_file_loc.without_cwd()}[/] with header\n[blue]{header_result.decode()}[/]",
+      "%s: %s: Created new merged file at location [yellow]%s[/] with header\n[blue]%s[/]",
+      self.__class__.__name__,
+      key,
+      new_file_loc.without_cwd(),
+      header_result.decode(),
       extra={"markup": True},
     )
 

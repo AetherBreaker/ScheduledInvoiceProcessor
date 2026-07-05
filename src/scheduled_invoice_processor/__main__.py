@@ -66,8 +66,8 @@ if not __debug__:
     """Write current timestamp to heartbeat file for health monitoring."""
     try:
       HEARTBEAT_FILE.write_text(datetime.now(tz=SETTINGS.tz).isoformat())
-    except Exception as e:
-      logger.error(f"Failed to write heartbeat: {e}")
+    except Exception:
+      logger.exception("Failed to write heartbeat: %s")
 else:
 
   def write_heartbeat():
@@ -187,14 +187,14 @@ async def reschedule_all_tasks():
         replace_existing=True,
         jobstore="order_processing",
       )
-      logger.info(f"Scheduled {processor.__class__.__name__}.register_pickup for order: {reg_pickup_job_id}")
+      logger.info("Scheduled %s.register_pickup for order: %s", processor.__class__.__name__, reg_pickup_job_id)
     else:
       try:
         scheduler.remove_job(reg_pickup_job_id, jobstore="order_processing")
       except JobLookupError:
         pass
       else:
-        logger.info(f"Removed register_pickup because order was marked as picked up: {reg_pickup_job_id}")
+        logger.info("Removed register_pickup because order was marked as picked up: %s", reg_pickup_job_id)
     if not applied and not manually_moved:
       scheduler.add_job(
         processor.register_dropoff,
@@ -214,14 +214,14 @@ async def reschedule_all_tasks():
         replace_existing=True,
         jobstore="order_processing",
       )
-      logger.info(f"Scheduled {processor.__class__.__name__}.register_dropoff for order: {reg_dropoff_job_id}")
+      logger.info("Scheduled %s.register_dropoff for order: %s", processor.__class__.__name__, reg_dropoff_job_id)
     else:
       try:
         scheduler.remove_job(reg_dropoff_job_id, jobstore="order_processing")
       except JobLookupError:
         pass
       else:
-        logger.info(f"Removed register_dropoff because order was marked as applied: {reg_dropoff_job_id}")
+        logger.info("Removed register_dropoff because order was marked as applied: %s", reg_dropoff_job_id)
 
   # previous_week_orders = [order async for order in previous_week.walk_typed_rows()]
   # for order in previous_week_orders:
@@ -451,15 +451,16 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block  # noq
         logger.warning("Fatal shutdown: stopping scheduler to freeze application state")
         scheduler.pause()
         scheduler.shutdown(wait=False)
-      except Exception as e:
-        logger.error(f"Fatal shutdown: failed to stop scheduler cleanly: {e}", exc_info=True)
+      except Exception:
+        logger.exception("Fatal shutdown: failed to stop scheduler cleanly")
 
       fatal_details = get_last_fatal_details()
 
       if fatal_details["is_database_origin"]:
         logger.warning(
-          "Fatal shutdown: skipping final Google Sheets flush because fatal error originated in database interface"
-          f" (type={fatal_details['exception_type']}, message={fatal_details['exception_message']})"
+          "Fatal shutdown: skipping final Google Sheets flush because fatal error originated in database interface (type=%s, message=%s)",
+          fatal_details["exception_type"],
+          fatal_details["exception_message"],
         )
       else:
         try:
@@ -467,8 +468,8 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block  # noq
             logger.warning("Fatal shutdown: attempting final Google Sheets flush of queued writes")
             await cache.submit_queued_writes_to_pool()
             logger.warning("Fatal shutdown: final Google Sheets flush completed")
-        except Exception as e:
-          logger.error(f"Fatal shutdown: final Google Sheets flush failed: {e}", exc_info=True)
+        except Exception:
+          logger.exception("Fatal shutdown: final Google Sheets flush failed")
 
       sys.exit(1)
 

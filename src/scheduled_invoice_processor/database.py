@@ -349,7 +349,7 @@ class DatabaseCache(metaclass=SingletonType):
           self._after_write_update_body = None  # Reset the update body after writing
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
-      logger.error(f"Error during API write: {e}")
+      logger.exception("Error during API write")
       raise e
 
   async def flip_to_new_week(self):

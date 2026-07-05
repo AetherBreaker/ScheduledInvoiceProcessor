@@ -177,7 +177,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
             f.write(data)
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
-      logger.error(f"{self.__class__.__name__}: Error saving queue backups: {e}")
+      logger.error("%s: Error saving queue backups: %s", self.__class__.__name__, exc_info=e)
       raise e
 
   def _load_queue_backups(self) -> None:
@@ -213,11 +213,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     try:
       return self._queue_ta.validate_json(raw_backup)
-    except Exception as exc:
+    except Exception as e:
       quarantined_file = self._quarantine_corrupted_queue_backup(backup_file, raw_backup)
       logger.error(
-        f"{self.__class__.__name__}: Failed to load {queue_name} queue backup from {backup_file}. "
-        f"Quarantined corrupted backup to {quarantined_file}: {exc}"
+        "%s: Failed to load %s queue backup from %s. Quarantined corrupted backup to %s: %s",
+        self.__class__.__name__,
+        queue_name,
+        backup_file,
+        quarantined_file,
+        exc_info=e,
       )
       send_alert_email(
         subject=f"Corrupted {self.queue_backup_prefix} {queue_name} queue backup",
@@ -225,7 +229,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
           f"{self.__class__.__name__} could not load the {queue_name} queue backup.\n\n"
           f"Original backup: {backup_file}\n"
           f"Quarantined copy: {quarantined_file}\n"
-          f"Error: {exc}\n\n"
+          f"Error: {e}\n\n"
           "Startup will continue with this queue cleared."
         ),
       )
@@ -233,7 +237,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   async def clean_stale_queue_entries(self) -> None:
     if self.errored:
-      logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping cleanup of stale queue entries")
+      logger.warning("%s: Disabled due to error state. Skipping cleanup of stale queue entries", self.__class__.__name__)
       return
     async with self._lock:
       changed_entries = await self._clean_stale_queue_entries()
@@ -249,7 +253,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       if item.stale:
         self._file_pickup_queue.pop(key)
         changed_entries += 1
-        logger.warning(f"{self.__class__.__name__}: Removed stale queue entry {key} from pickup queue")
+        logger.warning("%s: Removed stale queue entry %s from pickup queue", self.__class__.__name__, key)
       elif await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
         (self.supplier_name, item.storenum), DatabaseScheduleColumns.invoice_grabbed
       ) or await (self.cache.schedule if item.current_week else self.cache.prev_week_schedule).check_toggled(
@@ -259,7 +263,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
         self._file_waiting_queue[key] = entry
         changed_entries += 1
         logger.warning(
-          f"{self.__class__.__name__}: queue entry {key} found in pickup queue while marked as invoice_grabbed. Moved entry to waiting queue."
+          "%s: queue entry %s found in pickup queue while marked as invoice_grabbed. Moved entry to waiting queue.",
+          self.__class__.__name__,
+          key,
         )
 
     for queue_name, queue in {
@@ -279,7 +285,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
         ):
           queue.pop(key)
           changed_entries += 1
-          logger.warning(f"{self.__class__.__name__}: Removed stale queue entry {key} from {queue_name} queue")
+          logger.warning("%s: Removed stale queue entry %s from %s queue", self.__class__.__name__, key, queue_name)
 
     return changed_entries
 
@@ -295,9 +301,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
     vendor_ftp_online = cls.vendor_ftp.test_connection()
 
     if not waiting_ftp_online:
-      logger.error(f"{cls.__name__}: Waiting FTP server is offline.")
+      logger.error("%s: Waiting FTP server is offline.", cls.__name__)
     if not vendor_ftp_online:
-      logger.error(f"{cls.__name__}: Vendor FTP server is offline.")
+      logger.error("%s: Vendor FTP server is offline.", cls.__name__)
 
     return waiting_ftp_online and vendor_ftp_online
 
@@ -311,7 +317,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ) -> None:
     if self.errored:
       logger.warning(
-        f"{self.__class__.__name__}: Disabled due to error state. Skipping registration of pickup for {storenum}, {customer_id}"
+        "%s: Disabled due to error state. Skipping registration of pickup for %s, %s",
+        self.__class__.__name__,
+        storenum,
+        customer_id,
       )
       return
     await self._register_pickup(storenum, customer_id, pickup_date, dropoff_date, current_week)
@@ -326,20 +335,23 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ) -> None:
     if self.errored:
       logger.warning(
-        f"{self.__class__.__name__}: Disabled due to error state. Skipping registration of dropoff for {storenum}, {customer_id}"
+        "%s: Disabled due to error state. Skipping registration of dropoff for %s, %s",
+        self.__class__.__name__,
+        storenum,
+        customer_id,
       )
       return
     await self._register_dropoff(storenum, customer_id, pickup_date, dropoff_date, current_week)
 
   async def pickup_files(self) -> None:
     if self.errored:
-      logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping pickup of files")
+      logger.warning("%s: Disabled due to error state. Skipping pickup of files", self.__class__.__name__)
       return
     await self._pickup_files()
 
   async def dropoff_files(self) -> None:
     if self.errored:
-      logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping dropoff of files")
+      logger.warning("%s: Disabled due to error state. Skipping dropoff of files", self.__class__.__name__)
       return
     await self._dropoff_files()
 
@@ -352,12 +364,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ):
     local_logger = adapted_logger or logger
     if self.errored:
-      local_logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping preprocessing of files")
+      local_logger.warning("%s: Disabled due to error state. Skipping preprocessing of files", self.__class__.__name__)
       return
     if not self._file_preprocess_queue:
       return
     if not self.waiting_ftp.test_connection(logit=True):
-      local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling preprocessing step.")
+      local_logger.warning("%s: Waiting FTP server is not online. Cancelling preprocessing step.", self.__class__.__name__)
       return
     async with self._lock:
       if not self._file_preprocess_queue:
@@ -365,7 +377,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
       num_files = sum(len(v.file_names) for v in self._file_preprocess_queue.values())
 
-      local_logger.info(f"{self.__class__.__name__}: Beginning preprocessing for {num_files} files")
+      local_logger.info("%s: Beginning preprocessing for %s files", self.__class__.__name__, num_files)
 
       with self.pbar.add_task(f"{self.__class__.__name__}: Preprocessing files", total=num_files) as files_move_task:
         futures = []
@@ -414,19 +426,19 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return
 
     if not self.waiting_ftp.test_connection(logit=True):
-      local_logger.warning(f"{self.__class__.__name__}: Waiting FTP server is not online. Cancelling dropoff step.")
+      local_logger.warning("%s: Waiting FTP server is not online. Cancelling dropoff step.", self.__class__.__name__)
       return
 
     await self._preprocess_files()
 
     if self.errored:
-      local_logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping dropoff of files")
+      local_logger.warning("%s: Disabled due to error state. Skipping dropoff of files", self.__class__.__name__)
       return
 
     if not self._file_dropoff_queue:
       local_logger.error(
-        f"{self.__class__.__name__}: No files to drop off after preprocessing step."
-        "This likely indicates an error in the preprocessing step."
+        "%s: No files to drop off after preprocessing step.This likely indicates an error in the preprocessing step.",
+        self.__class__.__name__,
       )
       return
     async with self._lock:
@@ -466,7 +478,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
           self._file_dropoff_queue.pop(key)
           schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
 
-          local_logger.info(f"{self.__class__.__name__}: Checking off {self.supplier_name}_{file_meta.storenum} invoice_applied")
+          local_logger.info("%s: Checking off %s_%s invoice_applied", self.__class__.__name__, self.supplier_name, file_meta.storenum)
           await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_applied)
 
   def _transfer_file_vend_to_main(
@@ -486,7 +498,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
     for attempt in range(1, self._transient_transfer_retries + 2):
       if self.errored:
         local_logger.warning(
-          f"{self.__class__.__name__}: Disabled due to error state. Skipping transfer of files from vendor to main FTP"
+          "%s: Disabled due to error state. Skipping transfer of files from vendor to main FTP",
+          self.__class__.__name__,
         )
         return False
       try:
@@ -507,7 +520,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
         getattr(file_meta, success_attr)[idx] = success
 
         local_logger.info(
-          f"{self.__class__.__name__}: Transferred {self.supplier_name} [yellow]{send_path}[/] to SFT FTP [yellow]{recv_path}[/]",
+          "%s: Transferred %s [yellow]%s[/] to SFT FTP [yellow]%s[/]",
+          self.__class__.__name__,
+          self.supplier_name,
+          send_path,
+          recv_path,
           extra={"markup": True},
         )
         self.extract_invoice_num(transient_file, file_meta, idx, adapted_logger=adapted_logger)
@@ -519,14 +536,18 @@ class SupplierProcessorBase(metaclass=SingletonType):
         if self._is_transient_transfer_error(e) and attempt <= self._transient_transfer_retries:
           backoff_seconds = 2 ** (attempt - 1)
           local_logger.warning(
-            f"{self.__class__.__name__}: Transient transfer failure for {send_path.name} on attempt {attempt} of "
-            f"{self._transient_transfer_retries + 1}. Retrying in {backoff_seconds} seconds",
+            "%s: Transient transfer failure for %s on attempt %s of %s. Retrying in %s seconds",
+            self.__class__.__name__,
+            send_path.name,
+            attempt,
+            self._transient_transfer_retries + 1,
+            backoff_seconds,
             exc_info=e,
           )
           sleep(backoff_seconds)
           continue
 
-        local_logger.error(f"{self.__class__.__name__}: Error transferring {send_path} to {recv_path}", exc_info=e)
+        local_logger.exception("%s: Error transferring %s to %s", self.__class__.__name__, send_path, recv_path)
         getattr(file_meta, success_attr)[idx] = False
         if log_action_handler is not None:
           log_action_handler(key, StatusCode.FAILURE, file_meta)
@@ -562,11 +583,13 @@ class SupplierProcessorBase(metaclass=SingletonType):
           file_meta.invoice_nums[idx] = match.group("invoice_num")
         else:
           local_logger.warning(
-            f"{self.__class__.__name__}: Failed to extract invoice number from file for {file_meta.storenum} using pattern {self.invoice_num_pattern.pattern}"
+            "%s: Failed to extract invoice number from file for %s using pattern %s",
+            self.__class__.__name__,
+            file_meta.storenum,
+            self.invoice_num_pattern.pattern,
           )
-    except Exception as e:
-      local_logger.error(f"{self.__class__.__name__}: Error extracting invoice number for {file_meta.storenum}", exc_info=e)
-      pass
+    except Exception:
+      local_logger.exception("%s: Error extracting invoice number for %s", self.__class__.__name__, file_meta.storenum)
 
   def _transfer_file_main_to_main(
     self,
@@ -583,7 +606,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
     result = StatusCode.UNKNOWN
     if self.errored:
-      local_logger.warning(f"{self.__class__.__name__}: Disabled due to error state. Skipping transfer of files within main FTP")
+      local_logger.warning("%s: Disabled due to error state. Skipping transfer of files within main FTP", self.__class__.__name__)
       return False
     try:
       with self.waiting_ftp.start_session() as client:
@@ -596,10 +619,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
           success = True
           result = StatusCode.SUCCESS
           local_logger.info(
-            f"{self.__class__.__name__}: Moved [yellow]{send_path}[/] to [yellow]{recv_path}[/]", extra={"markup": True}
+            "%s: Moved [yellow]%s[/] to [yellow]%s[/]",
+            self.__class__.__name__,
+            send_path,
+            recv_path,
+            extra={"markup": True},
           )
         except (*all_errors, OSError) as e:
-          local_logger.warning(f"{self.__class__.__name__}: Failed to verify move of {send_path.name}", exc_info=e)
+          local_logger.warning("%s: Failed to verify move of %s", self.__class__.__name__, send_path.name, exc_info=e)
           result = StatusCode.FAILURE
         getattr(file_meta, success_attr)[idx] = success
 
@@ -607,10 +634,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
       if log_action_handler is not None:
         log_action_handler(key, result, file_meta)
     # Ensure that exceptions actually get logged while executing off main thread
-    except Exception as e:
-      local_logger.error(
-        f"{self.__class__.__name__}: Error moving\n[yellow]{send_path}[/] to\n[yellow]{recv_path}[/]",
-        exc_info=e,
+    except Exception:
+      local_logger.exception(
+        "%s: Error moving\n[yellow]%s[/] to\n[yellow]%s[/]",
+        self.__class__.__name__,
+        send_path,
+        recv_path,
         extra={"markup": True},
       )
       if log_action_handler is not None:
@@ -645,20 +674,29 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     if picked_up:
       local_logger.info(
-        f"{self.__class__.__name__}: "
-        f"Attempted to register pickup for already grabbed invoice: {self.supplier_name}, {storenum}, {customer_id}"
+        "%s: Attempted to register pickup for already grabbed invoice: %s, %s, %s",
+        self.__class__.__name__,
+        self.supplier_name,
+        storenum,
+        customer_id,
       )
       return
     if applied:
       local_logger.info(
-        f"{self.__class__.__name__}: "
-        f"Attempted to register pickup for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
+        "%s: Attempted to register pickup for already applied invoice: %s, %s, %s",
+        self.__class__.__name__,
+        self.supplier_name,
+        storenum,
+        customer_id,
       )
       return
     if manually_moved:
       local_logger.info(
-        f"{self.__class__.__name__}: "
-        f"Attempted to register pickup for manually moved invoice: {self.supplier_name}, {storenum}, {customer_id}"
+        "%s: Attempted to register pickup for manually moved invoice: %s, %s, %s",
+        self.__class__.__name__,
+        self.supplier_name,
+        storenum,
+        customer_id,
       )
       return
 
@@ -672,7 +710,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     ):
       # program constantly attempts to re-register things for pickup. So no need to emit a warning
       if picked_up:
-        local_logger.error(f"{self.__class__.__name__}: {queue_key}: File has already been picked up and has not been checked off")
+        local_logger.error("%s: %s: File has already been picked up and has not been checked off", self.__class__.__name__, queue_key)
       return
 
     pattern = self.assemble_filename_pattern(customer_id, pickup_date, dropoff_date, current_week)
@@ -694,7 +732,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     # Protect queue modification with lock for consistency
     async with self._lock:
       self._file_pickup_queue[queue_key] = register_data
-    local_logger.info(f"{self.__class__.__name__}: Added {storenum} to pickup queue")
+    local_logger.info("%s: Added %s to pickup queue", self.__class__.__name__, storenum)
 
     if log_action_handler is not None:
       log_action_handler(queue_key, StatusCode.SUCCESS, register_data)
@@ -726,20 +764,32 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     if not picked_up:
       local_logger.debug(
-        f"{self.__class__.__name__}: {key}: "
-        f"Attempted to register dropoff for not-yet picked up invoice: {self.supplier_name}, {storenum}, {customer_id}"
+        "%s: %s: Attempted to register dropoff for not-yet picked up invoice: %s, %s, %s",
+        self.__class__.__name__,
+        key,
+        self.supplier_name,
+        storenum,
+        customer_id,
       )
       return
     if applied:
       local_logger.debug(
-        f"{self.__class__.__name__}: {key}: "
-        f"Attempted to register dropoff for already applied invoice: {self.supplier_name}, {storenum}, {customer_id}"
+        "%s: %s: Attempted to register dropoff for already applied invoice: %s, %s, %s",
+        self.__class__.__name__,
+        key,
+        self.supplier_name,
+        storenum,
+        customer_id,
       )
       return
     if manually_moved:
       local_logger.debug(
-        f"{self.__class__.__name__}: {key}: "
-        f"Attempted to register dropoff for manually moved invoice: {self.supplier_name}, {storenum}, {customer_id}"
+        "%s: %s: Attempted to register dropoff for manually moved invoice: %s, %s, %s",
+        self.__class__.__name__,
+        key,
+        self.supplier_name,
+        storenum,
+        customer_id,
       )
       return
 
@@ -747,12 +797,17 @@ class SupplierProcessorBase(metaclass=SingletonType):
     async with self._lock:
       # first check if key is already in dropoff queue
       if key in self._file_preprocess_queue or key in self._file_dropoff_queue:
-        local_logger.warning(f"{self.__class__.__name__}: {key}: File already registered for dropoff")
+        local_logger.warning("%s: %s: File already registered for dropoff", self.__class__.__name__, key)
         return
       if key not in self._file_waiting_queue:
         local_logger.error(
-          f"{self.__class__.__name__}: {key}: Key not found in the file waiting queue! "
-          f"{self.supplier_name}, {storenum}, {customer_id}, {pickup_date.isoformat()}"
+          "%s: %s: Key not found in the file waiting queue! %s, %s, %s, %s",
+          self.__class__.__name__,
+          key,
+          self.supplier_name,
+          storenum,
+          customer_id,
+          pickup_date.isoformat(),
         )
         return
       else:
@@ -760,11 +815,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
           matched_item = self._file_waiting_queue.pop(key)
         except KeyError as e:
           local_logger.critical(
-            f"{self.__class__.__name__}: {key}: "
-            f"No waiting file found for: {self.supplier_name}, {storenum}, {customer_id}, {pickup_date.isoformat()}\n"
-            f"Invoice may not have been picked up or is missing!",
-            exc_info=e,
+            "%s: %s: No waiting file found for: %s, %s, %s, %s\nInvoice may not have been picked up or is missing!",
+            self.__class__.__name__,
+            key,
+            self.supplier_name,
+            storenum,
+            customer_id,
+            pickup_date.isoformat(),
             stack_info=True,
+            exc_info=e,
           )
           if log_action_handler is not None:
             log_action_handler(
@@ -787,7 +846,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
         log_action_handler(key, StatusCode.SUCCESS, matched_item)
 
       self._file_preprocess_queue[key] = matched_item
-      local_logger.info(f"{self.__class__.__name__}: {key}: Registered dropoff for: {matched_item.storenum}")
+      local_logger.info("%s: %s: Registered dropoff for: %s", self.__class__.__name__, key, matched_item.storenum)
 
   def assemble_queue_key(self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime) -> SupplierQueueKey:
     return f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
@@ -803,7 +862,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
     if self.errored:
       local_logger.warning(
-        f"{self.__class__.__name__}: Disabled due to error state. Skipping archiving of file {remote_file} from {source_folder} to {archive_folder}"
+        "%s: Disabled due to error state. Skipping archiving of file %s from %s to %s",
+        self.__class__.__name__,
+        remote_file,
+        source_folder,
+        archive_folder,
       )
       return
     try:
@@ -813,14 +876,19 @@ class SupplierProcessorBase(metaclass=SingletonType):
         try:
           ftp_client.get_size(archive_loc)
           local_logger.info(
-            f"{self.__class__.__name__}: Archive file already exists at [yellow]{archive_loc}[/]",
+            "%s: Archive file already exists at [yellow]%s[/]",
+            self.__class__.__name__,
+            archive_loc,
             extra={"markup": True},
           )
 
         except (*all_errors, OSError):
           if not debug:
             local_logger.info(
-              f"{self.__class__.__name__}: Archiving [yellow]{remote_file}[/] to {archive_folder.as_posix()}",
+              "%s: Archiving [yellow]%s[/] to %s",
+              self.__class__.__name__,
+              remote_file,
+              archive_folder.as_posix(),
               extra={"markup": True},
             )
             ftp_client.rename(source_loc, archive_loc)
@@ -828,14 +896,16 @@ class SupplierProcessorBase(metaclass=SingletonType):
         else:
           if not debug:
             local_logger.info(
-              f"{self.__class__.__name__}: Deleting new file from {source_loc} instead of moving.",
+              "%s: Deleting new file from %s instead of moving.",
+              self.__class__.__name__,
+              source_loc,
             )
             ftp_client.remove(source_loc)
-    except (*all_errors, OSError) as e:
-      local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving", exc_info=e)
+    except (*all_errors, OSError):
+      local_logger.exception("%s: File %s not found at %s for archiving", self.__class__.__name__, remote_file, source_folder)
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
-      local_logger.error(f"{self.__class__.__name__}: Error archiving file {remote_file} at {source_folder}", exc_info=e)
+      local_logger.exception("%s: Error archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
       raise e
 
   def _vendor_archive_file(
@@ -849,7 +919,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
     if self.errored:
       local_logger.warning(
-        f"{self.__class__.__name__}: Disabled due to error state. Skipping archiving of file {remote_file} from {source_folder} to {archive_folder}"
+        "%s: Disabled due to error state. Skipping archiving of file %s from %s to %s",
+        self.__class__.__name__,
+        remote_file,
+        source_folder,
+        archive_folder,
       )
       return
     try:
@@ -859,14 +933,19 @@ class SupplierProcessorBase(metaclass=SingletonType):
         try:
           sftp_client.get_size(archive_loc)
           local_logger.info(
-            f"{self.__class__.__name__}: Archive file already exists at [yellow]{archive_loc}[/]",
+            "%s: Archive file already exists at [yellow]%s[/]",
+            self.__class__.__name__,
+            archive_loc,
             extra={"markup": True},
           )
 
         except FileNotFoundError:
           if not debug:
             local_logger.info(
-              f"{self.__class__.__name__}: Archiving [yellow]{remote_file}[/] to {archive_folder.as_posix()}",
+              "%s: Archiving [yellow]%s[/] to %s",
+              self.__class__.__name__,
+              remote_file,
+              archive_folder.as_posix(),
               extra={"markup": True},
             )
             sftp_client.rename(source_loc, archive_loc)
@@ -874,21 +953,23 @@ class SupplierProcessorBase(metaclass=SingletonType):
         else:
           if not debug:
             local_logger.info(
-              f"{self.__class__.__name__}: Deleting new file from {source_loc} instead of moving.",
+              "%s: Deleting new file from %s instead of moving.",
+              self.__class__.__name__,
+              source_loc,
             )
             sftp_client.remove(source_loc)
-    except FileNotFoundError as e:
-      local_logger.error(f"{self.__class__.__name__}: File {remote_file} not found at {source_folder} for archiving", exc_info=e)
+    except FileNotFoundError:
+      local_logger.exception("%s: File %s not found at %s for archiving", self.__class__.__name__, remote_file, source_folder)
     # Ensure that exceptions actually get logged while executing off main thread
     except OSError as e:
       if e.args and e.args[0] is EACCES:
-        local_logger.error(f"{self.__class__.__name__}: Permission denied archiving file {remote_file} at {source_folder}", exc_info=e)
+        local_logger.exception("%s: Permission denied archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
       else:
-        local_logger.error(f"{self.__class__.__name__}: IOError archiving file {remote_file} at {source_folder}", exc_info=e)
+        local_logger.exception("%s: IOError archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
         raise e
 
     except Exception as e:
-      local_logger.error(f"{self.__class__.__name__}: Error archiving file {remote_file}", exc_info=e)
+      local_logger.exception("%s: Error archiving file %s", self.__class__.__name__, remote_file)
       raise e
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
@@ -902,7 +983,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     if not self._file_pickup_queue:
       return
     if not self.vendor_ftp.test_connection() or not self.waiting_ftp.test_connection():
-      local_logger.warning(f"{self.__class__.__name__}: Aborting pickup_files due to offline FTP server(s)")
+      local_logger.warning("%s: Aborting pickup_files due to offline FTP server(s)", self.__class__.__name__)
       return
 
     async with self._lock:
@@ -934,9 +1015,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
           items_to_dl[key] = file_meta
           if log_action_handler is not None:
             log_action_handler(key, StatusCode.UNKNOWN, file_meta)
-          local_logger.info(f"{self.__class__.__name__}: {key}: Matched {len(matched_files)} files for: {file_meta.storenum}")
+          local_logger.info("%s: %s: Matched %s files for: %s", self.__class__.__name__, key, len(matched_files), file_meta.storenum)
         else:
-          local_logger.warning(f"{self.__class__.__name__}: {key}: No files matched with pattern {file_meta.file_pattern.pattern}")
+          local_logger.warning(
+            "%s: %s: No files matched with pattern %s", self.__class__.__name__, key, file_meta.file_pattern.pattern
+          )
 
       with self.pbar.add_task("Transferring Files", total=sum(len(v.file_names) for v in items_to_dl.values())) as move_files_task:
         dl_futures = []
@@ -979,7 +1062,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
           schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
 
           local_logger.info(
-            f"{self.__class__.__name__}: {key}: Checking off {self.supplier_name}_{file_meta.storenum} invoice_grabbed"
+            "%s: %s: Checking off %s_%s invoice_grabbed",
+            self.__class__.__name__,
+            key,
+            self.supplier_name,
+            file_meta.storenum,
           )
           await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_grabbed)
 
@@ -989,4 +1076,4 @@ class SupplierProcessorBase(metaclass=SingletonType):
     for key, item in items_to_advance.items():
       self._file_waiting_queue[key] = item
       self._file_pickup_queue.pop(key)
-      local_logger.info(f"{self.__class__.__name__}: {key}: Moved {item.storenum} to waiting queue")
+      local_logger.info("%s: %s: Moved %s to waiting queue", self.__class__.__name__, key, item.storenum)

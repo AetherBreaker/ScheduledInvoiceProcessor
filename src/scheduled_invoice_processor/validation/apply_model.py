@@ -77,8 +77,9 @@ def apply_model(row: Series, types_model: type[CustomBaseModel], typed_rows: lis
     typed_rows.append(Series(model_dict, name=row.name, dtype=object))
   elif types_model is ScheduledOrderDBEntryModel:
     logger.error(
-      f"Row with index {row.name} failed validation and could not be converted to ScheduledOrderDBEntryModel\n"
-      + "\n".join(f"{k}: {v}" for k, v in row_dict.items())
+      "Row with index %s failed validation and could not be converted to ScheduledOrderDBEntryModel\n%s",
+      row.name,
+      "\n".join(f"{k}: {v}" for k, v in row_dict.items()),
     )
     raise ScheduleValidationError(
       f"Entry {row[DatabaseScheduleColumns.supplier]} SFT{row[DatabaseScheduleColumns.store]:0>3} failed validation and could not be converted to ScheduledOrderDBEntryModel",
