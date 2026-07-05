@@ -50,24 +50,20 @@ class LoggingConfig(BaseLoggingConfig):
     cls,
     rich_console: Console,
     project_name: str,
-    logging_type: Literal["daily", "per_run"] = "daily",
-    logging_base_name: str | None = None,
-    default_max_width: int | None = None,
-    timestamp_format: str = "%b, %d %a %I:%M %p",
+    asyncio: bool = False,
     log_to_console: bool | Literal["rich"] = "rich",
     queue_console_handler: bool = False,
     logging_queues: Sequence[QueueCatchall] | None = None,
+    extra_handlers: Sequence[logging.Handler] | None = None,
   ):
     super().configure_logging_main(
+      asyncio=asyncio,
       rich_console=rich_console,
       project_name=project_name,
-      logging_type=logging_type,
-      logging_base_name=logging_base_name,
-      default_max_width=default_max_width,
-      timestamp_format=timestamp_format,
       log_to_console=log_to_console,
       queue_console_handler=queue_console_handler,
       logging_queues=logging_queues,
+      extra_handlers=extra_handlers,
     )
 
     # Standard library imports
