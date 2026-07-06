@@ -38,7 +38,7 @@ def build_typed_dataframe(
 
   if not df.empty:
     # Ensure all None-like objects within the dataframe are replaced with None prior to validation
-    df = df.infer_objects(copy=False).replace(NULL_VALUES, value=nan)
+    df = df.infer_objects(copy=False).replace(NULL_VALUES, value=nan)  # pyright: ignore[reportCallIssue]
 
     newly_typed_rows: list[Series] = []
 
@@ -62,7 +62,7 @@ def build_typed_dataframe(
     columns.__index_items__,
     drop=False,
     verify_integrity=True,
-  )
+  )  # pyright: ignore[reportCallIssue]
 
   return df
 

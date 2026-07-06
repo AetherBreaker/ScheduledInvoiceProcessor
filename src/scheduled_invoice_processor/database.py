@@ -261,10 +261,10 @@ class DatabaseCache(metaclass=SingletonType):
 
       self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_dropoff_time] = self.prev_week_schedule._cache.loc[
         :, DatabaseScheduleColumns.invoice_dropoff_time
-      ].map(lambda x: x - relativedelta(weeks=1) if x else x)
+      ].map(lambda x: x - relativedelta(weeks=1) if x else x)  # pyright: ignore[reportOperatorIssue]
       self.prev_week_schedule._cache.loc[:, DatabaseScheduleColumns.invoice_pickup_time] = self.prev_week_schedule._cache.loc[
         :, DatabaseScheduleColumns.invoice_pickup_time
-      ].map(lambda x: x - relativedelta(weeks=1) if x else x)
+      ].map(lambda x: x - relativedelta(weeks=1) if x else x)  # pyright: ignore[reportOperatorIssue]
 
       try:
         order_log_data: list[list[str | int | float]] = result["valueRanges"][2]["values"]

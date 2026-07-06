@@ -117,10 +117,10 @@ class LoggingConfig(BaseLoggingConfig):
   @classmethod
   def configure_shared_socket_logging_client(
     cls,
-    host: str,
-    port: int,
     project_name: str,
     rich_console: Console,
+    host: str | None = None,
+    port: int | None = None,
     handler_defs: Sequence[HandlerDef] = (),
   ) -> None:
 

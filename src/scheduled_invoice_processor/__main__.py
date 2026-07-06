@@ -13,10 +13,11 @@ if __name__ == "__main__":
     log_time=platform == "win32",
   )
   PROJECT_NAME = "ScheduledInvoiceProcessor"
-  HOST = "log-serve"
-  PORT = 9020
+  # HOST = SETTINGS.log_conn_host
+  # PORT = SETTINGS.log_conn_port
 
   initialize(asyncio=True, logging="socket")
+  # initialize(asyncio=True, logging=True)
 else:
   # Third party imports
   from rich import get_console
@@ -31,7 +32,6 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 # Third party imports
-from aiohttp.web import Application, AppRunner, FileResponse, Request, TCPSite
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.cron import CronTrigger
 from dateutil.relativedelta import SA, relativedelta
@@ -310,7 +310,7 @@ async def flip_week():
   scheduler.resume()
 
 
-async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
+async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block  # noqa: C901, PLR0912, PLR0915
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
   with Progress(console=RICH_CONSOLE, auto_refresh=False) as pbar:
     cache = await bootstrap_runtime(pbar)
@@ -372,71 +372,59 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
 
     scheduler.print_jobs()
 
-    app = Application()
-
-    async def favicon(request: Request):
-      return FileResponse(FAVICON_PATH)
-
-    app.router.add_get("/favicon.ico", favicon)
-    app.router.add_static("/", SETTINGS.log_loc_folder, show_index=True, follow_symlinks=True, append_version=True)
-    runner = AppRunner(app)
-    await runner.setup()
-    site = TCPSite(runner, SETTINGS.file_serve_host, SETTINGS.file_serve_port)
-    await site.start()
-
     if __debug__:
       pass
-      # # force run immediately for testing
-      # # Standard library imports
-      # from asyncio import create_task, gather
+      # force run immediately for testing
+      # Standard library imports
+      from asyncio import create_task, gather
 
-      # orders = [order async for order in cache.schedule.walk_typed_rows()]
+      orders = [order async for order in cache.schedule.walk_typed_rows()]
 
-      # register_pickup_tasks = []
-      # for order in orders:
-      #   if order.supplier not in supplier_register:
-      #     continue
-      #   task = create_task(
-      #     supplier_register[order.supplier]().register_pickup(
-      #       storenum=order.store,
-      #       customer_id=order.customer,
-      #       pickup_date=order.invoice_pickup_time,
-      #       dropoff_date=order.invoice_dropoff_time,
-      #       current_week=True,
-      #     )
-      #   )
-      #   register_pickup_tasks.append(task)
-      # await gather(*register_pickup_tasks)
+      register_pickup_tasks = []
+      for order in orders:
+        if order.supplier not in supplier_register:
+          continue
+        task = create_task(
+          supplier_register[order.supplier]().register_pickup(
+            storenum=order.store,
+            customer_id=order.customer,
+            pickup_date=order.invoice_pickup_time,
+            dropoff_date=order.invoice_dropoff_time,
+            current_week=True,
+          )
+        )
+        register_pickup_tasks.append(task)
+      await gather(*register_pickup_tasks)
 
-      # pickup_tasks = []
-      # for processor in supplier_register.values():
-      #   task = create_task(processor().pickup_files())
-      #   pickup_tasks.append(task)
-      # await gather(*pickup_tasks)
+      pickup_tasks = []
+      for processor in supplier_register.values():
+        task = create_task(processor().pickup_files())
+        pickup_tasks.append(task)
+      await gather(*pickup_tasks)
 
-      # register_dropoff_tasks = []
-      # for order in orders:
-      #   if order.supplier not in supplier_register:
-      #     continue
-      #   task = create_task(
-      #     supplier_register[order.supplier]().register_dropoff(
-      #       storenum=order.store,
-      #       customer_id=order.customer,
-      #       pickup_date=order.invoice_pickup_time,
-      #       dropoff_date=order.invoice_dropoff_time,
-      #       current_week=True,
-      #     )
-      #   )
-      #   register_dropoff_tasks.append(task)
-      # await gather(*register_dropoff_tasks)
+      register_dropoff_tasks = []
+      for order in orders:
+        if order.supplier not in supplier_register:
+          continue
+        task = create_task(
+          supplier_register[order.supplier]().register_dropoff(
+            storenum=order.store,
+            customer_id=order.customer,
+            pickup_date=order.invoice_pickup_time,
+            dropoff_date=order.invoice_dropoff_time,
+            current_week=True,
+          )
+        )
+        register_dropoff_tasks.append(task)
+      await gather(*register_dropoff_tasks)
 
-      # dropoff_tasks = []
-      # for processor in supplier_register.values():
-      #   task = create_task(processor().dropoff_files())
-      #   dropoff_tasks.append(task)
-      # await gather(*dropoff_tasks)
+      dropoff_tasks = []
+      for processor in supplier_register.values():
+        task = create_task(processor().dropoff_files())
+        dropoff_tasks.append(task)
+      await gather(*dropoff_tasks)
 
-      # await cache.submit_queued_writes_to_pool()
+      await cache.submit_queued_writes_to_pool()
 
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
     with RICH_CONSOLE.status("Application is running."):
