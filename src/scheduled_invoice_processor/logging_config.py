@@ -8,8 +8,9 @@ from secrets import token_urlsafe
 from typing import TYPE_CHECKING, Literal, override
 
 # First party imports
-from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, NamedLogRecord
+from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, FixedFormatter, NamedLogRecord
 from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
+from aeth_ext.shared_log_processor.protocol import HandlerDef
 
 # Local folder imports
 from .environment_init_vars import SETTINGS
@@ -107,6 +108,56 @@ class LoggingConfig(BaseLoggingConfig):
     scheduler_queue_listener.start()
 
     atexit.register(scheduler_queue_listener.stop)
+
+  # @override
+  # @classmethod
+  # def configure_shared_socket_logging_client(
+  #   cls,
+  #   host: str,
+  #   port: int,
+  #   project_name: str,
+  #   rich_console: Console,
+  #   log_to_console: bool | Literal["rich"] = "rich",
+  #   extra_handler_defs: Sequence[HandlerDef] = (),
+  # ) -> None:
+
+  #   # First party imports
+  #   from aeth_ext.shared_log_processor.client import HandshakeSocketHandler, make_formatter_def, make_handler_def
+
+  #   formatter_def = make_formatter_def(
+  #     FixedFormatter,
+  #     fmt=f"{{libpath: <{cls.default_max_width}}} | [{{asctime}}] | {{levelname: >8}} | {{message}}",
+  #     datefmt=cls.timestamp_format,
+  #     style="{",
+  #   )
+
+  #     debug_handler_def = make_handler_def(
+  #       CustomTimedRotatingFileHandler,
+  #       debug_log_loc,
+  #       when="midnight",
+  #       backupCount=14,
+  #       delay=True,
+  #       formatter=formatter_def,
+  #       project_name=project_name,
+  #     )
+  #     info_handler_def = make_handler_def(
+  #       CustomTimedRotatingFileHandler,
+  #       info_log_loc,
+  #       when="midnight",
+  #       backupCount=14,
+  #       delay=True,
+  #       formatter=formatter_def,
+  #       project_name=project_name,
+  #     )
+
+  #   super().configure_shared_socket_logging_client(
+  #     host=host,
+  #     port=port,
+  #     project_name=project_name,
+  #     rich_console=rich_console,
+  #     log_to_console=log_to_console,
+  #     extra_handler_defs=extra_handler_defs,
+  #   )
 
 
 def add_log_context[**TP, TR](
