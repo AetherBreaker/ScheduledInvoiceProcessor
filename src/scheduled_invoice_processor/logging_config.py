@@ -8,9 +8,8 @@ from secrets import token_urlsafe
 from typing import TYPE_CHECKING, Literal, override
 
 # First party imports
-from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, FixedFormatter, NamedLogRecord
+from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, NamedLogRecord
 from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
-from aeth_ext.shared_log_processor.protocol import HandlerDef
 
 # Local folder imports
 from .environment_init_vars import SETTINGS

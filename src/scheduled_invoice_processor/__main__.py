@@ -312,7 +312,7 @@ async def flip_week():
   scheduler.resume()
 
 
-async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block  # noqa: C901, PLR0912, PLR0915
+async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
   with Progress(console=RICH_CONSOLE, auto_refresh=False) as pbar:
     cache = await bootstrap_runtime(pbar)
