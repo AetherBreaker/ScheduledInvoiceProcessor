@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Literal, override
 # First party imports
 from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, NamedLogRecord
 from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
+from aeth_ext.shared_log_processor.client import make_filter_def, make_handler_def
+from aeth_ext.shared_log_processor.client.filters import NotFilter
 
 # Local folder imports
 from .environment_init_vars import SETTINGS
@@ -20,6 +22,9 @@ if TYPE_CHECKING:
 
   # Third party imports
   from rich.console import Console
+
+  # First party imports
+  from aeth_ext.shared_log_processor.protocol import HandlerDef
 
   # Local folder imports
   from .suppliers import SupplierProcessorBase
@@ -108,55 +113,64 @@ class LoggingConfig(BaseLoggingConfig):
 
     atexit.register(scheduler_queue_listener.stop)
 
-  # @override
-  # @classmethod
-  # def configure_shared_socket_logging_client(
-  #   cls,
-  #   host: str,
-  #   port: int,
-  #   project_name: str,
-  #   rich_console: Console,
-  #   log_to_console: bool | Literal["rich"] = "rich",
-  #   extra_handler_defs: Sequence[HandlerDef] = (),
-  # ) -> None:
+  @override
+  @classmethod
+  def configure_shared_socket_logging_client(
+    cls,
+    host: str,
+    port: int,
+    project_name: str,
+    rich_console: Console,
+    handler_defs: Sequence[HandlerDef] = (),
+  ) -> None:
 
-  #   # First party imports
-  #   from aeth_ext.shared_log_processor.client import HandshakeSocketHandler, make_formatter_def, make_handler_def
+    # First party imports
 
-  #   formatter_def = make_formatter_def(
-  #     FixedFormatter,
-  #     fmt=f"{{libpath: <{cls.default_max_width}}} | [{{asctime}}] | {{levelname: >8}} | {{message}}",
-  #     datefmt=cls.timestamp_format,
-  #     style="{",
-  #   )
+    if cls.logging_file_name is None:
+      cls.logging_file_name = project_name
 
-  #     debug_handler_def = make_handler_def(
-  #       CustomTimedRotatingFileHandler,
-  #       debug_log_loc,
-  #       when="midnight",
-  #       backupCount=14,
-  #       delay=True,
-  #       formatter=formatter_def,
-  #       project_name=project_name,
-  #     )
-  #     info_handler_def = make_handler_def(
-  #       CustomTimedRotatingFileHandler,
-  #       info_log_loc,
-  #       when="midnight",
-  #       backupCount=14,
-  #       delay=True,
-  #       formatter=formatter_def,
-  #       project_name=project_name,
-  #     )
+    formatter_def = get_preferred_logrecord_formatter(cls.default_max_width, cls.timestamp_format, return_def=True)
 
-  #   super().configure_shared_socket_logging_client(
-  #     host=host,
-  #     port=port,
-  #     project_name=project_name,
-  #     rich_console=rich_console,
-  #     log_to_console=log_to_console,
-  #     extra_handler_defs=extra_handler_defs,
-  #   )
+    is_not_scheduler_filter_def = make_filter_def(NotFilter, name="apscheduler")
+
+    is_scheduler_filter_def = make_filter_def(logging.Filter, name="apscheduler")
+
+    scheduler_debug_handler_def = make_handler_def(
+      CustomTimedRotatingFileHandler,
+      filename=APSCHEDULER_DEBUG_LOG_LOC,
+      when="midnight",
+      backupCount=14,
+      delay=True,
+      formatter=formatter_def,
+      project_name=project_name,
+      level=logging.DEBUG,
+      filters=[is_scheduler_filter_def],
+    )
+    scheduler_info_handler_def = make_handler_def(
+      CustomTimedRotatingFileHandler,
+      filename=APSCHEDULER_INFO_LOG_LOC,
+      when="midnight",
+      backupCount=14,
+      delay=True,
+      formatter=formatter_def,
+      project_name=project_name,
+      level=logging.INFO,
+      filters=[is_scheduler_filter_def],
+    )
+
+    base_handler_defs = cls.get_default_socket_handlerdefs(
+      project_name=project_name,
+      logging_file_name=cls.logging_file_name,
+      extra_filters=[is_not_scheduler_filter_def],
+    )
+
+    super().configure_shared_socket_logging_client(
+      host=host,
+      port=port,
+      project_name=project_name,
+      rich_console=rich_console,
+      handler_defs=(scheduler_debug_handler_def, scheduler_info_handler_def, *base_handler_defs, *handler_defs),
+    )
 
 
 def add_log_context[**TP, TR](
