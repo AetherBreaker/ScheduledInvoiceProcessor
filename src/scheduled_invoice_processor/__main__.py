@@ -387,57 +387,58 @@ async def main() -> NoReturn:  # sourcery skip: remove-empty-nested-block  # noq
     await site.start()
 
     if __debug__:
-      # force run immediately for testing
-      # Standard library imports
-      from asyncio import create_task, gather
+      pass
+      # # force run immediately for testing
+      # # Standard library imports
+      # from asyncio import create_task, gather
 
-      orders = [order async for order in cache.schedule.walk_typed_rows()]
+      # orders = [order async for order in cache.schedule.walk_typed_rows()]
 
-      register_pickup_tasks = []
-      for order in orders:
-        if order.supplier not in supplier_register:
-          continue
-        task = create_task(
-          supplier_register[order.supplier]().register_pickup(
-            storenum=order.store,
-            customer_id=order.customer,
-            pickup_date=order.invoice_pickup_time,
-            dropoff_date=order.invoice_dropoff_time,
-            current_week=True,
-          )
-        )
-        register_pickup_tasks.append(task)
-      await gather(*register_pickup_tasks)
+      # register_pickup_tasks = []
+      # for order in orders:
+      #   if order.supplier not in supplier_register:
+      #     continue
+      #   task = create_task(
+      #     supplier_register[order.supplier]().register_pickup(
+      #       storenum=order.store,
+      #       customer_id=order.customer,
+      #       pickup_date=order.invoice_pickup_time,
+      #       dropoff_date=order.invoice_dropoff_time,
+      #       current_week=True,
+      #     )
+      #   )
+      #   register_pickup_tasks.append(task)
+      # await gather(*register_pickup_tasks)
 
-      pickup_tasks = []
-      for processor in supplier_register.values():
-        task = create_task(processor().pickup_files())
-        pickup_tasks.append(task)
-      await gather(*pickup_tasks)
+      # pickup_tasks = []
+      # for processor in supplier_register.values():
+      #   task = create_task(processor().pickup_files())
+      #   pickup_tasks.append(task)
+      # await gather(*pickup_tasks)
 
-      register_dropoff_tasks = []
-      for order in orders:
-        if order.supplier not in supplier_register:
-          continue
-        task = create_task(
-          supplier_register[order.supplier]().register_dropoff(
-            storenum=order.store,
-            customer_id=order.customer,
-            pickup_date=order.invoice_pickup_time,
-            dropoff_date=order.invoice_dropoff_time,
-            current_week=True,
-          )
-        )
-        register_dropoff_tasks.append(task)
-      await gather(*register_dropoff_tasks)
+      # register_dropoff_tasks = []
+      # for order in orders:
+      #   if order.supplier not in supplier_register:
+      #     continue
+      #   task = create_task(
+      #     supplier_register[order.supplier]().register_dropoff(
+      #       storenum=order.store,
+      #       customer_id=order.customer,
+      #       pickup_date=order.invoice_pickup_time,
+      #       dropoff_date=order.invoice_dropoff_time,
+      #       current_week=True,
+      #     )
+      #   )
+      #   register_dropoff_tasks.append(task)
+      # await gather(*register_dropoff_tasks)
 
-      dropoff_tasks = []
-      for processor in supplier_register.values():
-        task = create_task(processor().dropoff_files())
-        dropoff_tasks.append(task)
-      await gather(*dropoff_tasks)
+      # dropoff_tasks = []
+      # for processor in supplier_register.values():
+      #   task = create_task(processor().dropoff_files())
+      #   dropoff_tasks.append(task)
+      # await gather(*dropoff_tasks)
 
-      await cache.submit_queued_writes_to_pool()
+      # await cache.submit_queued_writes_to_pool()
 
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
     with RICH_CONSOLE.status("Application is running."):
