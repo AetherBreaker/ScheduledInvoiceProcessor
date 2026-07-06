@@ -18,7 +18,7 @@ if __name__ == "__main__":
   HOST = "log-serve"
   PORT = 9020
 
-  initialize(asyncio=True, logging="socket")
+  initialize(asyncio=True, logging=True)
 else:
   # Third party imports
   from rich import get_console
