@@ -47,3 +47,5 @@ services:
       - ALERTS_EMAIL=info@sweetfiretobacco.com
       - ALERTS_EMAIL_PWD=${ALERTS_EMAIL_PWD:?}
       - ALERTS_RECIPIENTS=["jacob.ogden@sweetfiretobacco.com"]
+      - LOG_CONN_HOST=log-serve-d7jh606m76fwj8f2yonc1i9p
+      - LOG_CONN_PORT=9020
