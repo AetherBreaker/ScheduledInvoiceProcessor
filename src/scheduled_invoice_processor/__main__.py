@@ -15,6 +15,8 @@ if __name__ == "__main__":
   PROJECT_NAME = "ScheduledInvoiceProcessor"
   LOGGING_TYPE = "daily"
   DEFAULT_MAX_WIDTH = 36
+  HOST = "log-serve"
+  PORT = 9020
 
   initialize(asyncio=True, logging="socket")
 else:
