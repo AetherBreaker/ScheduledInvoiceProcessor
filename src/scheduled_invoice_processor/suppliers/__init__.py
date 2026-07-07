@@ -845,6 +845,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.SUCCESS, matched_item)
 
+      matched_item.dropoff_date = dropoff_date
+
       self._file_preprocess_queue[key] = matched_item
       local_logger.info("%s: %s: Registered dropoff for: %s", self.__class__.__name__, key, matched_item.storenum)
 
