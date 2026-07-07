@@ -1,9 +1,9 @@
 [project]
   name            = "scheduled-invoice-processor"
-  version         = "1.5.1"
+  version         = "1.5.2"
   requires-python = ">=3.14"
   dependencies    = [
-    "aeth-ext[sftp, async, logserver]>=3.0.0",
+    "aeth-ext[sftp, async, logserver]>=3.2.1",
     "aiohttp>=3.13.5",
     "aiologic>=0.16.0",
     "aiorwlock>=1.5.1",
