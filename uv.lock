@@ -50,7 +50,7 @@ sftp = [
 
 [[package]]
 name = "aeth-ext"
-version = "3.1.14"
+version = "3.1.15"
 source = { editable = "../aeth_ext" }
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -73,6 +73,7 @@ logserver = [
     { name = "cloudpickle", marker = "sys_platform == 'win32'" },
     { name = "textual", marker = "sys_platform == 'win32'" },
     { name = "textual-serve", marker = "sys_platform == 'win32'" },
+    { name = "textual-speedups", marker = "sys_platform == 'win32'" },
     { name = "textual-web", marker = "sys_platform == 'win32'" },
     { name = "typer", marker = "sys_platform == 'win32'" },
 ]
@@ -91,6 +92,7 @@ requires-dist = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "textual", marker = "extra == 'logserver'", specifier = ">=8.2.8" },
     { name = "textual-serve", marker = "extra == 'logserver'", specifier = ">=1.1.3" },
+    { name = "textual-speedups", marker = "extra == 'logserver'", specifier = ">=0.2.1" },
     { name = "textual-web", marker = "extra == 'logserver'", specifier = ">=0.4.2" },
     { name = "typer", marker = "extra == 'logserver'", specifier = ">=0.26.8" },
     { name = "tzdata", specifier = ">=2026.2" },
@@ -1509,7 +1511,7 @@ version = "1.4.10"
 source = { editable = "." }
 dependencies = [
     { name = "aeth-ext", version = "3.1.8", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "logserver", "sftp"], marker = "sys_platform == 'linux'" },
-    { name = "aeth-ext", version = "3.1.14", source = { editable = "../aeth_ext" }, extra = ["async", "logserver", "sftp"], marker = "sys_platform == 'win32'" },
+    { name = "aeth-ext", version = "3.1.15", source = { editable = "../aeth_ext" }, extra = ["async", "logserver", "sftp"], marker = "sys_platform == 'win32'" },
     { name = "aiohttp", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiologic", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiorwlock", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -1624,6 +1626,16 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c2/7e/62fecc552853ec6a178cb1faa2d6f73b34d5512924770e7b08b58ff14148/textual_serve-1.1.3.tar.gz", hash = "sha256:f8f636ae2f5fd651b79d965473c3e9383d3521cdf896f9bc289709185da3f683", size = 448340, upload-time = "2025-11-01T16:22:36.723Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/fe/108e7773349d500cf363328c3d0b7123e03feda51e310a3a5b136ac8ca71/textual_serve-1.1.3-py3-none-any.whl", hash = "sha256:207a472bc6604e725b1adab4ab8bf12f4c4dc25b04eea31e4d04731d8bf30f18", size = 447339, upload-time = "2025-11-01T16:22:35.209Z" },
+]
+
+[[package]]
+name = "textual-speedups"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/73/bba3e9feae9ca730c32122306ddac61278a8bc47633346eddad9d52a435d/textual_speedups-0.2.1.tar.gz", hash = "sha256:72cf0f7bdeede015367b59b70bcf724ba2c3080a8641ebc5eb94b36ad1536824", size = 10951, upload-time = "2025-11-28T09:38:51.582Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/33/1894d2433d0e852177857c3a328346aae626d096e34a1064691ccf04eca1/textual_speedups-0.2.1-cp314-cp314-win32.whl", hash = "sha256:8ffcf6711869f4241a751aacc055f46c842fb633000964c94e3d1f1bf4b887c0", size = 151110, upload-time = "2025-11-28T09:38:58.758Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/b3/0b3957b1187c657794d36529d7a0d7e81e2a8af6f68d0e0b57f53f347db1/textual_speedups-0.2.1-cp314-cp314-win_amd64.whl", hash = "sha256:1889ae903263c47f76905443a5274d3cceacf5ee218af8c79ef24598c54ac70e", size = 159722, upload-time = "2025-11-28T09:38:56.653Z" },
 ]
 
 [[package]]
