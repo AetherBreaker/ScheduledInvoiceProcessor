@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal, override
 
 # First party imports
 from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, NamedLogRecord
-from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_logrecord_formatter
+from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_formatter_def, get_preferred_logrecord_formatter
 from aeth_ext.shared_log_processor.client import make_filter_def, make_handler_def
 from aeth_ext.shared_log_processor.client.filters import NotFilter
 
@@ -122,6 +122,7 @@ class LoggingConfig(BaseLoggingConfig):
     host: str | None = None,
     port: int | None = None,
     handler_defs: Sequence[HandlerDef] = (),
+    testing: bool = False,
   ) -> None:
 
     # First party imports
@@ -129,7 +130,7 @@ class LoggingConfig(BaseLoggingConfig):
     if cls.logging_file_name is None:
       cls.logging_file_name = project_name
 
-    formatter_def = get_preferred_logrecord_formatter(cls.default_max_width, cls.timestamp_format, return_def=True)
+    formatter_def = get_preferred_formatter_def(cls.default_max_width, cls.timestamp_format)
 
     is_not_scheduler_filter_def = make_filter_def(NotFilter, name="apscheduler")
 
@@ -170,6 +171,7 @@ class LoggingConfig(BaseLoggingConfig):
       project_name=project_name,
       rich_console=rich_console,
       handler_defs=(scheduler_debug_handler_def, scheduler_info_handler_def, *base_handler_defs, *handler_defs),
+      testing=testing,
     )
 
 
