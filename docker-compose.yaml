@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         PACKAGE_NAME: scheduled-invoice-processor
-        PACKAGE_VERSION: 1.6.0
+        PACKAGE_VERSION: 1.6.1
         SFTPYPI_INDEX_URL: ${SFTPYPI_INDEX_URL:-https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple}
         PYPI_INDEX_URL: ${PYPI_INDEX_URL:-https://pypi.org/simple}
     container_name: scheduled-invoice-processor
@@ -47,5 +47,5 @@ services:
       - ALERTS_EMAIL=info@sweetfiretobacco.com
       - ALERTS_EMAIL_PWD=${ALERTS_EMAIL_PWD:?}
       - ALERTS_RECIPIENTS=["jacob.ogden@sweetfiretobacco.com"]
-      - LOG_CONN_HOST=log-serve-d7jh606m76fwj8f2yonc1i9p
+      - LOG_CONN_HOST=central-log-server-d7jh606m76fwj8f2yonc1i9p
       - LOG_CONN_PORT=9020
