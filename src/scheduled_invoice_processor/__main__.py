@@ -40,6 +40,7 @@ from dateutil.relativedelta import SA, relativedelta
 # First party imports
 from aeth_ext.errors.err_handling import FATAL_EVENT
 from aeth_ext.rich.progress import Progress
+from scheduled_invoice_processor.command_server import InvoiceProcessorCommandServer
 from scheduled_invoice_processor.database import DatabaseCache
 from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
 from scheduled_invoice_processor.err_handling import get_last_fatal_details
@@ -370,6 +371,9 @@ async def main() -> NoReturn:
 
     scheduler.start()
 
+    command_server = InvoiceProcessorCommandServer(scheduler, supplier_register)
+    await command_server.start(host="0.0.0.0")
+
     # Write initial heartbeat on startup
     write_heartbeat()
 
@@ -379,6 +383,12 @@ async def main() -> NoReturn:
     with RICH_CONSOLE.status("Application is running."):
       await FATAL_EVENT
       fatal_details = get_last_fatal_details()
+
+      try:
+        logger.warning("Fatal shutdown: stopping command server to reject further commands")
+        await command_server.stop()
+      except Exception:
+        logger.exception("Fatal shutdown: failed to stop command server cleanly")
 
       if not fatal_details["is_database_origin"] and any(processor().errored for processor in supplier_register.values()):
         await sleep(

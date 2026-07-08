@@ -99,6 +99,11 @@ class DatabaseCache(metaclass=SingletonType):
   reauth_interval = 2700
   api_call_min_interval = 1.1
 
+  # How long a lazily-built base-template-sheet view stays valid before it is
+  # re-fetched.  Keeping it around briefly avoids rebuilding on every command
+  # during a chain of schedule edits, while still picking up external changes.
+  _base_sheet_view_ttl = 300.0
+
   schedule: CacheViewSchedule
   prev_week_schedule: CacheViewSchedule
   order_log: CacheViewOrderLog
@@ -123,6 +128,9 @@ class DatabaseCache(metaclass=SingletonType):
     self._values_batch_update_user_entered_body: ValuesBatchUpdateBody | None = None
     self._before_write_update_body: BatchUpdateBody | None = None
     self._after_write_update_body: BatchUpdateBody | None = None
+
+    self._base_sheet_view: CacheViewSchedule | None = None
+    self._base_sheet_view_expires: float | None = None
 
     self.loop = get_running_loop()
 
@@ -294,6 +302,64 @@ class DatabaseCache(metaclass=SingletonType):
       # self.order_log._cache.to_csv("debug_order_log.csv")
       # pass
 
+  async def get_base_sheet_view(self) -> CacheViewSchedule:
+    """Lazily build (and briefly cache) a writable view over the base template sheet.
+
+    The base sheet is duplicated into a fresh "Current Week" every week by
+    :meth:`flip_to_new_week`, so writing to it makes a schedule change persist
+    across weeks.  As far as the scheduler and processors are concerned the
+    base sheet is read-only, so this view is built on demand and callers are
+    expected to :meth:`~CacheViewBase.freeze` it once done.  A cached instance
+    is reused (and un-frozen) for ``_base_sheet_view_ttl`` seconds to avoid
+    re-fetching during a chain of schedule edits.
+    """
+    now = self.loop.time()
+    if self._base_sheet_view is not None and self._base_sheet_view_expires is not None and now < self._base_sheet_view_expires:
+      self._base_sheet_view._writable = True
+      return self._base_sheet_view
+
+    async with self._api_write_lock:
+      await self.wait_for_api()
+
+      metadata = self.client.http_client.fetch_sheet_metadata(self._database_id)
+      try:
+        base_sheet = finditem(
+          lambda s: int(s["properties"]["sheetId"]) == self._tab_id_schedule_base_sheet,
+          metadata["sheets"],
+        )
+      except StopIteration:
+        raise RuntimeError(f"Base schedule sheet with id {self._tab_id_schedule_base_sheet} was not found") from None
+
+      base_tab_name: str = base_sheet["properties"]["title"]
+      base_tab_range = f"'{base_tab_name}'!R2C1:C{len(DatabaseScheduleColumns.all_columns())}"
+
+      await self.wait_for_api()
+      result = self.client.http_client.values_batch_get(
+        id=self._database_id,
+        ranges=[base_tab_range],
+        params={
+          "majorDimension": Dimension.rows,
+          "valueRenderOption": ValueRenderOption.unformatted,
+          "dateTimeRenderOption": DateTimeOption.formatted_string,
+        },
+      )
+
+      try:
+        base_data: list[list[str | int | float]] = result["valueRanges"][0]["values"]
+      except KeyError:
+        base_data = []
+
+      view = CacheViewSchedule(
+        raw_data=base_data,
+        cache_core=self,
+        sheet_id=None,
+        range_format=f"'{base_tab_name}'!{{start}}:{{end}}",
+        range_format_single=f"'{base_tab_name}'!{{cell}}",
+      )
+      self._base_sheet_view = view
+      self._base_sheet_view_expires = self.loop.time() + self._base_sheet_view_ttl
+      return view
+
   async def submit_queued_writes_to_pool(self) -> None:
     if (
       self.queued_values_raw_updates
@@ -354,6 +420,11 @@ class DatabaseCache(metaclass=SingletonType):
 
   async def flip_to_new_week(self):
     await self.submit_queued_writes_to_pool()
+
+    # The base template becomes a brand-new "Current Week"; any cached view of
+    # it now points at stale data, so drop it and force a fresh fetch.
+    self._base_sheet_view = None
+    self._base_sheet_view_expires = None
 
     async with self._api_write_lock, self._db_write_queue_lock:
       await self.wait_for_api()
@@ -439,12 +510,37 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
   columns: type[ColsT]
   model: type[ModelT]
 
-  def __init__(self, raw_data: list[list[str | int | float]], cache_core: DatabaseCache, sheet_id: int | None) -> None:
+  def __init__(
+    self,
+    raw_data: list[list[str | int | float]],
+    cache_core: DatabaseCache,
+    sheet_id: int | None,
+    *,
+    range_format: str | None = None,
+    range_format_single: str | None = None,
+  ) -> None:
     self._cache = build_typed_dataframe(data=raw_data, columns=self.columns, types_model=self.model)
     self._cache_index = self.columns.__index_items__
     self._core = cache_core
     self._sheet_id = sheet_id
+    self._writable = True
+    # TODO Rewire this to use it's own dedicated class as explicit is always better than implicit
+    # Allow overriding the class-level range templates so a single view class
+    # (e.g. CacheViewSchedule) can be pointed at an alternate tab such as the
+    # base template sheet without needing a dedicated subclass.
+    if range_format is not None:
+      self._range_format = range_format
+    if range_format_single is not None:
+      self._range_format_single = range_format_single
     super().__init__()
+
+  def freeze(self) -> None:
+    """Mark this view read-only; subsequent write attempts raise ``PermissionError``."""
+    self._writable = False
+
+  def _check_writable(self) -> None:
+    if not self._writable:
+      raise PermissionError(f"{type(self).__name__} is frozen (read-only) and cannot be written to")
 
   async def __aenter__(self) -> DataFrame:
     await self._core._read_write_lock.reader_lock.acquire()
@@ -502,6 +598,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     return row_number
 
   async def write_value(self, index: IndexT, column: ColsT, value: Any, ta: TypeAdapter[Any]) -> None:
+    self._check_writable()
     row_number = await self.get_rownum(index)
 
     value = ta.dump_python(value)
@@ -523,6 +620,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     )
 
   async def update_row(self, index: IndexT, values: Sequence[Any] | ModelT, raw: bool = True) -> None:
+    self._check_writable()
     row_number = await self.get_rownum(index)
 
     if isinstance(values, self.model):
@@ -553,6 +651,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
       await self._core.queue_db_api_values_user_entered_update(update_data)
 
   async def append_row(self, values: ModelT, raw: bool = True) -> None:
+    self._check_writable()
     if self._sheet_id is None:
       raise RuntimeError("This cache view does not support appending rows")
     assert len(self._cache_index) > 0, "Cache view must have at least one column in index to append rows"
