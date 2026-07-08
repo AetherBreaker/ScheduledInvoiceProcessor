@@ -10,8 +10,9 @@ from paramiko import AutoAddPolicy, SFTPClient, SSHClient
 from rich import get_console
 
 # First party imports
-from aeth_ext.ftp import AdaptedFTP, AdaptedSFTP, FTPAdapter, FTPProtocol, ProtocolEnum, ServerNotAvailableError, SFTPProtocol
-from aeth_ext.rich import Progress
+from aeth_ext.ftp.errors import ServerNotAvailableError
+from aeth_ext.ftp.types import FTPProtocol, ProtocolEnum, SFTPProtocol
+from aeth_ext.rich.progress import Progress
 
 # Local folder imports
 from .environment_init_vars import SETTINGS
@@ -166,6 +167,7 @@ if __name__ == "__main__":
   from pathlib import PurePosixPath
 
   # First party imports
+  from aeth_ext.ftp.adapter import AdaptedFTP, AdaptedSFTP, FTPAdapter
   from scheduled_invoice_processor.environment_init_vars import CWD
 
   local_testing_file = CWD / "test.txt"

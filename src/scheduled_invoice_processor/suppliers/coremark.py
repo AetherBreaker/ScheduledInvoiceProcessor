@@ -10,8 +10,9 @@ from re import compile
 from typing import TYPE_CHECKING, override
 
 # First party imports
+from aeth_ext.ftp.adapter import AdaptedFTP, FTPAdapter
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
-from scheduled_invoice_processor.ftp_configs import AdaptedFTP, CoremarkFTPClient, FTPAdapter
+from scheduled_invoice_processor.ftp_configs import CoremarkFTPClient
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
@@ -29,7 +30,6 @@ if TYPE_CHECKING:
   from typing import Any
 
   # First party imports
-  from scheduled_invoice_processor.ftp_configs import AdaptedFTP
   from scheduled_invoice_processor.typing_custom import CustomerID, SupplierQueueKey
 
   # Local folder imports

@@ -12,8 +12,9 @@ from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
 
 # First party imports
+from aeth_ext.ftp.adapter import AdaptedSFTP, FTPAdapter
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
-from scheduled_invoice_processor.ftp_configs import FTPAdapter, SASSFTPClient
+from scheduled_invoice_processor.ftp_configs import SASSFTPClient
 from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
 
 # Local folder imports
@@ -24,7 +25,6 @@ if TYPE_CHECKING:
   from re import Pattern
 
   # First party imports
-  from scheduled_invoice_processor.ftp_configs import AdaptedSFTP
   from scheduled_invoice_processor.typing_custom import CustomerID
 
 logger = getLogger(__name__)

@@ -14,8 +14,9 @@ from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
 
 # First party imports
+from aeth_ext.ftp.adapter import AdaptedSFTP, FTPAdapter
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
-from scheduled_invoice_processor.ftp_configs import FTPAdapter, RYOSFTPClient
+from scheduled_invoice_processor.ftp_configs import RYOSFTPClient
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
@@ -33,7 +34,6 @@ if TYPE_CHECKING:
   from typing import Any
 
   # First party imports
-  from scheduled_invoice_processor.ftp_configs import AdaptedSFTP
   from scheduled_invoice_processor.typing_custom import CustomerID, SupplierQueueKey
 
   # Local folder imports

@@ -8,10 +8,10 @@ from secrets import token_urlsafe
 from typing import TYPE_CHECKING, Literal, override
 
 # First party imports
-from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, NamedLogRecord
+from aeth_ext.central_log_server.client import make_filter_def, make_handler_def
+from aeth_ext.central_log_server.client.filters import NotFilter
+from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, TaggedLogRecord
 from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_formatter_def, get_preferred_logrecord_formatter
-from aeth_ext.shared_log_processor.client import make_filter_def, make_handler_def
-from aeth_ext.shared_log_processor.client.filters import NotFilter
 
 # Local folder imports
 from .environment_init_vars import SETTINGS
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
   from rich.console import Console
 
   # First party imports
-  from aeth_ext.shared_log_processor.protocol import HandlerDef
+  from aeth_ext.central_log_server.protocol import HandlerDef
 
   # Local folder imports
   from .suppliers import SupplierProcessorBase
@@ -41,7 +41,7 @@ class ContextFilter(logging.Filter):
     self.identifier = identifier
 
   @override
-  def filter(self, record: NamedLogRecord) -> bool:  # pyright: ignore[reportIncompatibleMethodOverride]
+  def filter(self, record: TaggedLogRecord) -> bool:  # pyright: ignore[reportIncompatibleMethodOverride]
     try:
       return record.ctx.get() == self.identifier  # pyright: ignore[reportAttributeAccessIssue]
     except AttributeError:
