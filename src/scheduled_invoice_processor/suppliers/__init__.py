@@ -19,10 +19,11 @@ from pydantic import TypeAdapter
 
 # First party imports
 from aeth_ext.errors.send_alert_email import send_alert_email
+from aeth_ext.ftp.adapter import FTPAdapter
 from aeth_ext.types.abc import SingletonType
 from scheduled_invoice_processor.database import DatabaseCache
 from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
-from scheduled_invoice_processor.ftp_configs import FTPAdapter, SFTFTPClient
+from scheduled_invoice_processor.ftp_configs import SFTFTPClient
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
 from scheduled_invoice_processor.suppliers.log_action import log_actions
