@@ -7,7 +7,7 @@ from datetime import datetime
 from errno import EACCES
 from ftplib import all_errors
 from io import BytesIO
-from logging import getLogger
+from logging import Logger, getLogger
 from time import sleep
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
   # First party imports
   from aeth_ext.ftp.adapter import AdaptedFTP
+  from aeth_ext.ftp.types import AdapterProtocol
   from aeth_ext.rich.progress import Progress, TaskID
   from scheduled_invoice_processor.suppliers.log_action import LogActionHandlerType
   from scheduled_invoice_processor.typing_custom import CustomerID, StoreNum, SupplierQueueKey
@@ -854,6 +855,60 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def assemble_queue_key(self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime) -> SupplierQueueKey:
     return f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
 
+  def _handle_existing_archive(
+    self,
+    client: AdapterProtocol,
+    source_loc: str,
+    archive_loc: str,
+    archive_size: int | None,
+    archive_folder: PurePosixPath,
+    remote_file: str,
+    debug: bool,
+    adapted_logger: LoggerAdapter[Any] | Logger,
+  ) -> None:
+    local_logger = adapted_logger or logger
+    source_size = client.get_size(source_loc)
+    if source_size == 0:
+      local_logger.warning(
+        "%s: Source file [yellow]%s[/] is empty. Skipping archive to preserve existing archive at [yellow]%s[/].",
+        self.__class__.__name__,
+        source_loc,
+        archive_loc,
+        extra={"markup": True},
+      )
+    elif archive_size == 0:
+      local_logger.warning(
+        "%s: Existing archive at [yellow]%s[/] is empty. Replacing with source file.",
+        self.__class__.__name__,
+        archive_loc,
+        extra={"markup": True},
+      )
+      if not debug:
+        client.remove(archive_loc)
+        client.rename(source_loc, archive_loc)
+    elif source_size != archive_size:
+      existing_path = archive_folder / remote_file
+      timestamp = datetime.now(tz=SETTINGS.tz).strftime("%Y%m%d_%H%M%S")
+      new_archive_loc = (archive_folder / f"{existing_path.stem}_{timestamp}{existing_path.suffix}").as_posix()
+      local_logger.warning(
+        "%s: Source file [yellow]%s[/] (%s bytes) differs from existing archive (%s bytes). Archiving source to [yellow]%s[/] instead.",
+        self.__class__.__name__,
+        source_loc,
+        source_size,
+        archive_size,
+        new_archive_loc,
+        extra={"markup": True},
+      )
+      if not debug:
+        client.rename(source_loc, new_archive_loc)
+    elif not debug:
+      local_logger.info(
+        "%s: Deleting new file from %s instead of moving.",
+        self.__class__.__name__,
+        source_loc,
+      )
+      client.remove(source_loc)
+
   def _middle_archive_file(
     self,
     source_folder: PurePosixPath,
@@ -877,7 +932,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       archive_loc = (archive_folder / remote_file).as_posix()
       with self.waiting_ftp.start_session() as ftp_client:
         try:
-          ftp_client.get_size(archive_loc)
+          archive_size = ftp_client.get_size(archive_loc)
           local_logger.info(
             "%s: Archive file already exists at [yellow]%s[/]",
             self.__class__.__name__,
@@ -897,13 +952,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
             ftp_client.rename(source_loc, archive_loc)
 
         else:
-          if not debug:
-            local_logger.info(
-              "%s: Deleting new file from %s instead of moving.",
-              self.__class__.__name__,
-              source_loc,
-            )
-            ftp_client.remove(source_loc)
+          self._handle_existing_archive(
+            ftp_client, source_loc, archive_loc, archive_size, archive_folder, remote_file, debug, local_logger
+          )
     except (*all_errors, OSError):
       local_logger.exception("%s: File %s not found at %s for archiving", self.__class__.__name__, remote_file, source_folder)
     # Ensure that exceptions actually get logged while executing off main thread
@@ -934,7 +985,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       archive_loc = (archive_folder / remote_file).as_posix()
       with self.vendor_ftp.start_session() as sftp_client:
         try:
-          sftp_client.get_size(archive_loc)
+          archive_size = sftp_client.get_size(archive_loc)
           local_logger.info(
             "%s: Archive file already exists at [yellow]%s[/]",
             self.__class__.__name__,
@@ -954,13 +1005,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
             sftp_client.rename(source_loc, archive_loc)
 
         else:
-          if not debug:
-            local_logger.info(
-              "%s: Deleting new file from %s instead of moving.",
-              self.__class__.__name__,
-              source_loc,
-            )
-            sftp_client.remove(source_loc)
+          self._handle_existing_archive(
+            sftp_client, source_loc, archive_loc, archive_size, archive_folder, remote_file, debug, local_logger
+          )
     except FileNotFoundError:
       local_logger.exception("%s: File %s not found at %s for archiving", self.__class__.__name__, remote_file, source_folder)
     # Ensure that exceptions actually get logged while executing off main thread
