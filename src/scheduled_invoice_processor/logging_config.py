@@ -7,7 +7,6 @@ from secrets import token_urlsafe
 from typing import TYPE_CHECKING, override
 
 # First party imports
-from aeth_ext.logging.bases import TaggedLogRecord
 from aeth_ext.logging.setup import BaseLoggingConfig, get_preferred_logrecord_formatter
 
 # Local folder imports
@@ -16,6 +15,9 @@ from .environment_init_vars import SETTINGS
 if TYPE_CHECKING:
   # Standard library imports
   from collections.abc import Awaitable, Callable
+
+  # First party imports
+  from aeth_ext.logging.bases import TaggedLogRecord
 
   # Local folder imports
   from .suppliers import SupplierProcessorBase
