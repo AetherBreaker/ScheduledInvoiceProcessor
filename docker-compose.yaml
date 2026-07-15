@@ -35,7 +35,7 @@ services:
     environment:
       # Database configuration (from production.env - optional overrides)
       # Uncomment and modify these to override production.env values
-      - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
+      # - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
       - DATABASE_BASE_SCHEDULE_ID=184714754
       - DATABASE_ORDER_LOG_ID=850759335
       - DATABASE_REFRESH_INTERVAL=3600
