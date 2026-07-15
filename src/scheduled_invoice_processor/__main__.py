@@ -13,8 +13,6 @@ if __name__ == "__main__":
     log_time=platform == "win32",
   )
   PROJECT_NAME = "scheduled-invoice-processor"
-  # HOST = SETTINGS.log_conn_host
-  # PORT = SETTINGS.log_conn_port
   TESTING = True
 
   initialize(asyncio=True, logging="socket")
