@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        GIT_TAG: v2.0.0a1
+        GIT_TAG: v2.0.0
         GIT_REPO: https://github.com/AetherBreaker/ScheduledInvoiceProcessor.git
     container_name: scheduled-invoice-processor
     restart: no
