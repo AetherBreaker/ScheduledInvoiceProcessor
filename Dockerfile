@@ -30,6 +30,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --index-url ${SFTPYPI_INDEX_URL} \
     --extra-index-url ${PYPI_INDEX_URL} \
     --index-strategy ${UV_INDEX_STRATEGY} \
+    --prerelease=allow \
     ${PACKAGE_NAME}==${PACKAGE_VERSION}
 
 # ---- Final stage ----
