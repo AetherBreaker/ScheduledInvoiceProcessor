@@ -13,7 +13,7 @@ if __name__ == "__main__":
     log_time=platform == "win32",
   )
   PROJECT_NAME = "scheduled-invoice-processor"
-  TESTING = True
+  # TESTING = True
 
   initialize(asyncio=True, logging="socket")
   # initialize(asyncio=True, logging=True)
