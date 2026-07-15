@@ -4,10 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        PACKAGE_NAME: scheduled-invoice-processor
-        PACKAGE_VERSION: 2.0.0a1
-        SFTPYPI_INDEX_URL: ${SFTPYPI_INDEX_URL:-https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple}
-        PYPI_INDEX_URL: ${PYPI_INDEX_URL:-https://pypi.org/simple}
+        GIT_TAG: v2.0.0a1
+        GIT_REPO: https://github.com/AetherBreaker/ScheduledInvoiceProcessor.git
     container_name: scheduled-invoice-processor
     restart: no
     networks:
