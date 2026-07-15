@@ -61,6 +61,7 @@
 
   [tool.uv.sources]
     aeth-ext  = [
+      # { index = "SFTPyPI" },
       { index = "SFTPyPI", marker = "sys_platform == 'linux'" },
       { path = "../aeth_ext", editable = true, marker = "sys_platform == 'win32'" },
     ]

@@ -40,15 +40,10 @@ services:
       - DATABASE_ORDER_LOG_ID=850759335
       - DATABASE_REFRESH_INTERVAL=3600
       - DATABASE_WRITE_INTERVAL=30
-      # File Serve Configuration
-      - FILE_SERVE_HOST=0.0.0.0
-      - FILE_SERVE_PORT=8080
       # Alerts Emails
       - ALERTS_EMAIL=info@sweetfiretobacco.com
       - ALERTS_EMAIL_PWD=${ALERTS_EMAIL_PWD:?}
       - ALERTS_RECIPIENTS=["jacob.ogden@sweetfiretobacco.com"]
-      - LOG_CONN_HOST=central-log-server-d7jh606m76fwj8f2yonc1i9p
-      - LOG_CONN_PORT=9020
 
 networks:
   coolify:
