@@ -10,6 +10,8 @@ services:
         PYPI_INDEX_URL: ${PYPI_INDEX_URL:-https://pypi.org/simple}
     container_name: scheduled-invoice-processor
     restart: no
+    networks:
+      - coolify
     expose:
       - "8080"
     healthcheck:
@@ -23,9 +25,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-
     user: nonroot:nonroot
-    # Persist logs and queue backups
     volumes:
       - type: bind
         source: /data/scheduled_invoice_processor_files
@@ -49,3 +49,7 @@ services:
       - ALERTS_RECIPIENTS=["jacob.ogden@sweetfiretobacco.com"]
       - LOG_CONN_HOST=central-log-server-d7jh606m76fwj8f2yonc1i9p
       - LOG_CONN_PORT=9020
+
+networks:
+  coolify:
+    external: true
