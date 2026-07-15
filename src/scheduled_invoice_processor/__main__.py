@@ -8,6 +8,10 @@ if __name__ == "__main__":
   # First party imports
   from aeth_ext import initialize
 
+  # Register the LoggingConfig subclass (and its TOML overrides) BEFORE
+  # initialize() so BaseLoggingConfig.get_deepest_subclass() finds it.
+  from scheduled_invoice_processor.logging_config import LoggingConfig as _LoggingConfig  # noqa: F401
+
   RICH_CONSOLE = Console(
     width=None if platform == "win32" else 165,
     log_time=platform == "win32",
