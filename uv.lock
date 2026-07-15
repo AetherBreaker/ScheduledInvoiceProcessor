@@ -1183,37 +1183,11 @@ wheels = [
 
 [[package]]
 name = "poe-tasks"
-version = "4.0.1"
-source = { editable = "../poe_tasks" }
-resolution-markers = [
-    "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version < '3.15' and sys_platform == 'win32'",
-]
-dependencies = [
-    { name = "poethepoet", marker = "sys_platform == 'win32'" },
-    { name = "poethepoet-tasks", marker = "sys_platform == 'win32'" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "poethepoet", specifier = ">=0.46.0" },
-    { name = "poethepoet-tasks", specifier = ">=0.3.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pyright", specifier = ">=1.1.411" }]
-
-[[package]]
-name = "poe-tasks"
 version = "4.3.0"
 source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
-resolution-markers = [
-    "python_full_version >= '3.15' and sys_platform == 'linux'",
-    "python_full_version < '3.15' and sys_platform == 'linux'",
-]
 dependencies = [
-    { name = "poethepoet", marker = "sys_platform == 'linux'" },
-    { name = "poethepoet-tasks", marker = "sys_platform == 'linux'" },
+    { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "poethepoet-tasks", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/bc1/57d84211213ff/poe_tasks-4.3.0.tar.gz", hash = "sha256:bc157d84211213ffec7931e66d1179eef6e605ac16bc458fb885e0e3439a1225" }
 wheels = [
@@ -1589,8 +1563,7 @@ dev = [
     { name = "apscheduler-stubs", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "mypy", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pandas-stubs", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "poe-tasks", version = "4.0.1", source = { editable = "../poe_tasks" }, marker = "sys_platform == 'win32'" },
-    { name = "poe-tasks", version = "4.3.0", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, marker = "sys_platform == 'linux'" },
+    { name = "poe-tasks", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pytest", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "types-python-dateutil", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -1619,9 +1592,7 @@ dev = [
     { name = "apscheduler-stubs", specifier = ">=0.1.0.dev2" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "pandas-stubs", specifier = ">=3.0.0.260204" },
-    { name = "poe-tasks", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=4.0.0" },
-    { name = "poe-tasks", marker = "sys_platform == 'linux'", specifier = ">=4.0.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
-    { name = "poe-tasks", marker = "sys_platform == 'win32'", editable = "../poe_tasks" },
+    { name = "poe-tasks", specifier = ">=4.0.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
     { name = "poethepoet", specifier = ">=0.46.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "types-python-dateutil", specifier = ">=2.9.0.20260323" },
