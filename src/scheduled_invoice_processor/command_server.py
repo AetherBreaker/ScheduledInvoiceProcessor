@@ -43,13 +43,13 @@ class InvoiceProcessorCommandServer(CommandServerBase):
   every processor step holds.
   """
 
-  program_name: ClassVar[str] = "ScheduledInvoiceProcessor"
+  program_name: ClassVar[str] = "scheduled-invoice-processor"
   port: ClassVar[int] = 9010
 
   def __init__(
     self,
-    scheduler: "OrderProcessingScheduler",  # noqa: UP037
-    supplier_register: dict[SuppliersEnum, "type[SupplierProcessorBase]"],  # noqa: UP037
+    scheduler: OrderProcessingScheduler,
+    supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]],
   ) -> None:
     super().__init__()
     self._scheduler = scheduler
