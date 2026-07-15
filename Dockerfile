@@ -15,22 +15,14 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 # Install git for source checkout
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone the repository at the pinned tag.
-# For private repos supply a GitHub PAT as a build secret:
-#   docker build --secret id=github_token,env=GITHUB_TOKEN ...
-# In Coolify, configure the secret in the service environment.
-RUN --mount=type=secret,id=github_token \
-    TOKEN=$(cat /run/secrets/github_token 2>/dev/null || true) && \
-    if [ -n "$TOKEN" ]; then \
-    printf 'machine github.com\nlogin oauth2\npassword %s\n' "$TOKEN" > ~/.netrc; \
-    fi && \
-    git clone --depth 1 --branch "${GIT_TAG}" "${GIT_REPO}" /tmp/repo && \
+RUN git clone --depth 1 --branch "${GIT_TAG}" "${GIT_REPO}" /tmp/repo && \
     mv /tmp/repo/pyproject.toml /tmp/repo/uv.lock /app/ && \
     mv /tmp/repo/src /app/src && \
-    rm -rf /tmp/repo ~/.netrc
+    rm -rf /tmp/repo
 
 # Install all dependencies (without the project itself) using the frozen lockfile.
 # No live resolution occurs — exact versions come from uv.lock, so no
