@@ -25,10 +25,6 @@ class Settings(BaseSettings):
 
   use_testing_folders: Annotated[bool, Field(alias="USE_TESTING_FOLDERS")] = False
 
-  file_serve_public_domain: Annotated[str, Field(alias="FILE_SERVE_PUBLIC_DOMAIN")] = "som.sweetfiretobacco.com"
-  file_serve_host: Annotated[str, Field(alias="FILE_SERVE_HOST")] = "localhost"
-  file_serve_port: Annotated[int, Field(alias="FILE_SERVE_PORT")] = 8080
-
   @property
   def google_api_key_file(self) -> Path:
     return self._creds_file_reusable("Google API key file not found at expected location", "secrets", "db-key.json")

@@ -1,9 +1,9 @@
 [project]
   name            = "scheduled-invoice-processor"
-  version         = "1.6.6"
+  version         = "2.0.0a1"
   requires-python = ">=3.14"
   dependencies    = [
-    "aeth-ext[sftp, async, logserver]>=3.3.5",
+    "aeth-ext[sftp, async, logserver]>=4.0.0a2",
     "aiohttp>=3.13.5",
     "aiologic>=0.16.0",
     "aiorwlock>=1.5.1",
@@ -61,6 +61,7 @@
 
   [tool.uv.sources]
     aeth-ext  = [
+      # { index = "SFTPyPI" },
       { index = "SFTPyPI", marker = "sys_platform == 'linux'" },
       { path = "../aeth_ext", editable = true, marker = "sys_platform == 'win32'" },
     ]

@@ -4,12 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        PACKAGE_NAME: scheduled-invoice-processor
-        PACKAGE_VERSION: 1.6.6
-        SFTPYPI_INDEX_URL: ${SFTPYPI_INDEX_URL:-https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple}
-        PYPI_INDEX_URL: ${PYPI_INDEX_URL:-https://pypi.org/simple}
+        GIT_TAG: v2.0.0a1
+        GIT_REPO: https://github.com/AetherBreaker/ScheduledInvoiceProcessor.git
     container_name: scheduled-invoice-processor
     restart: no
+    networks:
+      - coolify
     expose:
       - "8080"
     healthcheck:
@@ -23,9 +23,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-
     user: nonroot:nonroot
-    # Persist logs and queue backups
     volumes:
       - type: bind
         source: /data/scheduled_invoice_processor_files
@@ -35,17 +33,16 @@ services:
     environment:
       # Database configuration (from production.env - optional overrides)
       # Uncomment and modify these to override production.env values
-      - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
+      # - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
       - DATABASE_BASE_SCHEDULE_ID=184714754
       - DATABASE_ORDER_LOG_ID=850759335
       - DATABASE_REFRESH_INTERVAL=3600
       - DATABASE_WRITE_INTERVAL=30
-      # File Serve Configuration
-      - FILE_SERVE_HOST=0.0.0.0
-      - FILE_SERVE_PORT=8080
       # Alerts Emails
       - ALERTS_EMAIL=info@sweetfiretobacco.com
       - ALERTS_EMAIL_PWD=${ALERTS_EMAIL_PWD:?}
       - ALERTS_RECIPIENTS=["jacob.ogden@sweetfiretobacco.com"]
-      - LOG_CONN_HOST=central-log-server-d7jh606m76fwj8f2yonc1i9p
-      - LOG_CONN_PORT=9020
+
+networks:
+  coolify:
+    external: true

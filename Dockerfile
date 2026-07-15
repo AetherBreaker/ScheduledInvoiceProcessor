@@ -5,11 +5,8 @@ FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
 
 WORKDIR /app
 
-ARG PACKAGE_NAME
-ARG PACKAGE_VERSION
-ARG SFTPYPI_INDEX_URL=https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple
-ARG PYPI_INDEX_URL=https://pypi.org/simple
-ARG UV_INDEX_STRATEGY=unsafe-best-match
+ARG GIT_TAG
+ARG GIT_REPO
 
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
@@ -17,20 +14,26 @@ ENV UV_COMPILE_BYTECODE=1
 # Copy from the cache instead of linking since it's a mounted volume
 ENV UV_LINK_MODE=copy
 
-# Install git (required for uv to fetch git-based dependencies)
+# Install git for source checkout
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-# Use the repository pyproject to resolve and install dependencies into the builder venv.
-COPY pyproject.toml /app/pyproject.toml
+# Clone the repository at the pinned tag.
+RUN git clone --depth 1 --branch "${GIT_TAG}" "${GIT_REPO}" /tmp/repo && \
+    mv /tmp/repo/pyproject.toml /tmp/repo/uv.lock /app/ && \
+    mv /tmp/repo/src /app/src && \
+    rm -rf /tmp/repo
 
+# Install all dependencies (without the project itself) using the frozen lockfile.
+# No live resolution occurs — exact versions come from uv.lock, so no
+# --prerelease flag is needed and no unexpected pre-releases can sneak in.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv venv /app/.venv \
-    && uv pip install --python /app/.venv/bin/python \
-    --index-url ${SFTPYPI_INDEX_URL} \
-    --extra-index-url ${PYPI_INDEX_URL} \
-    --index-strategy ${UV_INDEX_STRATEGY} \
-    ${PACKAGE_NAME}==${PACKAGE_VERSION}
+    uv sync --frozen --no-dev --no-install-project
+
+# Install the project itself as a non-editable wheel so the
+# source tree is not required at runtime.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable
 
 # ---- Final stage ----
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
@@ -59,11 +62,7 @@ RUN mkdir -p /app/persisted_data /app/file_holding \
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Re-declare build arg and persist as ENV so it is available at runtime
-ARG PACKAGE_NAME
-ENV PACKAGE_NAME=${PACKAGE_NAME}
-
-# Reset the image entrypoint so we can explicitly invoke uv in CMD
+# Reset the image entrypoint so we can explicitly invoke python in CMD
 ENTRYPOINT []
 
 # Use the non-root user to run our application
@@ -71,4 +70,4 @@ USER nonroot
 
 # Run the application.
 WORKDIR /app
-CMD ["sh", "-c", "MODULE_NAME=$(printf '%s' \"$PACKAGE_NAME\" | tr '-' '_'); exec uv run -m \"$MODULE_NAME\""]
+CMD ["python", "-m", "scheduled_invoice_processor"]

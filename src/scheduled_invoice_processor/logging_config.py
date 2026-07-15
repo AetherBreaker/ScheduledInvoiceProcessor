@@ -3,36 +3,25 @@
 import logging
 from datetime import datetime
 from functools import wraps
-from queue import Queue
 from secrets import token_urlsafe
-from typing import TYPE_CHECKING, Literal, override
+from typing import TYPE_CHECKING, override
 
 # First party imports
-from aeth_ext.central_log_server.client import make_filter_def, make_handler_def
-from aeth_ext.central_log_server.client.filters import NotFilter
-from aeth_ext.logging.bases import CustomTimedRotatingFileHandler, TaggedLogRecord
-from aeth_ext.logging.config import BaseLoggingConfig, QueueCatchall, get_preferred_formatter_def, get_preferred_logrecord_formatter
+from aeth_ext.logging.setup import BaseLoggingConfig, get_preferred_logrecord_formatter
 
 # Local folder imports
 from .environment_init_vars import SETTINGS
 
 if TYPE_CHECKING:
   # Standard library imports
-  from collections.abc import Awaitable, Callable, Sequence
-
-  # Third party imports
-  from rich.console import Console
+  from collections.abc import Awaitable, Callable
 
   # First party imports
-  from aeth_ext.central_log_server.protocol import HandlerDef
+  from aeth_ext.logging.bases import TaggedLogRecord
 
   # Local folder imports
   from .suppliers import SupplierProcessorBase
   from .typing_custom.enums import LogActionEnum
-
-SCHEDULER_LOG_LOC = SETTINGS.log_loc_folder / "scheduler_logs"
-APSCHEDULER_DEBUG_LOG_LOC = SETTINGS.log_loc_folder / "scheduler_debug.txt"
-APSCHEDULER_INFO_LOG_LOC = SETTINGS.log_loc_folder / "scheduler.txt"
 
 
 class ContextFilter(logging.Filter):
@@ -49,130 +38,21 @@ class ContextFilter(logging.Filter):
 
 
 class LoggingConfig(BaseLoggingConfig):
-  @override
-  @classmethod
-  def configure_logging_main(
-    cls,
-    rich_console: Console,
-    project_name: str,
-    asyncio: bool = False,
-    log_to_console: bool | Literal["rich"] = "rich",
-    queue_console_handler: bool = False,
-    logging_queues: Sequence[QueueCatchall] | None = None,
-    extra_handlers: Sequence[logging.Handler] | None = None,
-  ):
-    super().configure_logging_main(
-      asyncio=asyncio,
-      rich_console=rich_console,
-      project_name=project_name,
-      log_to_console=log_to_console,
-      queue_console_handler=queue_console_handler,
-      logging_queues=logging_queues,
-      extra_handlers=extra_handlers,
-    )
+  """Project logging configuration.
 
-    # Standard library imports
-    import atexit
-    from logging.handlers import QueueHandler, QueueListener
+  All customization lives in the TOML override files shipped next to this
+  module (discovered via the directory of ``__main__``):
 
-    SCHEDULER_LOG_LOC.mkdir(exist_ok=True, parents=True)
+  - ``logging_config.toml`` - local-mode apscheduler file split.
+  - ``remote_logging_config.toml`` - the same split applied server-side by the
+    central log server (merged into the remote config sent in the socket
+    handshake).
 
-    root = logging.getLogger()
+  ``override_mode = "merge"`` merges those files onto the packaged aeth_ext
+  defaults instead of replacing them.
+  """
 
-    scheduler = logging.getLogger("apscheduler")
-    scheduler.propagate = False
-
-    scheduler_debug_handler = CustomTimedRotatingFileHandler(APSCHEDULER_DEBUG_LOG_LOC, when="midnight", backupCount=14, delay=True)
-    scheduler_info_handler = CustomTimedRotatingFileHandler(APSCHEDULER_INFO_LOG_LOC, when="midnight", backupCount=14, delay=True)
-
-    scheduler_debug_handler.setLevel(logging.DEBUG)
-    scheduler_info_handler.setLevel(logging.INFO)
-
-    formatter = get_preferred_logrecord_formatter()
-
-    scheduler_debug_handler.setFormatter(formatter)
-    scheduler_info_handler.setFormatter(formatter)
-
-    log_queue = Queue(-1)
-    scheduler_log_queue = Queue(-1)
-
-    queue_handler = QueueHandler(log_queue)
-    scheduler_queue_handler = QueueHandler(scheduler_log_queue)
-
-    scheduler_queue_listener = QueueListener(
-      scheduler_log_queue,
-      scheduler_debug_handler,
-      scheduler_info_handler,
-      respect_handler_level=True,
-    )
-
-    root.addHandler(queue_handler)
-    scheduler.addHandler(scheduler_queue_handler)
-
-    scheduler_queue_listener.start()
-
-    atexit.register(scheduler_queue_listener.stop)
-
-  @override
-  @classmethod
-  def configure_shared_socket_logging_client(
-    cls,
-    project_name: str,
-    rich_console: Console,
-    host: str | None = None,
-    port: int | None = None,
-    handler_defs: Sequence[HandlerDef] = (),
-    testing: bool = False,
-  ) -> None:
-
-    # First party imports
-
-    if cls.logging_file_name is None:
-      cls.logging_file_name = project_name
-
-    formatter_def = get_preferred_formatter_def(cls.default_max_width, cls.timestamp_format)
-
-    is_not_scheduler_filter_def = make_filter_def(NotFilter, name="apscheduler")
-
-    is_scheduler_filter_def = make_filter_def(logging.Filter, name="apscheduler")
-
-    scheduler_debug_handler_def = make_handler_def(
-      CustomTimedRotatingFileHandler,
-      filename=APSCHEDULER_DEBUG_LOG_LOC,
-      when="midnight",
-      backupCount=14,
-      delay=True,
-      formatter=formatter_def,
-      project_name=project_name,
-      level=logging.DEBUG,
-      filters=[is_scheduler_filter_def],
-    )
-    scheduler_info_handler_def = make_handler_def(
-      CustomTimedRotatingFileHandler,
-      filename=APSCHEDULER_INFO_LOG_LOC,
-      when="midnight",
-      backupCount=14,
-      delay=True,
-      formatter=formatter_def,
-      project_name=project_name,
-      level=logging.INFO,
-      filters=[is_scheduler_filter_def],
-    )
-
-    base_handler_defs = cls.get_default_socket_handlerdefs(
-      project_name=project_name,
-      logging_file_name=cls.logging_file_name,
-      extra_filters=[is_not_scheduler_filter_def],
-    )
-
-    super().configure_shared_socket_logging_client(
-      host=host,
-      port=port,
-      project_name=project_name,
-      rich_console=rich_console,
-      handler_defs=(scheduler_debug_handler_def, scheduler_info_handler_def, *base_handler_defs, *handler_defs),
-      testing=testing,
-    )
+  override_mode = "merge"
 
 
 def add_log_context[**TP, TR](

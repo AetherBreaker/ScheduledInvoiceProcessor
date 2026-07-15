@@ -19,8 +19,4 @@ SETTINGS = Settings.model_validate({})
 CWD = Path.cwd()
 
 
-HOST_NAME = (
-  f"{SETTINGS.file_serve_host}:{SETTINGS.file_serve_port}"
-  if SETTINGS.file_serve_public_domain is None  # pyright: ignore[reportUnnecessaryComparison]
-  else SETTINGS.file_serve_public_domain
-)
+HOST_NAME = "unavailable"
