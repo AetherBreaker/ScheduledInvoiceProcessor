@@ -14,7 +14,7 @@ supported-markers = [
 
 [[package]]
 name = "aeth-ext"
-version = "4.0.0"
+version = "4.2.0"
 source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'linux'",
@@ -29,9 +29,9 @@ dependencies = [
     { name = "typer", marker = "sys_platform == 'linux'" },
     { name = "tzdata", marker = "sys_platform == 'linux'" },
 ]
-sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/caf/61580de9a55ea/aeth_ext-4.0.0.tar.gz", hash = "sha256:caf61580de9a55ea0f0ee4ec60b26c89d9c08b65025fb12bd1a06f8f99300214" }
+sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/c36/6f125b04f0947/aeth_ext-4.2.0.tar.gz", hash = "sha256:c366f125b04f0947d0349559d1f9d616a2e4352a930324b1cf302da1ba96a707" }
 wheels = [
-    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/651/7575e107181f7/aeth_ext-4.0.0-py3-none-any.whl", hash = "sha256:6517575e107181f7ad597b415dd942fe2a3be391363b6a1cf5b838c517330297" },
+    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/ddf/00c98b33af4e4/aeth_ext-4.2.0-py3-none-any.whl", hash = "sha256:ddf00c98b33af4e457657739ffd525ade33520aa2258231bb5cd73344378e79a" },
 ]
 
 [package.optional-dependencies]
@@ -53,7 +53,7 @@ sftp = [
 
 [[package]]
 name = "aeth-ext"
-version = "4.0.0"
+version = "4.2.0"
 source = { editable = "../aeth_ext" }
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -1540,11 +1540,11 @@ wheels = [
 
 [[package]]
 name = "scheduled-invoice-processor"
-version = "2.0.1"
+version = "2.0.2"
 source = { editable = "." }
 dependencies = [
-    { name = "aeth-ext", version = "4.0.0", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "logserver", "sftp"], marker = "sys_platform == 'linux'" },
-    { name = "aeth-ext", version = "4.0.0", source = { editable = "../aeth_ext" }, extra = ["async", "logserver", "sftp"], marker = "sys_platform == 'win32'" },
+    { name = "aeth-ext", version = "4.2.0", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "logserver", "sftp"], marker = "sys_platform == 'linux'" },
+    { name = "aeth-ext", version = "4.2.0", source = { editable = "../aeth_ext" }, extra = ["async", "logserver", "sftp"], marker = "sys_platform == 'win32'" },
     { name = "aiohttp", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiologic", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiorwlock", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -1571,8 +1571,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aeth-ext", extras = ["sftp", "async", "logserver"], marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=4.0.0" },
-    { name = "aeth-ext", extras = ["sftp", "async", "logserver"], marker = "sys_platform == 'linux'", specifier = ">=4.0.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
+    { name = "aeth-ext", extras = ["sftp", "async", "logserver"], marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=4.2.0" },
+    { name = "aeth-ext", extras = ["sftp", "async", "logserver"], marker = "sys_platform == 'linux'", specifier = ">=4.2.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
     { name = "aeth-ext", extras = ["sftp", "async", "logserver"], marker = "sys_platform == 'win32'", editable = "../aeth_ext" },
     { name = "aiohttp", specifier = ">=3.13.5" },
     { name = "aiologic", specifier = ">=0.16.0" },
