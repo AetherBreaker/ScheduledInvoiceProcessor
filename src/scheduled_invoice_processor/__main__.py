@@ -468,5 +468,10 @@ async def _run_debug_code(cache: DatabaseCache) -> None:
     await cache.submit_queued_writes_to_pool()
 
 
-if __name__ == "__main__":
+def run_app() -> None:
+  """Run the main application loop."""
   run(main())
+
+
+if __name__ == "__main__":
+  run_app()

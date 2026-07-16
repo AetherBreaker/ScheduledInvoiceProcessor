@@ -13,13 +13,13 @@
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}/.env",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}\\src",
-                "PYTHONPYCACHEPREFIX": "${workspaceFolder}\\__pycache__",
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.cache/__pycache__",
                 "PYTHONUNBUFFERED": "1",
-                "GOOGLE_API_KEY_FILE": "${workspaceFolder}\\secrets\\db-key.json",
-                "SFT_WEBSITE_CREDS_FILE": "${workspaceFolder}\\secrets\\sft_creds.json",
-                "SAS_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\sas_ftp_creds.json",
-                "RYO_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\ryo_ftp_creds.json"
+                "GOOGLE_API_KEY_FILE": "${workspaceFolder}/secrets/db-key.json",
+                "SFT_WEBSITE_CREDS_FILE": "${workspaceFolder}/secrets/sft_creds.json",
+                "SAS_FTP_CREDS_FILE": "${workspaceFolder}/secrets/sas_ftp_creds.json",
+                "RYO_FTP_CREDS_FILE": "${workspaceFolder}/secrets/ryo_ftp_creds.json"
             }
         },
         {
@@ -32,13 +32,13 @@
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}/.env",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}\\src",
-                "PYTHONPYCACHEPREFIX": "${workspaceFolder}\\__pycache__",
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "PYTHONPYCACHEPREFIX": "${workspaceFolder}/.cache/__pycache__",
                 "PYTHONUNBUFFERED": "1",
-                "GOOGLE_API_KEY_FILE": "${workspaceFolder}\\secrets\\db-key.json",
-                "SFT_WEBSITE_CREDS_FILE": "${workspaceFolder}\\secrets\\sft_creds.json",
-                "SAS_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\sas_ftp_creds.json",
-                "RYO_FTP_CREDS_FILE": "${workspaceFolder}\\secrets\\ryo_ftp_creds.json"
+                "GOOGLE_API_KEY_FILE": "${workspaceFolder}/secrets/db-key.json",
+                "SFT_WEBSITE_CREDS_FILE": "${workspaceFolder}/secrets/sft_creds.json",
+                "SAS_FTP_CREDS_FILE": "${workspaceFolder}/secrets/sas_ftp_creds.json",
+                "RYO_FTP_CREDS_FILE": "${workspaceFolder}/secrets/ryo_ftp_creds.json"
             }
         }
     ]

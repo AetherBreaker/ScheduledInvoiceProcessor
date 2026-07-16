@@ -1,47 +1,48 @@
 services:
+  init:
+    image: busybox
+    volumes:
+      - type: bind
+        source: /data/imap_report_collector_files
+        target: /app/persisted_data
+    command: chown -R 999:999 /app/persisted_data
+    user: root
+
   scheduled-invoice-processor:
+    container_name: scheduled-invoice-processor
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile
       args:
         GIT_TAG: v2.0.6
         GIT_REPO: https://github.com/AetherBreaker/ScheduledInvoiceProcessor.git
-    container_name: scheduled-invoice-processor
     restart: no
-    networks:
-      - coolify
     expose:
       - "8080"
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - bash -ec '[ -f /app/persisted_data/logs/heartbeat.txt ] && ts=$$(cat
-          /app/persisted_data/logs/heartbeat.txt 2>/dev/null) && [ -n "$$ts" ]
-          && hb=$$(date -d "$$ts" +%s 2>/dev/null) && now=$$(date +%s) && [
-          $$((now - hb)) -lt 180 ]'
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    user: nonroot:nonroot
     volumes:
       - type: bind
         source: /data/scheduled_invoice_processor_files
         target: /app/persisted_data
-
-      # Environment variables (customize as needed)
     environment:
-      # Database configuration (from production.env - optional overrides)
-      # Uncomment and modify these to override production.env values
       # - DATABASE_ID=15D6mO0PSfwKd5MeeycV2tP7FATOF0OfpJDNgygQ9NL0
       - DATABASE_BASE_SCHEDULE_ID=184714754
       - DATABASE_ORDER_LOG_ID=850759335
       - DATABASE_REFRESH_INTERVAL=3600
       - DATABASE_WRITE_INTERVAL=30
-      # Alerts Emails
       - ALERTS_EMAIL=info@sweetfiretobacco.com
       - ALERTS_EMAIL_PWD=${ALERTS_EMAIL_PWD:?}
       - ALERTS_RECIPIENTS=["jacob.ogden@sweetfiretobacco.com"]
+    networks:
+      - coolify
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - bash -ec '[ -f /app/persisted_data/logs/heartbeat.txt ] && ts=$$(cat /app/persisted_data/logs/heartbeat.txt 2>/dev/null) && [ -n "$$ts" ] && hb=$$(date -d "$$ts" +%s 2>/dev/null) && now=$$(date +%s) && [ $$((now - hb)) -lt 180 ]'
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    user: nonroot:nonroot
 
 networks:
   coolify:

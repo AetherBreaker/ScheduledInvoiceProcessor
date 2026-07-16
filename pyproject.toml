@@ -17,6 +17,9 @@
     "tzdata>=2026.2",
   ]
 
+  [project.scripts]
+    launch-app = "scheduled_invoice_processor.__main__:run_app"
+
 [dependency-groups]
   dev = [
     "apscheduler-stubs>=0.1.0.dev2",
@@ -34,14 +37,35 @@
   ]
   build-backend = "uv_build"
 
+[tool.coverage.run]
+  data_file   = ".cache/.coverage"
+  source_pkgs = ["scheduled_invoice_processor"]
+
+[tool.coverage.report]
+  show_missing = true
+
 [tool.poe]
   include_script = "poe_tasks:tasks"
 
 [tool.pyright]
   extends = "../pyproject.toml"
 
+[tool.pytest.ini_options]
+  addopts      = [
+    "--cov",
+    "--cov-report=term-missing",
+    "--strict-markers",
+    "--strict-config",
+    "-ra"
+  ]
+  cache_dir    = ".cache/pytest"
+  testpaths    = ["tests"]
+  xfail_strict = true
+  asyncio_mode = "auto"
+
 [tool.ruff]
-  extend = "../pyproject.toml"
+  extend    = "../pyproject.toml"
+  cache-dir = ".cache/ruff"
 
   src = ["./src"]
 
