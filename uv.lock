@@ -999,15 +999,15 @@ wheels = [
 
 [[package]]
 name = "poe-tasks"
-version = "4.3.3"
+version = "4.3.4"
 source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
 dependencies = [
     { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "poethepoet-tasks", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
-sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/36c/3a506395ed483/poe_tasks-4.3.3.tar.gz", hash = "sha256:36c3a506395ed48384c35d48a683e983f6b8f2eaf27d5e40b8fdd61f67e4cc38" }
+sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/c62/d18169c840a7a/poe_tasks-4.3.4.tar.gz", hash = "sha256:c62d18169c840a7af1041e5bc75db6ced3c8f993f05697788248f22b2a2b7aa5" }
 wheels = [
-    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/6ff/c1b58a485e479/poe_tasks-4.3.3-py3-none-any.whl", hash = "sha256:6ffc1b58a485e4795c25cbbd8ed66f68c20b78d5e34a4025e2682e045bc91d98" },
+    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/180/f153c9e54f7b6/poe_tasks-4.3.4-py3-none-any.whl", hash = "sha256:180f153c9e54f7b6b435d7e5719eaf5d995250614c4485263f3632c4e3e726f6" },
 ]
 
 [[package]]
