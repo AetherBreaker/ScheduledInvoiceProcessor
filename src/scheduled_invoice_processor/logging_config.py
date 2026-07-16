@@ -7,7 +7,7 @@ from secrets import token_urlsafe
 from typing import TYPE_CHECKING, override
 
 # First party imports
-from aeth_ext.logging.setup import BaseLoggingConfig, get_preferred_logrecord_formatter
+from aeth_ext.logging.setup import BaseLoggingConfig
 
 # Local folder imports
 from .environment_init_vars import SETTINGS
@@ -67,8 +67,6 @@ def add_log_context[**TP, TR](
     func: Callable[TP, Awaitable[TR]],
   ) -> Callable[TP, Awaitable[TR]]:
 
-    file_formatter = get_preferred_logrecord_formatter()
-
     @wraps(func)
     async def add_log_context_wrapper(*args: TP.args, **kwargs: TP.kwargs) -> TR:
       self_obj: SupplierProcessorBase = args[0]  # type: ignore
@@ -97,7 +95,6 @@ def add_log_context[**TP, TR](
         context_file_handler = logging.FileHandler(log_file_loc)
 
         context_file_handler.addFilter(ContextFilter(identifier))
-        context_file_handler.setFormatter(file_formatter)
         logger.addHandler(context_file_handler)
 
         kwargs["adapted_logger"] = adapted_logger
