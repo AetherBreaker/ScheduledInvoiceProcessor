@@ -1,9 +1,10 @@
 services:
   init:
     image: busybox
+    restart: no
     volumes:
       - type: bind
-        source: /data/imap_report_collector_files
+        source: /data/scheduled_invoice_processor_files
         target: /app/persisted_data
     command: chown -R 999:999 /app/persisted_data
     user: root
@@ -17,6 +18,9 @@ services:
         GIT_TAG: v2.0.6
         GIT_REPO: https://github.com/AetherBreaker/ScheduledInvoiceProcessor.git
     restart: no
+    depends_on:
+      init:
+        condition: service_completed_successfully
     expose:
       - "8080"
     volumes:
