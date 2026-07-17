@@ -47,6 +47,10 @@
 [tool.poe]
   include_script = "poe_tasks:tasks"
 
+  [tool.poe.tasks.sync]
+    help  = "Sync venv and ensure this project's scripts win over same-named dependency scripts"
+    shell = "uv sync && uv sync --reinstall-package scheduled-invoice-processor"
+
 [tool.pyright]
   extends = "../pyproject.toml"
 
