@@ -18,7 +18,7 @@
   ]
 
   [project.scripts]
-    launch-app = "scheduled_invoice_processor.__main__:run_app"
+    scheduled-invoice-processor = "scheduled_invoice_processor.__main__:run_app"
 
 [dependency-groups]
   dev = [

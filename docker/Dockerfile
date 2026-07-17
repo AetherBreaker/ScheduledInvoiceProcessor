@@ -40,8 +40,7 @@ RUN mv /tmp/repo/src /app/src && rm -rf /tmp/repo
 
 RUN --mount=type=cache,target=/root/.cache/uv \
   extras=$(uv run --no-project python /app/scripts/detect_app_extra.py) \
-  && uv sync --frozen --no-dev --no-editable $extras \
-  && uv pip install --python .venv --no-deps --reinstall .
+  && uv sync --frozen --no-dev --no-editable $extras
 
 # ---- Final stage ----
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
@@ -60,8 +59,12 @@ ENV PYTHONUNBUFFERED=1
 # Enable Python optimizations (removes assert statements and sets __debug__ to False)
 ENV PYTHONOPTIMIZE=1
 
-# Copy the virtual environment from the builder stage
+# Copy the virtual environment and build artifacts from the builder stage
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+COPY --from=builder /app/scripts/get_entrypoint.py /app/scripts/get_entrypoint.py
+
+RUN /app/.venv/bin/python /app/scripts/get_entrypoint.py > /app/.entrypoint
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
@@ -74,4 +77,4 @@ USER nonroot
 
 # Run the application.
 WORKDIR /app
-CMD ["launch-app"]
+CMD ["sh", "-c", "exec $(cat /app/.entrypoint)"]
