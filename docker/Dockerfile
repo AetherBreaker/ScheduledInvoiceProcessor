@@ -59,21 +59,21 @@ ENV PYTHONUNBUFFERED=1
 # Enable Python optimizations (removes assert statements and sets __debug__ to False)
 ENV PYTHONOPTIMIZE=1
 
-# Pre-create directories the app needs to write to at runtime
-RUN mkdir -p /app/file_holding && chown -R 999:999 /app/file_holding
-
 # Copy the virtual environment and build artifacts from the builder stage
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 COPY --from=builder /app/scripts/get_entrypoint.py /app/scripts/get_entrypoint.py
 
-RUN /app/.venv/bin/python /app/scripts/get_entrypoint.py > /app/.entrypoint
+RUN /app/.venv/bin/python /app/scripts/get_entrypoint.py >/app/.entrypoint
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Reset the image entrypoint so we can explicitly invoke uv in CMD
 ENTRYPOINT []
+
+# Give the app user ownership of the working directory so the app can create subdirectories at runtime
+RUN chown 999:999 /app
 
 # Use the non-root user to run our application
 USER nonroot
