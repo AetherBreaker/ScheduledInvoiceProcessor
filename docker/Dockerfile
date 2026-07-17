@@ -61,10 +61,10 @@ ENV PYTHONOPTIMIZE=1
 
 # Copy the virtual environment and build artifacts from the builder stage
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/pyproject.toml /app/pyproject.toml
-COPY --from=builder /app/scripts/get_entrypoint.py /app/scripts/get_entrypoint.py
+# COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+# COPY --from=builder /app/scripts/get_entrypoint.py /app/scripts/get_entrypoint.py
 
-RUN /app/.venv/bin/python /app/scripts/get_entrypoint.py >/app/.entrypoint
+# RUN /app/.venv/bin/python /app/scripts/get_entrypoint.py >/app/.entrypoint
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
@@ -80,4 +80,5 @@ USER nonroot
 
 # Run the application.
 WORKDIR /app
-CMD ["sh", "-c", "exec $(cat /app/.entrypoint)"]
+# CMD ["sh", "-c", "exec $(cat /app/.entrypoint)"]
+CMD ["uv", "run", "-m","scheduled_invoice_processor"]
