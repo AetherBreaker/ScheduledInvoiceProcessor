@@ -41,8 +41,7 @@ RUN mv /tmp/repo/src /app/src && rm -rf /tmp/repo
 RUN --mount=type=cache,target=/root/.cache/uv \
   extras=$(uv run --no-project python /app/scripts/detect_app_extra.py) \
   && uv sync --frozen --no-dev --no-editable $extras \
-  && project_name=$(uv run --no-project python /app/scripts/get_project_name.py) \
-  && uv sync --frozen --no-dev --no-editable --reinstall-package "$project_name" $extras
+  && uv pip install --python .venv --no-deps --reinstall .
 
 # ---- Final stage ----
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
