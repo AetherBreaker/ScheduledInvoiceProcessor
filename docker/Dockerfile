@@ -59,6 +59,9 @@ ENV PYTHONUNBUFFERED=1
 # Enable Python optimizations (removes assert statements and sets __debug__ to False)
 ENV PYTHONOPTIMIZE=1
 
+# Pre-create directories the app needs to write to at runtime
+RUN mkdir -p /app/file_holding && chown -R 999:999 /app/file_holding
+
 # Copy the virtual environment and build artifacts from the builder stage
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
