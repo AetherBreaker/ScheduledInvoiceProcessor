@@ -1,13 +1,4 @@
 services:
-  init:
-    image: busybox
-    restart: no
-    volumes:
-      - type: bind
-        source: /data/scheduled_invoice_processor_files
-        target: /app/persisted_data
-    command: chown -R 999:999 /app/persisted_data
-    user: root
 
   scheduled-invoice-processor:
     container_name: scheduled-invoice-processor
@@ -15,12 +6,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile
       args:
-        GIT_TAG: v2.0.9
+        GIT_TAG: v2.0.10
         GIT_REPO: https://github.com/AetherBreaker/ScheduledInvoiceProcessor.git
     restart: no
-    depends_on:
-      init:
-        condition: service_completed_successfully
     expose:
       - "8080"
     volumes:
@@ -46,7 +34,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    user: nonroot:nonroot
 
 networks:
   coolify:

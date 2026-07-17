@@ -14,7 +14,7 @@ supported-markers = [
 
 [[package]]
 name = "aeth-ext"
-version = "4.2.4"
+version = "4.2.9"
 source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'linux'",
@@ -30,9 +30,9 @@ dependencies = [
     { name = "typer", marker = "sys_platform == 'linux'" },
     { name = "tzdata", marker = "sys_platform == 'linux'" },
 ]
-sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/465/19ee52e64d7e4/aeth_ext-4.2.4.tar.gz", hash = "sha256:46519ee52e64d7e4ba1bf3336cf95971d724143e2b06e772d3cc9678d6fe50f3" }
+sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/9d1/0f420d6885243/aeth_ext-4.2.9.tar.gz", hash = "sha256:9d10f420d6885243b65d19d94f38b188e805b9e8c9918e4dddaa5165c2c2aa48" }
 wheels = [
-    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/d37/c520e21e21d86/aeth_ext-4.2.4-py3-none-any.whl", hash = "sha256:d37c520e21e21d866a720ab4629ea001aac70c62e69837bf27a4a49a4afb6272" },
+    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/8b7/dc22f97756bd9/aeth_ext-4.2.9-py3-none-any.whl", hash = "sha256:8b7dc22f97756bd99d3f2848dc1b8f2ffb6e2883f7224a8b013faf3d33449741" },
 ]
 
 [package.optional-dependencies]
@@ -45,7 +45,7 @@ sftp = [
 
 [[package]]
 name = "aeth-ext"
-version = "4.2.7"
+version = "4.2.9"
 source = { editable = "../aeth_ext" }
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -999,15 +999,15 @@ wheels = [
 
 [[package]]
 name = "poe-tasks"
-version = "4.3.4"
+version = "4.3.6"
 source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
 dependencies = [
     { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "poethepoet-tasks", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
-sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/c62/d18169c840a7a/poe_tasks-4.3.4.tar.gz", hash = "sha256:c62d18169c840a7af1041e5bc75db6ced3c8f993f05697788248f22b2a2b7aa5" }
+sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/b34/abe3215ac0d1b/poe_tasks-4.3.6.tar.gz", hash = "sha256:b34abe3215ac0d1b4ef3a9ca3a1898d8c5b98849354c47f378c6b45904b745c2" }
 wheels = [
-    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/180/f153c9e54f7b6/poe_tasks-4.3.4-py3-none-any.whl", hash = "sha256:180f153c9e54f7b6b435d7e5719eaf5d995250614c4485263f3632c4e3e726f6" },
+    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/9cd/cd3ec3a88f7c0/poe_tasks-4.3.6-py3-none-any.whl", hash = "sha256:9cdcd3ec3a88f7c0ba7e42c8b185f875986ee4f0001020cd5d1582274730489d" },
 ]
 
 [[package]]
@@ -1356,11 +1356,11 @@ wheels = [
 
 [[package]]
 name = "scheduled-invoice-processor"
-version = "2.0.9"
+version = "2.0.10"
 source = { editable = "." }
 dependencies = [
-    { name = "aeth-ext", version = "4.2.4", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "sftp"], marker = "sys_platform == 'linux'" },
-    { name = "aeth-ext", version = "4.2.7", source = { editable = "../aeth_ext" }, extra = ["async", "sftp"], marker = "sys_platform == 'win32'" },
+    { name = "aeth-ext", version = "4.2.9", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "sftp"], marker = "sys_platform == 'linux'" },
+    { name = "aeth-ext", version = "4.2.9", source = { editable = "../aeth_ext" }, extra = ["async", "sftp"], marker = "sys_platform == 'win32'" },
     { name = "aiohttp", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiologic", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiorwlock", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
