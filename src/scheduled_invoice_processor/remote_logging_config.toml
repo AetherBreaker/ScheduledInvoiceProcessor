@@ -1,4 +1,4 @@
-#:schema logging_config_schema.json
+#:schema ../../logging_config_schema.json
 # Remote logging override, merged onto aeth_ext's default remote config before
 # it is shipped to the central log server in the socket handshake. The server
 # applies the result into a private hierarchy for this program; logdir:// paths
