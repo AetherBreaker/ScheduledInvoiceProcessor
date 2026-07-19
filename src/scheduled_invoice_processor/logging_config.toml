@@ -1,4 +1,4 @@
-#:schema logging_config_schema.json
+#:schema ../../logging_config_schema.json
 # Local-mode logging override (merged onto the packaged aeth_ext defaults; see
 # LoggingConfig.override_mode = "merge"). Routes apscheduler records into their
 # own rotating files instead of the main program logs. logdir:// paths resolve
