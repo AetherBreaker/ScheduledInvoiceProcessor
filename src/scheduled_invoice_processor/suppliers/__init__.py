@@ -73,7 +73,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _transient_transfer_retries = 3
   _lock: Lock = Lock()
 
-  vendor_ftp: FTPAdapter  # pyright: ignore[reportMissingTypeArgument]
+  vendor_ftp: FTPAdapter
   waiting_ftp: FTPAdapter[AdaptedFTP] = FTPAdapter(SFTFTPClient, container_cls="SupplierProcessorBase")
 
   queue_backup_prefix: str
@@ -111,7 +111,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
       self.waiting_ftp.pbar = pbar
-      if vendor_ftp := cast("FTPAdapter", getattr(self, "vendor_ftp", None)):  # pyright: ignore[reportMissingTypeArgument]
+      if vendor_ftp := cast("FTPAdapter", getattr(self, "vendor_ftp", None)):
         vendor_ftp.pbar = pbar
 
     self._file_queue_backup_folder.mkdir(exist_ok=True, parents=True)

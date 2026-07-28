@@ -103,27 +103,27 @@ async def reschedule_all_tasks():
   for supplier, processor in supplier_register.items():
     scheduler.add_job(
       processor().pickup_files,
-      CronTrigger(minute="2-59/10"),
+      CronTrigger(minute="2-59/10", timezone=SETTINGS.tz),
       id=f"{supplier}_pickup_files",
       replace_existing=True,
     )
     scheduler.add_job(
       processor().dropoff_files,
-      CronTrigger(minute="6-59/10"),
+      CronTrigger(minute="6-59/10", timezone=SETTINGS.tz),
       id=f"{supplier}_dropoff_files",
       replace_existing=True,
     )
 
     scheduler.add_job(
       processor().save_queue_backups_off_thread,
-      CronTrigger(minute="8-59/10"),
+      CronTrigger(minute="8-59/10", timezone=SETTINGS.tz),
       id=f"{supplier}_save_queue_backups",
       replace_existing=True,
     )
 
     scheduler.add_job(
       processor().clean_stale_queue_entries,
-      CronTrigger(hour=3, minute=0),
+      CronTrigger(hour=3, minute=0, timezone=SETTINGS.tz),
       id=f"{supplier}_cleanup_stale_queue_entries",
       replace_existing=True,
     )
@@ -151,6 +151,7 @@ async def reschedule_all_tasks():
           minute="0-59/10",
           start_date=order.invoice_pickup_time,
           end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+          timezone=SETTINGS.tz,
         ),
         kwargs={
           "storenum": order.store,
@@ -178,6 +179,7 @@ async def reschedule_all_tasks():
           minute="4-59/10",
           start_date=order.invoice_dropoff_time,
           end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+          timezone=SETTINGS.tz,
         ),
         kwargs={
           "storenum": order.store,
@@ -221,6 +223,7 @@ async def reschedule_all_tasks():
   #         minute="0-59/10",
   #         start_date=order.invoice_pickup_time,
   #         end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+  #         timezone=SETTINGS.tz,
   #       ),
   #       kwargs={
   #         "storenum": order.store,
@@ -249,6 +252,7 @@ async def reschedule_all_tasks():
   #         minute="4-59/10",
   #         start_date=order.invoice_dropoff_time,
   #         end_date=order.invoice_dropoff_time + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59),
+  #         timezone=SETTINGS.tz,
   #       ),
   #       kwargs={
   #         "storenum": order.store,
@@ -293,42 +297,35 @@ async def main() -> NoReturn:
 
     scheduler.add_job(
       cache.refresh_cache,
-      CronTrigger(minute="*/30"),
+      CronTrigger(minute="*/30", timezone=SETTINGS.tz),
       id="refresh_cache",
       replace_existing=True,
     )
 
     scheduler.add_job(
       cache.submit_queued_writes_to_pool,
-      CronTrigger(second="*/30"),
+      CronTrigger(second="*/30", timezone=SETTINGS.tz),
       id="submit_queued_writes_to_pool",
       replace_existing=True,
     )
 
     scheduler.add_job(
       reschedule_all_tasks,
-      CronTrigger(
-        hour=5,
-      ),
+      CronTrigger(hour=5, timezone=SETTINGS.tz),
       id="reschedule_all_tasks",
       replace_existing=True,
     )
 
     scheduler.add_job(
       flip_week,
-      CronTrigger(
-        day_of_week="sun",
-        hour=0,
-        minute=0,
-        second=0,
-      ),
+      CronTrigger(day_of_week="sun", hour=0, minute=0, second=0, timezone=SETTINGS.tz),
       id="flip_week",
       replace_existing=True,
     )
 
     scheduler.add_job(
       scheduler.print_jobs,
-      CronTrigger(minute="*/1"),
+      CronTrigger(minute="*/1", timezone=SETTINGS.tz),
       id="print_jobs",
       replace_existing=True,
     )
@@ -336,7 +333,7 @@ async def main() -> NoReturn:
     # Heartbeat job - writes timestamp every minute for health monitoring
     scheduler.add_job(
       write_heartbeat,
-      CronTrigger(minute="*/1"),
+      CronTrigger(minute="*/1", timezone=SETTINGS.tz),
       id="heartbeat",
       replace_existing=True,
     )
