@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 def without_cwd(self: PurePath) -> str:
   cwd = getcwd()
-  return str(self)[len(cwd) :] if str(self).startswith(cwd) else str(self)
+  return str(self).removeprefix(cwd)
 
 
 class Patches(MonkeyPatcher):

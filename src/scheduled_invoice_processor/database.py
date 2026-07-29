@@ -348,9 +348,9 @@ class DatabaseCache(metaclass=SingletonType):
 
           self._after_write_update_body = None  # Reset the update body after writing
     # Ensure that exceptions actually get logged while executing off main thread
-    except Exception as e:
+    except Exception:
       logger.exception("Error during API write")
-      raise e
+      raise
 
   async def flip_to_new_week(self):
     await self.submit_queued_writes_to_pool()
@@ -631,7 +631,7 @@ class CacheViewOrderLog(CacheViewBase["OrderLogDBEntryModel", "DatabaseOrderLogC
   columns = DatabaseOrderLogColumns
   model = OrderLogDBEntryModel
 
-  async def log_action(
+  async def log_action(  # noqa: PLR0917
     self,
     supplier: SuppliersEnum,
     store: StoreNum | None,

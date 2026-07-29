@@ -246,11 +246,10 @@ class RYOProcessor(SupplierProcessorBase):
       # Uploaded the new file to the remote waiting folder, replacing the old invoice files.
       for new_file_loc in new_file_meta.local_copy_loc.values():
         send_path = self.post_processing_waiting_folder / new_file_loc.name
-        with new_file_loc.open("rb") as f:
-          with self.waiting_ftp.start_session() as waiting_client:
-            waiting_client.upload_file(
-              send_path.as_posix(), callback=f.read, file_size=new_file_loc.stat().st_size, task_msg=f"Uploading {send_path.name}"
-            )
+        with new_file_loc.open("rb") as f, self.waiting_ftp.start_session() as waiting_client:
+          waiting_client.upload_file(
+            send_path.as_posix(), callback=f.read, file_size=new_file_loc.stat().st_size, task_msg=f"Uploading {send_path.name}"
+          )
         local_logger.info("%s: %s: Uploaded merged file to remote location %s", self.__class__.__name__, key, send_path)
 
         try:
@@ -263,9 +262,9 @@ class RYOProcessor(SupplierProcessorBase):
 
       # return the new file meta and queue key to be updated in the logging list
       return key, new_file_meta
-    except Exception as e:
+    except Exception:
       logger.exception("%s: %s: Unexpected error in preprocessing off thread", self.__class__.__name__, key)
-      raise e
+      raise
 
   def _create_new_merged_file(  # noqa: C901, PLR0915
     self, key: SupplierQueueKey, old_file_meta: FileRegisterData, adapted_logger: LoggerAdapter[Any] | None = None

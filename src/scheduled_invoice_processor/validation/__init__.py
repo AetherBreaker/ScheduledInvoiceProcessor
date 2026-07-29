@@ -71,10 +71,7 @@ class CustomBaseModel(BaseModel):
   def log_failed_field_validations(cls, data: str, handler: ValidatorFunctionWrapHandler, info: ValidationInfo) -> Any:
     results = None
 
-    try:
-      results = handler(data)
-    except ValidationError as e:
-      raise e
+    results = handler(data)
 
     return data if results is None else results
 
@@ -86,9 +83,9 @@ class CustomBaseModel(BaseModel):
       results = handler(data)
     except ValidationError as e:
       if cls.__name__ != "ScheduledOrderDBEntryModel":
-        raise e
+        raise
 
       for err in e.errors():
         if err["type"] != "missing":
-          raise e
+          raise
     return results  # type: ignore

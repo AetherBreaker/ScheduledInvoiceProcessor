@@ -180,7 +180,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception as e:
       logger.error("%s: Error saving queue backups: %s", self.__class__.__name__, exc_info=e)
-      raise e
+      raise
 
   def _load_queue_backups(self) -> None:
     # Note: Called during __init__, no need for lock protection
@@ -483,7 +483,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
           local_logger.info("%s: Checking off %s_%s invoice_applied", self.__class__.__name__, self.supplier_name, file_meta.storenum)
           await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_applied)
 
-  def _transfer_file_vend_to_main(
+  def _transfer_file_vend_to_main(  # noqa: PLR0917
     self,
     send_path: PurePosixPath,
     recv_path: PurePosixPath,
@@ -593,7 +593,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     except Exception:
       local_logger.exception("%s: Error extracting invoice number for %s", self.__class__.__name__, file_meta.storenum)
 
-  def _transfer_file_main_to_main(
+  def _transfer_file_main_to_main(  # noqa: PLR0917
     self,
     send_path: PurePosixPath,
     recv_path: PurePosixPath,
@@ -653,7 +653,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
   @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
-  async def _register_pickup(
+  async def _register_pickup(  # noqa: PLR0917
     self,
     storenum: "StoreNum",  # noqa: UP037
     customer_id: "CustomerID",  # noqa: UP037
@@ -741,7 +741,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF, log_subfolder=LogActionEnum.REGISTERED_DROPOFF)
   @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_DROPOFF)
-  async def _register_dropoff(
+  async def _register_dropoff(  # noqa: PLR0917
     self,
     storenum: "StoreNum",  # noqa: UP037
     customer_id: "CustomerID",  # noqa: UP037
@@ -855,7 +855,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def assemble_queue_key(self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime) -> SupplierQueueKey:
     return f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
 
-  def _handle_existing_archive(
+  def _handle_existing_archive(  # noqa: PLR0917
     self,
     client: AdapterProtocol,
     source_loc: str,
@@ -958,9 +958,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
     except (*all_errors, OSError):
       local_logger.exception("%s: File %s not found at %s for archiving", self.__class__.__name__, remote_file, source_folder)
     # Ensure that exceptions actually get logged while executing off main thread
-    except Exception as e:
+    except Exception:
       local_logger.exception("%s: Error archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
-      raise e
+      raise
 
   def _vendor_archive_file(
     self,
@@ -1016,11 +1016,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
         local_logger.exception("%s: Permission denied archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
       else:
         local_logger.exception("%s: IOError archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
-        raise e
+        raise
 
-    except Exception as e:
+    except Exception:
       local_logger.exception("%s: Error archiving file %s", self.__class__.__name__, remote_file)
-      raise e
+      raise
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)

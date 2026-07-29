@@ -64,7 +64,7 @@ def log_actions[**TP, TR](
 
       try:
         result = await func(*args, **kwargs)
-      except Exception as e:
+      except Exception:
         adapted_logger.exception("Exception in %s", func.__name__)
         self_obj.errored = True
         await self_obj.cache.order_log.log_action(
@@ -78,7 +78,7 @@ def log_actions[**TP, TR](
           week_end_date=None,
           note=note if log_file_loc is not None and log_file_loc.exists() else "Nothing logged",
         )
-        raise e
+        raise
 
       for status, file_meta in items_to_log.values():
         if status == StatusCode.SKIPPED:
