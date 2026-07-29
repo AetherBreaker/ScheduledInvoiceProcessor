@@ -14,7 +14,7 @@ version = 1
 
 [handlers.scheduler_debug]
   class       = "aeth_ext.logging.bases.CustomTimedRotatingFileHandler"
-  filename    = "logdir://scheduler_debug.txt"
+  filename    = "logdir://scheduler_debug.log"
   when        = "midnight"
   backupCount = 14
   delay       = true
@@ -23,7 +23,7 @@ version = 1
 
 [handlers.scheduler_info]
   class       = "aeth_ext.logging.bases.CustomTimedRotatingFileHandler"
-  filename    = "logdir://scheduler.txt"
+  filename    = "logdir://scheduler.log"
   when        = "midnight"
   backupCount = 14
   delay       = true
