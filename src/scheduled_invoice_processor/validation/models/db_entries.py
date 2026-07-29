@@ -1,3 +1,4 @@
+# ruff: noqa: TRY004
 # pyright: reportUnnecessaryIsInstance=false
 # pyright: reportUnreachable=false
 # Standard library imports
@@ -50,7 +51,7 @@ TIMESTAMP_PATTERN = compile(r"(?P<Weekday>\w*?) (?P<Hour>\d{1,2}):(?P<Minute>\d{
 
 def process_formatted_time_pattern_str(target_time: str) -> datetime:
   if isinstance(target_time, (datetime, int, float)):
-    raise TypeError(f"Expected a string for time pattern, got {type(target_time).__name__}")
+    raise ValueError(f"Expected a string for time pattern, got {type(target_time).__name__}")
   match = TIMESTAMP_PATTERN.match(target_time) if target_time else None
 
   if not match:
@@ -98,7 +99,7 @@ class ScheduledOrderDBEntryModel(CustomBaseModel):
 
 def remove_tz_info_if_aware(dt: datetime) -> datetime:
   if not isinstance(dt, datetime):
-    raise TypeError("Expected a datetime object")
+    raise ValueError("Expected a datetime object")
   if dt.tzinfo is not None:
     dt = dt.replace(tzinfo=None)
   return dt
@@ -106,7 +107,7 @@ def remove_tz_info_if_aware(dt: datetime) -> datetime:
 
 def init_generic_datetime_str(dt: str) -> datetime:
   if not isinstance(dt, str):
-    raise TypeError(f"Expected a string for datetime initialization, got {type(dt).__name__}")
+    raise ValueError(f"Expected a string for datetime initialization, got {type(dt).__name__}")
   try:
     return datetime.strptime(dt, "%m/%d/%Y %H:%M:%S")  # noqa: DTZ007
   except ValueError as e:

@@ -16,6 +16,7 @@ PROJECT_NAME = "scheduled-invoice-processor"
 
 def run_app() -> None:
   """Run the main application loop."""
+  # initialize(asyncio=True, logging=True)
   initialize(asyncio=True, logging="socket")
 
   # Standard library imports
