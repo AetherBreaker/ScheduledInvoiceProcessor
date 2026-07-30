@@ -1373,7 +1373,7 @@ wheels = [
 
 [[package]]
 name = "scheduled-invoice-processor"
-version = "2.1.5"
+version = "2.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "aeth-ext", version = "5.2.0", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "sftp"], marker = "sys_platform == 'linux'" },
@@ -1404,8 +1404,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=4.2.2" },
-    { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform == 'linux'", specifier = ">=4.2.2", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
+    { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=5.2.0" },
+    { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform == 'linux'", specifier = ">=5.2.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
     { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform == 'win32'", editable = "../aeth_ext" },
     { name = "aiohttp", specifier = ">=3.13.5" },
     { name = "aiologic", specifier = ">=0.16.0" },
