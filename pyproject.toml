@@ -3,7 +3,7 @@
   version         = "2.2.1"
   requires-python = ">=3.14"
   dependencies    = [
-    "aeth-ext[sftp, async]>=5.2.0",
+    "aeth-ext[sftp, async]>=6.2.1",
     "aiohttp>=3.13.5",
     "aiologic>=0.16.0",
     "aiorwlock>=1.5.1",

@@ -1,6 +1,7 @@
 # Standard library imports
 import sys
-from asyncio import sleep
+from asyncio import CancelledError, create_task, sleep
+from contextlib import suppress
 from datetime import datetime
 from logging import getLogger
 from typing import TYPE_CHECKING
@@ -13,6 +14,7 @@ from rich import get_console
 
 # First party imports
 from aeth_ext.errors.err_handling import FATAL_EVENT
+from aeth_ext.monitoring import run_heartbeat_async, send_heartbeat
 from aeth_ext.rich.progress import Progress
 from scheduled_invoice_processor.database import DatabaseCache
 from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
@@ -34,20 +36,8 @@ logger = getLogger(__name__)
 
 RICH_CONSOLE = get_console()
 
-if not __debug__:
-  # Heartbeat file for health checks
-  HEARTBEAT_FILE = SETTINGS.log_loc_folder / "heartbeat.txt"
-
-  def write_heartbeat():
-    """Write current timestamp to heartbeat file for health monitoring."""
-    try:
-      HEARTBEAT_FILE.write_text(datetime.now(tz=SETTINGS.tz).isoformat())
-    except Exception:
-      logger.exception("Failed to write heartbeat: %s")
-else:
-
-  def write_heartbeat():
-    pass
+HEARTBEAT_FILE = SETTINGS.log_loc_folder / "heartbeat.txt"
+FAVICON_PATH = CWD / "favicon.ico"
 
 
 expected_suppliers: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
@@ -62,9 +52,6 @@ supplier_register: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
 
 
 scheduler = OrderProcessingScheduler.init_scheduler()
-
-
-FAVICON_PATH = CWD / "favicon.ico"
 
 
 async def bootstrap_runtime(pbar: Progress) -> DatabaseCache:
@@ -292,6 +279,15 @@ async def flip_week():
 
 async def main() -> NoReturn:
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
+
+  send_heartbeat(
+    HEARTBEAT_FILE,
+    ping_url=SETTINGS.alerts_healthcheck_ping_url,
+    pingkey=SETTINGS.alerts_healthcheck_pingkey,
+    tz=SETTINGS.tz,
+    start=True,
+  )
+
   with Progress(console=RICH_CONSOLE, auto_refresh=False) as pbar:
     cache = await bootstrap_runtime(pbar)
 
@@ -330,26 +326,43 @@ async def main() -> NoReturn:
       replace_existing=True,
     )
 
-    # Heartbeat job - writes timestamp every minute for health monitoring
-    scheduler.add_job(
-      write_heartbeat,
-      CronTrigger(minute="*/1", timezone=SETTINGS.tz),
-      id="heartbeat",
-      replace_existing=True,
+    # send_start=False: the boot-time send_heartbeat() call above already sent
+    # the one "start" ping for this run.
+    periodic_heartbeat_task = create_task(
+      run_heartbeat_async(
+        HEARTBEAT_FILE,
+        ping_url=SETTINGS.alerts_healthcheck_ping_url,
+        pingkey=SETTINGS.alerts_healthcheck_pingkey,
+        send_start=False,
+        tz=SETTINGS.tz,
+      )
     )
+
+    # # Heartbeat job - writes timestamp every minute for health monitoring
+    # scheduler.add_job(
+    #   write_heartbeat,
+    #   CronTrigger(minute="*/1", timezone=SETTINGS.tz),
+    #   id="heartbeat",
+    #   replace_existing=True,
+    # )
 
     await _run_debug_code(cache)
 
     scheduler.start()
 
     # Write initial heartbeat on startup
-    write_heartbeat()
+    # write_heartbeat()
 
     scheduler.print_jobs()
 
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
     with RICH_CONSOLE.status("Application is running."):
       await FATAL_EVENT
+
+      periodic_heartbeat_task.cancel()
+      with suppress(CancelledError):
+        await periodic_heartbeat_task
+
       fatal_details = get_last_fatal_details()
 
       if not fatal_details["is_database_origin"] and any(processor().errored for processor in supplier_register.values()):

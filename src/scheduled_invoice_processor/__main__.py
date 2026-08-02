@@ -12,6 +12,7 @@ RICH_CONSOLE = Console(
   log_time=platform == "win32",
 )
 PROJECT_NAME = "scheduled-invoice-processor"
+HEARTBEAT_SLUG = "scheduled-invoice-processor"
 
 
 def run_app() -> None:
