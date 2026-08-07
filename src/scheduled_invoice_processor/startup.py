@@ -305,6 +305,8 @@ async def main() -> NoReturn:
       replace_existing=True,
     )
 
+    await _run_debug_code(cache)
+
     scheduler.add_job(
       reschedule_all_tasks,
       CronTrigger(hour=5, timezone=SETTINGS.tz),
@@ -345,8 +347,6 @@ async def main() -> NoReturn:
     #   id="heartbeat",
     #   replace_existing=True,
     # )
-
-    await _run_debug_code(cache)
 
     scheduler.start()
 
