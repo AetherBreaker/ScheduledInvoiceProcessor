@@ -13,7 +13,7 @@ from dateutil.relativedelta import SA, relativedelta
 from rich import get_console
 
 # First party imports
-from aeth_ext.errors.err_handling import FATAL_EVENT
+from aeth_ext.errors.shutdown import SHUTDOWN
 from aeth_ext.monitoring import run_heartbeat_async, send_heartbeat
 from aeth_ext.rich.progress import Progress
 from scheduled_invoice_processor.database import DatabaseCache
@@ -357,7 +357,7 @@ async def main() -> NoReturn:
 
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
     with RICH_CONSOLE.status("Application is running."):
-      await FATAL_EVENT
+      await SHUTDOWN
 
       periodic_heartbeat_task.cancel()
       with suppress(CancelledError):
