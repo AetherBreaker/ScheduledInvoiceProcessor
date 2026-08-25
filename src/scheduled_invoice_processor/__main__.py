@@ -16,27 +16,14 @@ HEARTBEAT_SLUG = "scheduled-invoice-processor"
 
 
 def run_app() -> None:
-  """Run the main application loop and exit with a code that reflects how it stopped."""
+  """Run the main application loop."""
   # initialize(asyncio=True, logging=True)
   initialize(asyncio=True, logging="socket")
 
-  # Standard library imports
-  import sys
-  from asyncio import run
-
   # First party imports
-  from aeth_ext.errors.shutdown import SHUTDOWN
-  from scheduled_invoice_processor.startup import exit_code_for_shutdown, main
+  from scheduled_invoice_processor.startup import run_until_shutdown
 
-  try:
-    run(main())
-  except KeyboardInterrupt:
-    # aeth_ext's exit nudge (simulated SIGINT). Normally main() returns on its own after awaiting
-    # SHUTDOWN_COMPLETE and the nudge is skipped; it lands here only if main()'s tail *or* asyncio's own
-    # close (joining in-flight FTP threads) outran the shutdown budget. Not an error either way; the kind
-    # below says how we stopped.
-    pass
-  sys.exit(exit_code_for_shutdown(SHUTDOWN.kind))
+  run_until_shutdown()
 
 
 if __name__ == "__main__":

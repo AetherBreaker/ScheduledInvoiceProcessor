@@ -19,7 +19,6 @@ from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRend
 from pandas import Series, to_numeric
 
 # First party imports
-from aeth_ext.errors.exception_trail import build_exception_trail
 from aeth_ext.types.abc import SingletonType
 from aeth_ext.utils import today
 
@@ -46,9 +45,6 @@ if TYPE_CHECKING:
   from pandas import DataFrame
   from pydantic import TypeAdapter
 
-  # First party imports
-  from aeth_ext.errors.exception_trail import ExceptionTrail
-
   # Local folder imports
   from .typing_custom import CustomerID, InvoiceNum, Request, StoreNum
   from .typing_custom.dataframe_column_names import ColNameEnum, DatabaseOrderLogIndex, DatabaseScheduleIndex  # noqa: F401
@@ -59,22 +55,6 @@ logger = getLogger(__name__)
 
 
 DEFAULT_SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-
-
-DATABASE_ORIGIN_PATTERNS: tuple[str, ...] = ("scheduled_invoice_processor.database", "**.gspread.**", "**.google.oauth2.**")
-"""Dot-segment globs (see `ExceptionTrail.matches`) for "the fatal error came from the Google Sheets layer": this
-module, gspread, or the google-auth credentials stack. A fatal error from any of these means a final flush of queued
-writes at shutdown would only fail again, so `startup.main()` skips it."""
-
-
-def trail_is_database_origin(trail: ExceptionTrail) -> bool:
-  """Whether any module on *trail* (origin-first, causes/contexts included) is part of the database layer."""
-  return bool(trail.matches(*DATABASE_ORIGIN_PATTERNS))
-
-
-def exception_is_database_origin(exc: BaseException) -> bool:
-  """`trail_is_database_origin` over a raised exception (must have a live `__traceback__`)."""
-  return trail_is_database_origin(build_exception_trail(exc))
 
 
 class DatabaseCache(metaclass=SingletonType):
@@ -314,22 +294,6 @@ class DatabaseCache(metaclass=SingletonType):
       # self.order_log._cache.to_csv("debug_order_log.csv")
       # pass
 
-  def flush_queued_writes(self) -> bool:
-    """Synchronously write every queued Sheets update. Safe from any thread: `_api_write` takes `aiologic` locks,
-    which work from plain threads as well as coroutines. Used by the shutdown callback, which runs on aeth_ext's
-    shutdown thread, not the event loop. Returns whether anything was written."""
-    # This pre-check reads the queued flags outside `_db_write_queue_lock`; benign -- `_api_write` re-checks
-    # them under the lock, so a racing enqueue at worst costs one extra no-op call.
-    if not (
-      self.queued_values_raw_updates
-      or self.queued_values_user_entered_updates
-      or self.queued_before_write_update_requests
-      or self.queued_after_write_update_requests
-    ):
-      return False
-    self._api_write()
-    return True
-
   async def submit_queued_writes_to_pool(self) -> None:
     if (
       self.queued_values_raw_updates
@@ -337,7 +301,7 @@ class DatabaseCache(metaclass=SingletonType):
       or self.queued_before_write_update_requests
       or self.queued_after_write_update_requests
     ):
-      await to_thread(self._api_write)
+      await to_thread(self.api_write)
 
   async def has_pending_writes(self) -> bool:
     async with self._db_write_queue_lock:
@@ -349,7 +313,7 @@ class DatabaseCache(metaclass=SingletonType):
       has_after = self._after_write_update_body is not None and bool(self._after_write_update_body["requests"])
       return has_raw or has_user_entered or has_before or has_after
 
-  def _api_write(self):
+  def api_write(self):
     try:
       with self._api_write_lock, self._db_write_queue_lock:
         if self.queued_before_write_update_requests:

@@ -1,7 +1,6 @@
 # Standard library imports
 from contextvars import ContextVar
 from datetime import datetime
-from json import loads
 from logging import getLogger
 from pathlib import PurePosixPath
 from re import compile
@@ -10,6 +9,7 @@ from typing import TYPE_CHECKING, override
 # Third party imports
 from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
+from orjson import loads
 from pydantic import SecretStr
 
 # First party imports
@@ -31,20 +31,21 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-def load_credentials() -> SFTPCredentials:
-  """SAS SFTP credentials (Files.com), read from `sas_ftp_creds.json`; the password is wrapped in a `SecretStr`."""
-  raw = loads(SETTINGS.sas_ftp_creds_file.read_text())
-  return SFTPCredentials(
-    host=raw["HOSTNAME"],
-    username=raw["USER"],
-    password=SecretStr(raw["PWD"]),
-    port=int(raw.get("PORT", 22)),
-    host_key_policy="auto_add",
-  )
-
-
 class SASProcessor(SupplierProcessorBase):
-  vendor_ftp = create_ftp_adapter(load_credentials(), container_cls="SASProcessor")
+  # The raw credential dict lives only for the next statement and is deleted from the class namespace right after,
+  # so the password exists on the class solely as the `SecretStr` inside the pool's credentials.
+  _raw = loads(SETTINGS.sas_ftp_creds_file.read_bytes())
+  vendor_ftp = create_ftp_adapter(
+    SFTPCredentials(
+      host=_raw["HOSTNAME"],
+      username=_raw["USER"],
+      password=SecretStr(_raw["PWD"]),
+      port=int(_raw.get("PORT", 22)),
+      host_key_policy="auto_add",
+    ),
+    container_cls="SASProcessor",
+  )
+  del _raw
 
   queue_backup_prefix: str = "sas"
 

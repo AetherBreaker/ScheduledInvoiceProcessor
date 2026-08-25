@@ -36,7 +36,7 @@ def _as_scheduler(stub: object) -> OrderProcessingScheduler:
 
 
 def _as_cache(stub: object) -> DatabaseCache:
-  """The hooks only call `.flush_queued_writes()`."""
+  """The hooks only read the four `queued_*` flags and call `.api_write()`."""
   return cast("DatabaseCache", stub)
 
 
@@ -45,15 +45,18 @@ def _trails(*items: object) -> tuple[ExceptionTrail, ...]:
 
 
 class _Cache:
-  def __init__(self, fail: bool = False) -> None:
+  def __init__(self, fail: bool = False, queued: bool = True) -> None:
     self.flushed = 0
     self.fail = fail
+    self.queued_values_raw_updates = queued
+    self.queued_values_user_entered_updates = False
+    self.queued_before_write_update_requests = False
+    self.queued_after_write_update_requests = False
 
-  def flush_queued_writes(self) -> bool:
+  def api_write(self) -> None:
     if self.fail:
       raise RuntimeError("sheets down")
     self.flushed += 1
-    return True
 
 
 def test_freeze_pauses_and_never_shuts_down() -> None:
@@ -83,6 +86,15 @@ def test_flush_skipped_when_a_database_origin_trail_exists(monkeypatch: pytest.M
     hooks.final_sheets_flush(_as_cache(cache))(_trails(SimpleNamespace(origin=SimpleNamespace(module="m", file="f"))))
   assert cache.flushed == 0
   assert "skipping final google sheets flush" in caplog.text.lower()
+
+
+def test_flush_is_skipped_when_nothing_is_queued(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+  monkeypatch.setattr(hooks, "trail_is_database_origin", lambda trail: False)
+  cache = _Cache(queued=False)
+  with caplog.at_level(logging.INFO):
+    hooks.final_sheets_flush(_as_cache(cache))(())
+  assert cache.flushed == 0
+  assert "no queued google sheets writes" in caplog.text.lower()
 
 
 def test_flush_swallows_and_logs_failure(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

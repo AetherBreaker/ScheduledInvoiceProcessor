@@ -3,21 +3,22 @@
 # Standard library imports
 from asyncio import gather, to_thread
 from atexit import register as register_at_exit
+from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime
 from errno import EACCES
-from ftplib import all_errors, error_perm, error_temp
+from ftplib import all_errors, error_temp
 from io import BytesIO
-from json import loads
 from logging import Logger, getLogger
 from os import replace
 from threading import RLock
 from time import sleep
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar
 
 # Third party imports
 from aiologic import Lock
 from dateutil.relativedelta import SA, SU, relativedelta
+from orjson import loads
 from paramiko import SSHException
 from pydantic import SecretStr, TypeAdapter
 
@@ -36,7 +37,6 @@ from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, Statu
 
 if TYPE_CHECKING:
   # Standard library imports
-  from contextvars import ContextVar
   from logging import LoggerAdapter
   from pathlib import Path, PurePosixPath
   from re import Match, Pattern
@@ -67,22 +67,16 @@ TRANSIENT_TRANSFER_ERROR_STRINGS = (
 HOLDING_FOLDER = CWD / "file_holding"
 
 
-def load_sft_credentials() -> FTPCredentials:
-  """Credentials for the shared SFT holding FTP server (`waiting_ftp`), read from `sft_creds.json`.
-
-  The raw JSON never outlives this call: the password leaves here wrapped in a `SecretStr`, so nothing on the
-  processor classes holds a plaintext credential.
-  """
-  raw = loads(SETTINGS.sft_website_creds_file.read_text())
-  return FTPCredentials(host=raw["HOST"], username=raw["USER"], password=SecretStr(raw["PWD"]), port=int(raw.get("PORT", 21)))
-
-
 class SupplierProcessorBase(metaclass=SingletonType):
   _file_pickup_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_preprocess_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_waiting_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_dropoff_queue: dict[SupplierQueueKey, FileRegisterData]
   _queue_ta = TypeAdapter(dict[str, FileRegisterData])
+  """One queue; used to read the pre-ledger per-queue backup files."""
+  _ledger_ta = TypeAdapter(dict[str, dict[str, FileRegisterData]])
+  """All four queues keyed by `_QUEUE_NAMES`; the on-disk ledger format."""
+  _QUEUE_NAMES: ClassVar[tuple[str, ...]] = ("pickup", "preprocess", "waiting", "dropoff")
   _file_queue_backup_folder: Path = SETTINGS.persisted_dir_loc / "queue_backups"
   _corrupted_queue_backup_folder: Path = _file_queue_backup_folder / "corrupted"
   _transient_transfer_retries = 3
@@ -95,7 +89,21 @@ class SupplierProcessorBase(metaclass=SingletonType):
   (workers never take `_lock`), so there is no deadlock."""
 
   vendor_ftp: FTPAdapter | SFTPAdapter
-  waiting_ftp: FTPAdapter = create_ftp_adapter(load_sft_credentials(), container_cls="SupplierProcessorBase")
+
+  ctx_var_container: ClassVar[ContextVar[str]] = ContextVar("supplier_container_label")
+  """Which processor is using the shared `waiting_ftp` pool right now, for the pool's log lines. Set by
+  `add_log_context` for the duration of each job (and inherited by its `to_thread` workers); outside a job the
+  pool falls back to its static `container_cls` label."""
+
+  # The raw credential dict lives only for the next statement and is deleted from the class namespace right after,
+  # so the password exists on the class solely as the `SecretStr` inside the pool's credentials.
+  _raw = loads(SETTINGS.sft_website_creds_file.read_bytes())
+  waiting_ftp: FTPAdapter = create_ftp_adapter(
+    FTPCredentials(host=_raw["HOST"], username=_raw["USER"], password=SecretStr(_raw["PWD"]), port=int(_raw.get("PORT", 21))),
+    container_cls="SupplierProcessorBase",
+    container_cvar=ctx_var_container,
+  )
+  del _raw
 
   queue_backup_prefix: str
 
@@ -132,8 +140,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
       self.waiting_ftp.pbar = pbar
-      if vendor_ftp := cast("FTPAdapter | SFTPAdapter | None", getattr(self, "vendor_ftp", None)):
-        vendor_ftp.pbar = pbar
+      self.vendor_ftp.pbar = pbar
 
     self._file_queue_backup_folder.mkdir(exist_ok=True, parents=True)
     self._corrupted_queue_backup_folder.mkdir(exist_ok=True, parents=True)
@@ -142,11 +149,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     self.job_holding_folder = HOLDING_FOLDER / self.__class__.__name__.lower()
     self.job_holding_folder.mkdir(parents=True, exist_ok=True)
 
-    self.pickup_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_pickup_queue.json"
-    self.waiting_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_waiting_queue.json"
-    self.dropoff_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_dropoff_queue.json"
-
-    self.preprocess_queue_backup_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_preprocess_queue.json"
+    self.queue_ledger_file = self._file_queue_backup_folder / f"{self.queue_backup_prefix}_queues.json"
 
     self.pbar = pbar
 
@@ -162,38 +165,42 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def __post_init__(self) -> None:
     pass
 
+  def _queues_by_name(self) -> dict[str, dict[SupplierQueueKey, FileRegisterData]]:
+    return {
+      "pickup": self._file_pickup_queue,
+      "preprocess": self._file_preprocess_queue,
+      "waiting": self._file_waiting_queue,
+      "dropoff": self._file_dropoff_queue,
+    }
+
   def _persist_queues(self) -> bool:
-    """Write all four queues to their backup files, atomically per file. Returns True only when every file was
-    written and replaced; callers that gate a destructive cleanup on a durable ledger check the result.
+    """Write all four queues to the single ledger file in one atomic replace. Returns whether the ledger was
+    written; callers that gate a destructive cleanup on a durable ledger check the result.
+
+    One file, not one per queue, so a transition (pickup -> waiting, preprocess -> dropoff) can never be half
+    on disk: with separate files a crash between "removed from A" and "added to B" reloaded the entry in no
+    queue at all.
 
     Callers either hold `self._lock` (the queue-mutating blocks) or are the at-exit path; the write itself is
     additionally serialised by `self._persist_lock` so concurrent `_preprocess_off_thread` workers (which run on
-    the default thread pool while the event loop holds `_lock`) never iterate/dump the same dict at once. Each
-    file is written to `<name>.tmp` and then `os.replace`d onto the real path, so a crash mid-write leaves the
-    previous backup intact and the loader's quarantine path only ever sees real corruption. An `OSError` on any
-    single file's write/replace is logged and that file's previous backup is left intact rather than propagating
-    -- a one-cycle-stale backup beats aborting the business operation mid-way -- and the remaining files are still
-    attempted.
+    the default thread pool while the event loop holds `_lock`) never iterate/dump the dicts at once. The
+    ledger is written to `<name>.tmp` and then `os.replace`d onto the real path, so a crash mid-write leaves
+    the previous ledger intact and the loader's quarantine path only ever sees real corruption. An `OSError`
+    is logged and the previous ledger left intact rather than propagating -- a one-cycle-stale ledger beats
+    aborting the business operation mid-way.
     """
-    all_written = True
     with self._persist_lock:
-      for backup_file, queue in (
-        (self.pickup_queue_backup_file, self._file_pickup_queue),
-        (self.preprocess_queue_backup_file, self._file_preprocess_queue),
-        (self.waiting_queue_backup_file, self._file_waiting_queue),
-        (self.dropoff_queue_backup_file, self._file_dropoff_queue),
-      ):
-        tmp_file = backup_file.with_name(f"{backup_file.name}.tmp")
-        try:
-          tmp_file.write_bytes(self._queue_ta.dump_json(queue, indent=2, round_trip=True))
-          replace(tmp_file, backup_file)
-        except OSError:
-          logger.exception(
-            "%s: Failed to persist queue backup %s; the previous backup file is left intact", self.__class__.__name__, backup_file
-          )
-          tmp_file.unlink(missing_ok=True)
-          all_written = False
-    return all_written
+      tmp_file = self.queue_ledger_file.with_name(f"{self.queue_ledger_file.name}.tmp")
+      try:
+        tmp_file.write_bytes(self._ledger_ta.dump_json(self._queues_by_name(), indent=2, round_trip=True))
+        replace(tmp_file, self.queue_ledger_file)
+      except OSError:
+        logger.exception(
+          "%s: Failed to persist queue ledger %s; the previous ledger is left intact", self.__class__.__name__, self.queue_ledger_file
+        )
+        tmp_file.unlink(missing_ok=True)
+        return False
+    return True
 
   def _persist_queues_at_exit(self) -> None:
     """Final save at interpreter exit. Waits up to 1 s for the queue lock; if it is still held (a transfer was
@@ -212,60 +219,60 @@ class SupplierProcessorBase(metaclass=SingletonType):
       if acquired:
         self._lock.green_release()
 
+  def _legacy_queue_backup_files(self) -> dict[str, Path]:
+    """The pre-ledger layout: one `<prefix>_<queue>_queue.json` per queue. Read once and migrated."""
+    return {name: self._file_queue_backup_folder / f"{self.queue_backup_prefix}_{name}_queue.json" for name in self._QUEUE_NAMES}
+
   def _load_queue_backups(self) -> None:
     # Note: Called during __init__, no need for lock protection
-    to_load = (
-      (
-        self._load_queue_backup_file(self.pickup_queue_backup_file, "pickup"),
-        self._file_pickup_queue,
-      ),
-      (
-        self._load_queue_backup_file(self.preprocess_queue_backup_file, "preprocess"),
-        self._file_preprocess_queue,
-      ),
-      (
-        self._load_queue_backup_file(self.waiting_queue_backup_file, "waiting"),
-        self._file_waiting_queue,
-      ),
-      (
-        self._load_queue_backup_file(self.dropoff_queue_backup_file, "dropoff"),
-        self._file_dropoff_queue,
-      ),
-    )
+    legacy_files: dict[str, Path] = {}
+    if self.queue_ledger_file.exists():
+      loaded = self._load_backup_file(self.queue_ledger_file, "ledger", self._ledger_ta) or {}
+    else:
+      legacy_files = {name: path for name, path in self._legacy_queue_backup_files().items() if path.exists()}
+      loaded = {name: self._load_backup_file(path, name, self._queue_ta) or {} for name, path in legacy_files.items()}
 
-    for loaded, target in to_load:
+    for name, target in self._queues_by_name().items():
       target.clear()
-      target.update(deepcopy(loaded))
+      target.update(deepcopy(loaded.get(name, {})))
 
-  def _load_queue_backup_file(self, backup_file: Path, queue_name: str) -> dict[str, FileRegisterData]:
-    if not backup_file.exists():
-      return {}
+    if legacy_files and self._persist_queues():
+      for path in legacy_files.values():
+        path.unlink(missing_ok=True)
+      logger.warning(
+        "%s: migrated %d per-queue backup file(s) into the queue ledger %s",
+        self.__class__.__name__,
+        len(legacy_files),
+        self.queue_ledger_file,
+      )
 
+  def _load_backup_file[T](self, backup_file: Path, label: str, ta: TypeAdapter[T]) -> T | None:
+    """Parse *backup_file* with *ta*; a file that does not validate is quarantined, reported, and read as empty."""
     raw_backup = backup_file.read_text()
 
     try:
-      return self._queue_ta.validate_json(raw_backup)
+      return ta.validate_json(raw_backup)
     except Exception as e:
       quarantined_file = self._quarantine_corrupted_queue_backup(backup_file, raw_backup)
       logger.error(
         "%s: Failed to load %s queue backup from %s. Quarantined corrupted backup to %s: %s",
         self.__class__.__name__,
-        queue_name,
+        label,
         backup_file,
         quarantined_file,
         exc_info=e,
       )
       send_alert_email(
-        subject=f"Corrupted {self.queue_backup_prefix} {queue_name} queue backup",
+        subject=f"Corrupted {self.queue_backup_prefix} {label} queue backup",
         content=(
-          f"{self.__class__.__name__} could not load the {queue_name} queue backup.\n\n"
+          f"{self.__class__.__name__} could not load the {label} queue backup.\n\n"
           f"Original backup: {backup_file}\n"
           f"Quarantined copy: {quarantined_file}\n"
           f"Error: {e}\n\n"
-          "Startup will continue with this queue cleared."
+          "Startup will continue with the affected queue(s) cleared."
         ),
       )
-      return {}
+      return None
 
   async def clean_stale_queue_entries(self) -> None:
     if self.errored:
@@ -470,10 +477,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return
 
     if not self._file_dropoff_queue:
-      local_logger.warning(
-        "%s: No files to drop off after preprocessing step (preprocessing did not advance any entry this run)",
-        self.__class__.__name__,
-      )
+      # Reached only when the preprocess queue was non-empty (both empty returns above): every entry's preprocess
+      # failed this run (each failure was already logged per file; the entries stay queued and are retried next
+      # run), or the dropoff queue was emptied during preprocessing, which should be impossible.
+      local_logger.error("%s: No files to drop off: preprocessing advanced no entry this run", self.__class__.__name__)
       return
     async with self._lock:
       with self.pbar.add_task(
@@ -505,18 +512,27 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
         await gather(*futures)
 
-      # Now that the transfers are complete, clear the items to log
-
-      for key, file_meta in tuple(self._file_dropoff_queue.items()):
-        if file_meta.dropoff_success and all(file_meta.dropoff_success.values()):
-          schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
-
-          local_logger.info("%s: Checking off %s_%s invoice_applied", self.__class__.__name__, self.supplier_name, file_meta.storenum)
-          # Tick the sheet before dropping the entry: a stop between the two must leave the entry queued
-          # (clean-stale drops it once the sheet says applied), never ticked-but-forgotten.
-          await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_applied)
-          self._file_dropoff_queue.pop(key)
-
+      # Commit, in two strictly ordered halves. First tick the sheet for every fully moved entry while the entries
+      # are still queued: a stop after a tick must leave the entry queued (clean-stale drops it once the sheet says
+      # applied), never ticked-but-forgotten. Only then pop and persist, with no `await` between the two, so a
+      # cancellation can never split the mutation from its ledger write.
+      done = {
+        key: file_meta
+        for key, file_meta in self._file_dropoff_queue.items()
+        if file_meta.dropoff_success and all(file_meta.dropoff_success.values())
+      }
+      for file_meta in done.values():
+        local_logger.info("%s: Checking off %s_%s invoice_applied", self.__class__.__name__, self.supplier_name, file_meta.storenum)
+      await gather(
+        *(
+          (self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule).check_box(
+            (self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_applied
+          )
+          for file_meta in done.values()
+        )
+      )
+      for key in done:
+        self._file_dropoff_queue.pop(key)
       self._persist_queues()
 
   def _transfer_file_vend_to_main(  # noqa: PLR0917
@@ -736,17 +752,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return False
     if not recv_size:
       return False
+    # Absence is established by listing the source's folder, not by interpreting a `SIZE` failure: FTP's 550
+    # covers "no such file" *and* "permission denied", so a reply code cannot prove the source is gone.
     try:
-      client.get_size(send_path.as_posix())
-    except FileNotFoundError:
-      return True
+      source_present = any(entry.filename == send_path.name for entry in client.listdir(send_path.parent.as_posix()))
     except (*all_errors, OSError) as exc:
-      # 550 is FTP's "no such file / not available". Any other reply -- a permanent 530/553, a transient error,
-      # a permission denial -- says nothing about whether the source still exists, so the move is not "done".
-      if isinstance(exc, error_perm) and str(exc).startswith("550"):
-        return True
       local_logger.warning("could not confirm %s is gone (%s); not treating the move as done", send_path, exc)
-    return False
+      return False
+    return not source_present
 
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool

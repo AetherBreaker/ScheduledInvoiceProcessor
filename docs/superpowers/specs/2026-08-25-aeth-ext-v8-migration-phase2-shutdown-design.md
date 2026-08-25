@@ -44,10 +44,10 @@ wave via a cross-loop future) is not worth building either:
 | Concern | Where | Why |
 |---|---|---|
 | Stop new jobs starting | THREADED callback `freeze_scheduler`, `priority=-10` | `AsyncIOScheduler.pause()` is thread-safe (`wakeup` goes through `call_soon_threadsafe`). `shutdown()` is **not** called here: `AsyncIOExecutor.shutdown` cancels asyncio tasks from a foreign thread. |
-| Flush queued Google Sheets writes | THREADED callback `final_sheets_flush`, `priority=0`, `required=True` | Queued writes live only in memory — unlike the queue backups (A2) they *are* lost on a kill. Runs on aeth_ext's shutdown thread, concurrently with the tail of `main()`, and is guaranteed to finish before the nudge that ends the run. Skipped when any fatal trail is database-origin (A4's `trail_is_database_origin`). Calls a new sync `DatabaseCache.flush_queued_writes()` which wraps the existing thread-safe `_api_write()` (`aiologic.Lock` is usable from plain threads). |
-| Cancel heartbeat, stop scheduler | `main()` after `await SHUTDOWN` | Best-effort: the nudge may pre-empt it; both are harmless to lose (the nudge cancels every task anyway). |
-| Exit code | `run_app()` in `__main__.py` | `run(main())` is wrapped in `except KeyboardInterrupt` (the nudge), then `sys.exit(exit_code_for_shutdown(SHUTDOWN.kind))`: `0` for GRACEFUL / not-requested, `1` for FATAL or FORCED. `main()` no longer calls `sys.exit`. |
-| Queue backups | nothing new | A2: persisted on every mutation and once more at `atexit`. |
+| Flush queued Google Sheets writes | THREADED callback `final_sheets_flush`, `priority=0`, `required=True` | Queued writes live only in memory — unlike the queue backups (A2) they *are* lost on a kill. Runs on aeth_ext's shutdown thread, concurrently with the tail of `main()`, and is guaranteed to finish before the nudge that ends the run. Skipped when any fatal trail is database-origin (`shutdown_hooks.trail_is_database_origin`, moved there from `database.py` in the PR review pass). Calls `DatabaseCache.api_write()` directly (public since the review pass; `aiologic.Lock` is usable from plain threads) after checking the four `queued_*` flags. |
+| Cancel heartbeat, stop scheduler, wait for in-flight jobs, catch-up flush | `main()` after `await SHUTDOWN` | Snapshot `scheduler.in_flight_jobs()` → `scheduler.shutdown(wait=False)` (cancels them) → `gather(*snapshot, return_exceptions=True)` so every job has actually stopped → `await SHUTDOWN_COMPLETE` → `await cache.submit_queued_writes_to_pool()` (same database-origin gate). The catch-up flush closes the window Copilot flagged on PR #10: a job mid-commit could tick a checkbox *after* the callback's flush and then pop its entry. See §6. |
+| Exit code | `startup.run_until_shutdown()` (called by `__main__.run_app()`) | `run(main())` is wrapped in `except KeyboardInterrupt` (the nudge), then `sys.exit(exit_code_for_shutdown(SHUTDOWN.kind))`: `0` for GRACEFUL / not-requested, `1` for FATAL or FORCED. `main()` never calls `sys.exit`. Lives in `startup`, not `__main__`, so `__main__` stays import-light; interim until aeth_ext owns the mapping (aeth_ext `TODO.md` item 12). |
+| Queue backups | single ledger file | A2: persisted on every mutation and once more at `atexit`. Since the review pass all four queues live in **one** file (`<prefix>_queues.json`, one `os.replace`), so a transition can never be half on disk; the legacy per-queue files are migrated on first boot. See §6. |
 
 The `sleep(600)` / `.errored` heuristic and every "Fatal shutdown:" log line in `main()` are deleted. This
 also closes the **known regression** carried out of Phase 1 (`await SHUTDOWN` resolves on every kind, so
@@ -202,3 +202,27 @@ tests exercise every reordered path.
 - Cancelling in-flight jobs in batch on FATAL; any wait-for-wave.
 - `docker/Dockerfile` version bump (still gated on this phase landing).
 - Coremark filename regex `{2}`; TODO #11; scheduler-level e2e.
+
+## 6. PR #10 review follow-up (2026-08-25)
+
+Changes made in response to the review of PR #10 (Jacob's threads plus the Copilot findings that bore on them).
+Each is a hardening of the design above, not a change of decision.
+
+| Thread | Change |
+|---|---|
+| Four backup files are not atomic as a set (Copilot) | `_persist_queues` writes one ledger `{pickup, preprocess, waiting, dropoff}` with a single tmp+`os.replace`; `_load_queue_backups` reads the ledger, or the legacy per-queue files once, migrating them (deleted only after the ledger write succeeded). One pydantic dump per persist instead of four (measured: 0.08 ms / 10 entries, 3.9 ms / 500). |
+| Sheet flush races in-flight jobs (Copilot, bears on the `check_box` thread) | `main()`'s tail awaits the cancelled job futures before `SHUTDOWN_COMPLETE`, then runs a loop-side catch-up flush. `OrderProcessingScheduler.in_flight_jobs()` exposes the executor's pending futures. |
+| Collect `check_box` calls and avoid an `await` between mutation and persist | Kept tick-before-pop (the recovery direction that self-heals), but restructured: all ticks are gathered first while every entry is still queued; then every pop and the single persist run with no `await` between them. |
+| 550 is not proof of absence (Copilot) | `_already_moved` establishes the source's absence by listing its folder, not by interpreting a `SIZE` reply. A listing failure is "not done". |
+| `container_cls` on the shared pool | The pool's own log lines always carry aeth_ext's module name, so the label is the only place the supplier can appear. The shared `waiting_ftp` gets `container_cvar=SupplierProcessorBase.ctx_var_container`, set by `add_log_context` to the processor class name for the duration of each job (inherited by `to_thread` workers). No instantiation moved. |
+| `load_credentials()` functions / orjson | Deleted. Each class body does `_raw = orjson.loads(<file>.read_bytes())`, builds the credentials, then `del _raw`, so the plaintext dict never outlives the class body. `orjson` added as a direct dependency. |
+| `vendor_ftp` "may be None" | Removed the `getattr` guard; it is always set on the concrete classes. |
+| "No files to drop off" demoted to warning | Restored to `error`; the message now says what it means (preprocessing advanced no entry this run). |
+| `file_date is not None` guard removed | Not a behaviour change: aeth_ext v8's `ListDirResult.modified_time` is a non-optional `datetime`. |
+| `database.py` helpers | `exception_is_database_origin` deleted (tests inline it); `DATABASE_ORIGIN_PATTERNS` / `trail_is_database_origin` moved to `shutdown_hooks.py`; `flush_queued_writes` deleted and `_api_write` made public as `api_write`. |
+| Exit code in `__main__` | Moved to `startup.run_until_shutdown()`; aeth_ext `TODO.md` item 12 tracks pushing the mapping upstream. |
+| Coolify stop grace / rolling updates | Compose's `stop_grace_period: 30s` stays the versioned source of truth; Coolify's UI field is left blank. Rolling updates are off automatically for compose deploys, so no instance overlap exists. |
+
+Verification: `tests/unit` 50 passed, Pyright 0/0 on `src` + `tests/unit`; graceful-stop harness (`-O`, real `startup.main()`,
+CTRL_BREAK): exit 0, no `KeyboardInterrupt`, catch-up flush at 13.235 s after `SHUTDOWN_COMPLETE`, main returned 13.238 s,
+0.42 s signal-to-exit.

@@ -2,7 +2,7 @@
 from datetime import timedelta
 from logging import getLogger
 from re import compile
-from typing import TYPE_CHECKING, Any, TextIO, override
+from typing import TYPE_CHECKING, Any, TextIO, cast, override
 from zoneinfo import ZoneInfo
 
 # Third party imports
@@ -24,6 +24,7 @@ from .environment_init_vars import SETTINGS
 
 if TYPE_CHECKING:
   # Standard library imports
+  from asyncio import Future as AsyncFuture
   from concurrent.futures import Future
   from datetime import datetime
 
@@ -140,6 +141,14 @@ class CustomAsyncIOExecutor(AsyncIOExecutor):
 
 
 class OrderProcessingScheduler(AsyncIOScheduler):
+  def in_flight_jobs(self) -> set[AsyncFuture[Any]]:
+    """The futures of every job currently running on the default executor. `shutdown(wait=False)` cancels these
+    but cannot wait for them (APScheduler's own limitation); `startup.main()` snapshots them first and awaits the
+    snapshot after the shutdown so no job is still mid-commit when the final Sheets flush runs."""
+    executor = self._lookup_executor("default")
+    # `CustomAsyncIOExecutor` only ever stores loop-bound futures (`create_task` / `run_in_executor`).
+    return cast("set[AsyncFuture[Any]]", set(getattr(executor, "_pending_futures", ())))
+
   @classmethod
   def init_scheduler(cls) -> OrderProcessingScheduler:
     # engine = create_engine(r"sqlite:///scheduler.db")

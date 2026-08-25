@@ -1,4 +1,4 @@
-"""Queue backups are written atomically on every change, and once more at interpreter exit."""
+"""The queue ledger is written atomically, as one file, on every change, and once more at interpreter exit."""
 
 # This file drives the private queues, locks and persistence hooks by design.
 # pyright: reportPrivateUsage=false
@@ -71,30 +71,82 @@ def _read(path: Path) -> dict[str, Any]:
   return json.loads(path.read_text())
 
 
-def test_persist_writes_all_four_queues_and_leaves_no_tmp(processor: SASProcessor, backup_dir: Path) -> None:
+def _queue(processor: SASProcessor, name: str) -> dict[str, Any]:
+  return _read(processor.queue_ledger_file).get(name, {})
+
+
+def test_persist_writes_all_four_queues_to_one_ledger_and_leaves_no_tmp(processor: SASProcessor, backup_dir: Path) -> None:
   processor._file_pickup_queue["p"] = _entry()
   processor._file_waiting_queue["w"] = _entry()
   processor._file_preprocess_queue["pp"] = _entry()
   processor._file_dropoff_queue["d"] = _entry()
 
-  processor._persist_queues()
+  assert processor._persist_queues() is True
 
-  assert set(_read(processor.pickup_queue_backup_file)) == {"p"}
-  assert set(_read(processor.waiting_queue_backup_file)) == {"w"}
-  assert set(_read(processor.preprocess_queue_backup_file)) == {"pp"}
-  assert set(_read(processor.dropoff_queue_backup_file)) == {"d"}
-  assert not list(backup_dir.glob("*.tmp"))
+  assert set(_queue(processor, "pickup")) == {"p"}
+  assert set(_queue(processor, "waiting")) == {"w"}
+  assert set(_queue(processor, "preprocess")) == {"pp"}
+  assert set(_queue(processor, "dropoff")) == {"d"}
+  assert [p.name for p in backup_dir.iterdir() if p.is_file()] == [processor.queue_ledger_file.name]
+
+
+def test_queue_transition_is_all_or_nothing_on_disk(
+  processor: SASProcessor, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+  """A pickup -> waiting move either lands in the ledger as a whole or not at all: there is no state in which
+  the entry has left one queue on disk without arriving in the other (the per-queue-file layout had that gap)."""
+  processor._file_pickup_queue["k"] = _entry()
+  assert processor._persist_queues() is True
+
+  processor._file_waiting_queue["k"] = processor._file_pickup_queue.pop("k")
+
+  def _boom(src: Any, dst: Any) -> None:
+    raise OSError("simulated replace failure")
+
+  monkeypatch.setattr(suppliers_mod, "replace", _boom)
+  with caplog.at_level(logging.ERROR):
+    assert processor._persist_queues() is False
+  assert set(_queue(processor, "pickup")) == {"k"}
+  assert _queue(processor, "waiting") == {}
+
+  monkeypatch.undo()
+  assert processor._persist_queues() is True
+  assert _queue(processor, "pickup") == {}
+  assert set(_queue(processor, "waiting")) == {"k"}
+
+
+def test_legacy_per_queue_backup_files_are_migrated_into_the_ledger(processor: SASProcessor, backup_dir: Path) -> None:
+  processor._file_pickup_queue["p"] = _entry()
+  processor._file_dropoff_queue["d"] = _entry()
+  legacy = processor._legacy_queue_backup_files()
+  legacy["pickup"].write_bytes(processor._queue_ta.dump_json(processor._file_pickup_queue, round_trip=True))
+  legacy["dropoff"].write_bytes(processor._queue_ta.dump_json(processor._file_dropoff_queue, round_trip=True))
+  processor.queue_ledger_file.unlink(missing_ok=True)
+
+  atexit.unregister(processor._persist_queues_at_exit)
+  _drop_singleton()
+  reloaded = SASProcessor()
+  try:
+    assert set(reloaded._file_pickup_queue) == {"p"}
+    assert set(reloaded._file_dropoff_queue) == {"d"}
+    assert reloaded._file_waiting_queue == {} and reloaded._file_preprocess_queue == {}
+    assert set(_queue(reloaded, "pickup")) == {"p"}
+    assert set(_queue(reloaded, "dropoff")) == {"d"}
+    assert not any(path.exists() for path in legacy.values())
+    assert not list((backup_dir / "corrupted").glob("*"))
+  finally:
+    atexit.unregister(reloaded._persist_queues_at_exit)
 
 
 def test_persist_reflects_each_change_immediately(processor: SASProcessor) -> None:
   processor._file_pickup_queue["first"] = _entry()
   processor._persist_queues()
-  assert set(_read(processor.pickup_queue_backup_file)) == {"first"}
+  assert set(_queue(processor, "pickup")) == {"first"}
 
   processor._file_pickup_queue.pop("first")
   processor._file_pickup_queue["second"] = _entry()
   processor._persist_queues()
-  assert set(_read(processor.pickup_queue_backup_file)) == {"second"}
+  assert set(_queue(processor, "pickup")) == {"second"}
 
 
 def test_failed_replace_leaves_previous_file_intact(
@@ -102,7 +154,7 @@ def test_failed_replace_leaves_previous_file_intact(
 ) -> None:
   processor._file_pickup_queue["kept"] = _entry()
   processor._persist_queues()
-  before = processor.pickup_queue_backup_file.read_text()
+  before = processor.queue_ledger_file.read_text()
 
   def _boom(src: Any, dst: Any) -> None:
     raise OSError("simulated replace failure")
@@ -112,9 +164,9 @@ def test_failed_replace_leaves_previous_file_intact(
   with caplog.at_level(logging.ERROR):
     processor._persist_queues()
 
-  assert processor.pickup_queue_backup_file.read_text() == before
+  assert processor.queue_ledger_file.read_text() == before
   assert not list(backup_dir.glob("*.tmp"))
-  assert "Failed to persist queue backup" in caplog.text
+  assert "Failed to persist queue ledger" in caplog.text
 
 
 def test_loader_ignores_stale_tmp_files(
@@ -122,7 +174,7 @@ def test_loader_ignores_stale_tmp_files(
 ) -> None:
   processor._file_pickup_queue["real"] = _entry()
   processor._persist_queues()
-  stale = backup_dir / f"{processor.pickup_queue_backup_file.name}.tmp"
+  stale = backup_dir / f"{processor.queue_ledger_file.name}.tmp"
   stale.write_text("{ this is not json")
 
   atexit.unregister(processor._persist_queues_at_exit)
@@ -139,7 +191,7 @@ def test_at_exit_persists_when_lock_is_free(processor: SASProcessor, caplog: pyt
   processor._file_dropoff_queue["d"] = _entry()
   with caplog.at_level(logging.WARNING):
     processor._persist_queues_at_exit()
-  assert set(_read(processor.dropoff_queue_backup_file)) == {"d"}
+  assert set(_queue(processor, "dropoff")) == {"d"}
   assert "still held" not in caplog.text
   assert not processor._lock.locked()
 
@@ -164,7 +216,7 @@ def test_at_exit_still_persists_with_warning_when_lock_is_held(processor: SASPro
     release.set()
     holder.join(timeout=5)
 
-  assert set(_read(processor.dropoff_queue_backup_file)) == {"d"}
+  assert set(_queue(processor, "dropoff")) == {"d"}
   assert "still held" in caplog.text
   assert not processor._lock.locked()
 
@@ -182,12 +234,12 @@ def test_at_exit_handler_is_registered_on_construction(processor: SASProcessor) 
 async def test_clean_stale_entries_persists_under_lock(processor: SASProcessor) -> None:
   processor._file_pickup_queue["stale"] = _entry(days_from_now=-30)
   processor._persist_queues()
-  assert set(_read(processor.pickup_queue_backup_file)) == {"stale"}
+  assert set(_queue(processor, "pickup")) == {"stale"}
 
   await processor.clean_stale_queue_entries()
 
   assert processor._file_pickup_queue == {}
-  assert _read(processor.pickup_queue_backup_file) == {}
+  assert _queue(processor, "pickup") == {}
 
 
 def test_concurrent_off_thread_persists_are_serialised(processor: SASProcessor) -> None:
@@ -220,7 +272,7 @@ def test_concurrent_off_thread_persists_are_serialised(processor: SASProcessor) 
     assert not t.is_alive(), "thread did not finish (possible deadlock)"
 
   assert errors == []
-  assert set(_read(processor.dropoff_queue_backup_file)) == {f"k{i}" for i in range(8)}
+  assert set(_queue(processor, "dropoff")) == {f"k{i}" for i in range(8)}
   assert not list(processor._file_queue_backup_folder.glob("*.tmp"))
 
 
