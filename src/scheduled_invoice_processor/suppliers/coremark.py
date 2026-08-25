@@ -44,7 +44,10 @@ logger = getLogger(__name__)
 def load_credentials() -> FTPCredentials:
   """Coremark FTP credentials (IIS FTP), read from `coremark_ftp_creds.json`; the password is wrapped in a `SecretStr`."""
   raw = loads(SETTINGS.coremark_ftp_creds_file.read_text())
-  return FTPCredentials(host=raw["HOST"], username=raw["USER"], password=SecretStr(raw["PWD"]), port=int(raw.get("PORT", 21)))
+  try:
+    return FTPCredentials(host=raw["HOST"], username=raw["USER"], password=SecretStr(raw["PWD"]), port=int(raw.get("PORT", 21)))
+  finally:
+    del raw
 
 
 class CoremarkProcessor(SupplierProcessorBase):
