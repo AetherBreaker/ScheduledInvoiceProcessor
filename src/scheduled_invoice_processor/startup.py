@@ -1,6 +1,5 @@
 # Standard library imports
-import sys
-from asyncio import CancelledError, create_task, sleep
+from asyncio import CancelledError, create_task
 from contextlib import suppress
 from datetime import datetime
 from logging import getLogger
@@ -13,21 +12,19 @@ from dateutil.relativedelta import SA, relativedelta
 from rich import get_console
 
 # First party imports
-from aeth_ext.errors.shutdown import SHUTDOWN, get_current_fatal_trails
+from aeth_ext.errors.shutdown import SHUTDOWN, ShutdownKind
 from aeth_ext.monitoring import run_heartbeat_async, send_heartbeat
 from aeth_ext.rich.progress import Progress
-from scheduled_invoice_processor.database import DatabaseCache, trail_is_database_origin
+from scheduled_invoice_processor.database import DatabaseCache
 from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
 from scheduled_invoice_processor.scheduler_config import OrderProcessingScheduler
+from scheduled_invoice_processor.shutdown_hooks import register_shutdown_hooks
 from scheduled_invoice_processor.suppliers.ryo import RYOProcessor
 from scheduled_invoice_processor.suppliers.sas import SASProcessor
 from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
 
 if TYPE_CHECKING:
-  # Standard library imports
-  from typing import NoReturn
-
   # First party imports
   from scheduled_invoice_processor.suppliers import SupplierProcessorBase
 
@@ -269,7 +266,13 @@ async def flip_week():
   scheduler.resume()
 
 
-async def main() -> NoReturn:
+def exit_code_for_shutdown(kind: ShutdownKind) -> int:
+  """0 for RUNNING (never requested) or GRACEFUL, 1 for FATAL or FORCED. `ShutdownKind` is an IntEnum ordered by
+  severity. Kept out of `main()` so it is testable and so `main()` never calls `sys.exit` itself."""
+  return 1 if kind >= ShutdownKind.FATAL else 0
+
+
+async def main() -> None:
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
 
   send_heartbeat(
@@ -348,46 +351,24 @@ async def main() -> NoReturn:
     scheduler.print_jobs()
 
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
+
+    register_shutdown_hooks(scheduler, cache)
+
     with RICH_CONSOLE.status("Application is running."):
       await SHUTDOWN
 
-      periodic_heartbeat_task.cancel()
-      with suppress(CancelledError):
-        await periodic_heartbeat_task
-
-      database_origin_trail = next((trail for trail in get_current_fatal_trails() if trail_is_database_origin(trail)), None)
-
-      if database_origin_trail is None and any(processor().errored for processor in supplier_register.values()):
-        await sleep(
-          600
-        )  # Sleep for 10 minutes to allow pending operations from non-error-state processors to flush through before exiting
-
-      try:
-        logger.warning("Fatal shutdown: stopping scheduler to freeze application state")
-        scheduler.pause()
-        scheduler.shutdown(wait=False)
-      except Exception:
-        logger.exception("Fatal shutdown: failed to stop scheduler cleanly")
-
-      # Re-read: another fatal error may have arrived during the sleep above.
-      database_origin_trail = next((trail for trail in get_current_fatal_trails() if trail_is_database_origin(trail)), None)
-
-      if database_origin_trail is not None:
-        logger.warning(
-          "Fatal shutdown: skipping final Google Sheets flush because fatal error originated in database interface (origin=%s in %s)",
-          database_origin_trail.origin.module,
-          database_origin_trail.origin.file,
-        )
-      else:
-        try:
-          if await cache.has_pending_writes():
-            logger.warning("Fatal shutdown: attempting final Google Sheets flush of queued writes")
-            await cache.submit_queued_writes_to_pool()
-            logger.warning("Fatal shutdown: final Google Sheets flush completed")
-        except Exception:
-          logger.exception("Fatal shutdown: final Google Sheets flush failed")
-
-      sys.exit(1)
+    # Everything below is best-effort: aeth_ext's threaded pass ends by raising KeyboardInterrupt on this
+    # thread (`_attempt_early_exit`), which can land before any of it runs. The work that *must* happen
+    # (pause the scheduler, flush the sheet) is in shutdown_hooks and has already run by then; queue backups
+    # are persisted on every change and once more at atexit (A2).
+    logger.warning("Shutdown requested (%s); stopping", SHUTDOWN.kind.name)
+    periodic_heartbeat_task.cancel()
+    with suppress(CancelledError):
+      await periodic_heartbeat_task
+    try:
+      scheduler.shutdown(wait=False)
+    except Exception:
+      logger.exception("Shutdown: failed to stop the scheduler cleanly")
 
 
 async def _run_debug_code(cache: DatabaseCache) -> None:
