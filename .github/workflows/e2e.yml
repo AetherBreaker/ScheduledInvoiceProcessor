@@ -9,6 +9,9 @@ concurrency:
   group: e2e-sheet
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
