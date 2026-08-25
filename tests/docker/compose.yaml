@@ -1,0 +1,69 @@
+# E2E stand-ins for the production servers. See docs/superpowers/specs/2026-08-24-e2e-baseline-test-suite-design.md
+services:
+
+  sft-ftp:
+    # Production SFT holding server runs Pure-FTPd; this is the same software.
+    image: stilliard/pure-ftpd:bookworm-latest
+    container_name: e2e-sft-ftp
+    ports:
+      - "21:21"
+      - "30000-30009:30000-30009"
+    environment:
+      PUBLICHOST: "127.0.0.1"
+      FTP_USER_NAME: "sft"
+      FTP_USER_PASS: "sft-test-pw"
+      FTP_USER_HOME: "/home/sft"
+      FTP_PASSIVE_PORTS: "30000:30009"
+      FTP_MAX_CLIENTS: "50"
+      FTP_MAX_CONNECTIONS: "50"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/21'"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  sas-sftp:
+    # Production SAS server is Files.com (not self-hostable). SFTPGo gives a writable root + per-user session cap.
+    image: drakkan/sftpgo:v2.7-alpine
+    container_name: e2e-sas-sftp
+    ports:
+      - "2022:2022"
+    environment:
+      SFTPGO_DATA_PROVIDER__CREATE_DEFAULT_ADMIN: "true"
+      SFTPGO_DEFAULT_ADMIN_USERNAME: "admin"
+      SFTPGO_DEFAULT_ADMIN_PASSWORD: "e2e-admin-pw"
+      SFTPGO_LOADDATA_FROM: "/srv/sftpgo/loaddata.json"
+      SFTPGO_LOADDATA_MODE: "0"
+    volumes:
+      - ./sftpgo/sas_users.json:/srv/sftpgo/loaddata.json:ro
+      - sas-data:/srv/sftpgo/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  ryo-sftp:
+    # Production RYO server is Bitvise SSH Server on Windows (port 2222). Same SFTPGo stand-in, published on 2222.
+    image: drakkan/sftpgo:v2.7-alpine
+    container_name: e2e-ryo-sftp
+    ports:
+      - "2222:2022"
+    environment:
+      SFTPGO_DATA_PROVIDER__CREATE_DEFAULT_ADMIN: "true"
+      SFTPGO_DEFAULT_ADMIN_USERNAME: "admin"
+      SFTPGO_DEFAULT_ADMIN_PASSWORD: "e2e-admin-pw"
+      SFTPGO_LOADDATA_FROM: "/srv/sftpgo/loaddata.json"
+      SFTPGO_LOADDATA_MODE: "0"
+    volumes:
+      - ./sftpgo/ryo_users.json:/srv/sftpgo/loaddata.json:ro
+      - ryo-data:/srv/sftpgo/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  sas-data:
+  ryo-data:
