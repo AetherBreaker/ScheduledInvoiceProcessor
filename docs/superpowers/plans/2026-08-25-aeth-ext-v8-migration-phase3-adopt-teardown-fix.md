@@ -1,8 +1,12 @@
 # aeth_ext v8 Migration — Phase 3: adopt the aeth_ext teardown-completion fix
 
-**Status:** blocked on aeth_ext. Do not start until the fix for
-`aeth_ext/ISSUE-shutdown-required-callbacks-race-interpreter-exit.md` has landed on aeth_ext `main` and been
-released (v8.0.1 or v8.1.0).
+**Status:** in progress (2026-08-25). aeth_ext **8.0.1** shipped **option C**: `SHUTDOWN_COMPLETE`
+(`ShutdownCompletion`, waitable via `is_set`/`wait`/`await`, set in `_run_threaded_pass` once every callback has
+run or been skipped, immediately before the exit nudge) **plus** `_join_pass_at_exit`, an `atexit` join of the
+still-daemon pass thread registered by `run_shutdown`. Awaiting `SHUTDOWN_COMPLETE` also *declares a tail*: the
+nudge is held for the remaining budget (≥ `_NUDGE_GRACE_SECS` 0.25 s) and skipped once the main thread has
+returned. `SHUTDOWN`'s docstring now says resolution ≠ teardown done. Lifecycle:
+`await SHUTDOWN` → tail → `await SHUTDOWN_COMPLETE` → return.
 
 **Goal:** Remove the app-side workaround for the aeth_ext gap (the `await sleep(20)` park at the tail of
 `startup.main()`) and replace it with whatever lifecycle aeth_ext ships, so that "the required Sheets flush

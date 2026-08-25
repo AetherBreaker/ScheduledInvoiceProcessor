@@ -2,10 +2,9 @@
 
 Both run on aeth_ext's shutdown thread (`ShutdownPhase.THREADED`), concurrently with the tail of `startup.main()`
 (the pass is started in the same synchronous stretch that requests the shutdown, so it is running — not
-finished — when the `await SHUTDOWN` waiter wakes). They are guaranteed to
-finish before aeth_ext nudges the main thread to exit with `interrupt_main()`, which is why `main()` parks until
-that nudge instead of returning. Anything after `await SHUTDOWN` in `startup.main()` is best-effort: the nudge can
-pre-empt it.
+finished — when the `await SHUTDOWN` waiter wakes). `main()` therefore ends with `await SHUTDOWN_COMPLETE`
+(aeth_ext >= 8.0.1), which resolves once every callback has run or been skipped; only then does it return.
+aeth_ext also joins the pass at interpreter exit as a safety net for a main that returns early.
 
 Rules for this phase: may block and log; must not `scheduler.shutdown()` (that cancels asyncio tasks from a
 foreign thread); `required=True` callbacks run even after the budget is exhausted.

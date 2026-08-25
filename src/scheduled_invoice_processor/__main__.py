@@ -31,8 +31,9 @@ def run_app() -> None:
   try:
     run(main())
   except KeyboardInterrupt:
-    # aeth_ext's threaded shutdown pass ends by simulating SIGINT on the main thread so the interpreter
-    # unwinds normally (atexit still runs). Not an error; the kind below says how we stopped.
+    # aeth_ext's exit nudge (simulated SIGINT). Normally main() returns on its own after awaiting
+    # SHUTDOWN_COMPLETE and the nudge is skipped; it only lands here if main()'s tail overran the
+    # shutdown budget. Not an error either way; the kind below says how we stopped.
     pass
   sys.exit(exit_code_for_shutdown(SHUTDOWN.kind))
 
