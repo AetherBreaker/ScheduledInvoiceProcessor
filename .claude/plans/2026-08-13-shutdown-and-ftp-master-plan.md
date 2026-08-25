@@ -21,7 +21,8 @@ verified against aeth_ext 8.0.0 source. Resolutions, in the order the questions 
 - **Pin**: this branch is on `>=8.0.0` (locked 8.0.0); `main` is capped `<7` and carries the e2e gate
   suite (`tests/e2e`, PR #11, merged 2026-08-25). **PR #10 is never merged by an agent** — Jacob reviews.
 - **A2**: full atomic save (`.tmp` + `os.replace`) after every mutation, inline under the existing lock;
-  four files stay separate; cron job, `__del__` and `save_queue_backups_off_thread` removed.
+  four files stay separate; cron job, `__del__` and `save_queue_backups_off_thread` removed; an `atexit`
+  hook does one final save (try-lock 1 s, write regardless) as a safety net.
 - **A3**: `main()` returns after `await SHUTDOWN`; teardown = two THREADED callbacks (freeze scheduler at
   priority -10; required final Sheets flush via a new sync `DatabaseCache.flush_queued_writes()`).
   `sleep(600)`/`.errored` heuristic dropped with no replacement. Orphaned in-flight jobs accepted.
