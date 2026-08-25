@@ -451,7 +451,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ):
     local_logger = adapted_logger or logger
 
-    if not self._file_preprocess_queue:
+    if not self._file_preprocess_queue and not self._file_dropoff_queue:
       return
 
     if not self.waiting_ftp.test_connection(logit=True):
@@ -465,8 +465,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return
 
     if not self._file_dropoff_queue:
-      local_logger.error(
-        "%s: No files to drop off after preprocessing step.This likely indicates an error in the preprocessing step.",
+      local_logger.warning(
+        "%s: No files to drop off after preprocessing step (preprocessing did not advance any entry this run)",
         self.__class__.__name__,
       )
       return
