@@ -1,8 +1,10 @@
 """aeth_ext v8 shutdown callbacks.
 
-Both run on aeth_ext's shutdown thread (`ShutdownPhase.THREADED`) *before* it nudges the main thread to exit with
-`interrupt_main()`, so they are the only application code guaranteed to run on every kind of stop. Anything after
-`await SHUTDOWN` in `startup.main()` is best-effort: the nudge can pre-empt it.
+Both run on aeth_ext's shutdown thread (`ShutdownPhase.THREADED`), concurrently with the tail of `startup.main()`
+(`await SHUTDOWN` resolves when the shutdown is *requested*, before this pass starts). They are guaranteed to
+finish before aeth_ext nudges the main thread to exit with `interrupt_main()`, which is why `main()` parks until
+that nudge instead of returning. Anything after `await SHUTDOWN` in `startup.main()` is best-effort: the nudge can
+pre-empt it.
 
 Rules for this phase: may block and log; must not `scheduler.shutdown()` (that cancels asyncio tasks from a
 foreign thread); `required=True` callbacks run even after the budget is exhausted.
@@ -71,6 +73,9 @@ def final_sheets_flush(cache: DatabaseCache) -> ShutdownCallback:
   return _flush
 
 
+# The callbacks are deliberately closures, not bound methods: `register_for_shutdown` holds bound methods only via
+# a `WeakMethod` (`aeth_ext/errors/shutdown.py` ~462-468), so a method registration whose instance is not otherwise
+# referenced would be silently dropped before the shutdown pass ran.
 def register_shutdown_hooks(scheduler: OrderProcessingScheduler, cache: DatabaseCache) -> None:
   register_for_shutdown(freeze_scheduler(scheduler), phase=ShutdownPhase.THREADED, priority=FREEZE_SCHEDULER_PRIORITY)
   register_for_shutdown(final_sheets_flush(cache), phase=ShutdownPhase.THREADED, priority=FINAL_SHEETS_FLUSH_PRIORITY, required=True)

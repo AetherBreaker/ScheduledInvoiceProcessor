@@ -318,6 +318,8 @@ class DatabaseCache(metaclass=SingletonType):
     """Synchronously write every queued Sheets update. Safe from any thread: `_api_write` takes `aiologic` locks,
     which work from plain threads as well as coroutines. Used by the shutdown callback, which runs on aeth_ext's
     shutdown thread, not the event loop. Returns whether anything was written."""
+    # This pre-check reads the queued flags outside `_db_write_queue_lock`; benign -- `_api_write` re-checks
+    # them under the lock, so a racing enqueue at worst costs one extra no-op call.
     if not (
       self.queued_values_raw_updates
       or self.queued_values_user_entered_updates
