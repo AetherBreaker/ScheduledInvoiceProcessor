@@ -9,10 +9,13 @@ from pathlib import PurePosixPath
 from re import compile
 from typing import TYPE_CHECKING, override
 
+# Third party imports
+from pydantic import SecretStr
+
 # First party imports
-from aeth_ext.ftp.adapter import AdaptedFTP, FTPAdapter
+from aeth_ext.ftp import create_ftp_adapter
+from aeth_ext.ftp.credentials import FTPCredentials
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
-from scheduled_invoice_processor.ftp_configs import CoremarkFTPClient
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
@@ -38,8 +41,14 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
+def load_credentials() -> FTPCredentials:
+  """Coremark FTP credentials (IIS FTP), read from `coremark_ftp_creds.json`; the password is wrapped in a `SecretStr`."""
+  raw = loads(SETTINGS.coremark_ftp_creds_file.read_text())
+  return FTPCredentials(host=raw["HOST"], username=raw["USER"], password=SecretStr(raw["PWD"]), port=int(raw.get("PORT", 21)))
+
+
 class CoremarkProcessor(SupplierProcessorBase):
-  vendor_ftp: FTPAdapter[AdaptedFTP] = FTPAdapter(CoremarkFTPClient, container_cls="CoremarkProcessor")
+  vendor_ftp = create_ftp_adapter(load_credentials(), container_cls="CoremarkProcessor")
 
   queue_backup_prefix: str = "coremark"
 
@@ -54,8 +63,6 @@ class CoremarkProcessor(SupplierProcessorBase):
   file_name_format = "{customer_id}_{invoice_num}.txt"
 
   supplier_name: SuppliersEnum = SuppliersEnum.COREMARK
-
-  pickup_ftp_creds: dict[str, str] = loads(SETTINGS.coremark_ftp_creds_file.read_text())
 
   checks_date_in_filename: bool = False
 
@@ -174,7 +181,6 @@ class CoremarkProcessor(SupplierProcessorBase):
       )
 
       # TODO Upload the original invoice files to a shared store specific google drive
-      ...
 
       # Update the queues with the new file meta
       self._file_dropoff_queue[key] = new_file_meta

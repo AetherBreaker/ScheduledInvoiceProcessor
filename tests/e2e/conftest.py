@@ -55,10 +55,10 @@ def _bootstrap_environment() -> Path:
   (secrets / "ryo_ftp_creds.json").write_text(
     json.dumps({"USER": C.RYO_USER, "PWD": C.RYO_PASS, "HOSTNAME": C.RYO_HOST, "PORT": C.RYO_PORT})
   )
-  # Coremark has no e2e stand-in (no docker container, no constants); CoremarkFTPClient reads this file as a
-  # class-body side effect at import time (scheduled_invoice_processor.ftp_configs), so it must exist even
-  # though nothing in the e2e suite talks to it.
-  (secrets / "coremark_ftp_creds.json").write_text(json.dumps({"USER": "unused", "PWD": "unused", "HOST": "127.0.0.1", "PORT": 0}))
+  # Coremark has no e2e stand-in (no docker container, no constants); suppliers/coremark.py loads this file at
+  # import time to build its FTP pool, so it must exist even though nothing in the e2e suite talks to it. The
+  # pool is lazy (no connection until a session starts), but the credentials object validates 1 <= PORT <= 65535.
+  (secrets / "coremark_ftp_creds.json").write_text(json.dumps({"USER": "unused", "PWD": "unused", "HOST": "127.0.0.1", "PORT": 21}))
 
   os.environ["PERSISTED_DIR_LOC"] = str(persisted)
   os.environ["USE_TESTING_FOLDERS"] = "True"
@@ -93,8 +93,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
   if not _MISSING_E2E_ENV:
     return
   reason = "e2e suite needs E2E_* environment (see tests/e2e/README.md)"
+  e2e_dir = Path(__file__).parent
   for item in items:
-    item.add_marker(pytest.mark.skip(reason=reason))
+    if item.path.is_relative_to(e2e_dir):
+      item.add_marker(pytest.mark.skip(reason=reason))
 
 
 # When env is missing, pytest_collection_modifyitems() above skips every item before any fixture below
