@@ -44,7 +44,7 @@ wave via a cross-loop future) is not worth building either:
 | Concern | Where | Why |
 |---|---|---|
 | Stop new jobs starting | THREADED callback `freeze_scheduler`, `priority=-10` | `AsyncIOScheduler.pause()` is thread-safe (`wakeup` goes through `call_soon_threadsafe`). `shutdown()` is **not** called here: `AsyncIOExecutor.shutdown` cancels asyncio tasks from a foreign thread. |
-| Flush queued Google Sheets writes | THREADED callback `final_sheets_flush`, `priority=0`, `required=True` | Queued writes live only in memory — unlike the queue backups (A2) they *are* lost on a kill. Runs before the nudge, so it is guaranteed to precede interpreter exit. Skipped when any fatal trail is database-origin (A4's `trail_is_database_origin`). Calls a new sync `DatabaseCache.flush_queued_writes()` which wraps the existing thread-safe `_api_write()` (`aiologic.Lock` is usable from plain threads). |
+| Flush queued Google Sheets writes | THREADED callback `final_sheets_flush`, `priority=0`, `required=True` | Queued writes live only in memory — unlike the queue backups (A2) they *are* lost on a kill. Runs on aeth_ext's shutdown thread, concurrently with the tail of `main()`, and is guaranteed to finish before the nudge that ends the run. Skipped when any fatal trail is database-origin (A4's `trail_is_database_origin`). Calls a new sync `DatabaseCache.flush_queued_writes()` which wraps the existing thread-safe `_api_write()` (`aiologic.Lock` is usable from plain threads). |
 | Cancel heartbeat, stop scheduler | `main()` after `await SHUTDOWN` | Best-effort: the nudge may pre-empt it; both are harmless to lose (the nudge cancels every task anyway). |
 | Exit code | `run_app()` in `__main__.py` | `run(main())` is wrapped in `except KeyboardInterrupt` (the nudge), then `sys.exit(exit_code_for_shutdown(SHUTDOWN.kind))`: `0` for GRACEFUL / not-requested, `1` for FATAL or FORCED. `main()` no longer calls `sys.exit`. |
 | Queue backups | nothing new | A2: persisted on every mutation and once more at `atexit`. |
@@ -66,6 +66,12 @@ Callbacks are registered from a new module `scheduled_invoice_processor/shutdown
   `atexit` persists the queues; exit 0. What is lost: the post-`gather` bookkeeping of the cancelled job.
 - **FATAL (`_handle_fatal`):** same, with a 1 s budget for non-required callbacks; the flush still runs
   (required) unless the trail is database-origin; exit 1.
+- **`main()` parks until the nudge:** `await SHUTDOWN` resolves when the shutdown is *requested*, which is
+  before aeth_ext starts the threaded pass — so `main()`'s tail runs alongside the callbacks, not after them.
+  After cancelling the heartbeat and stopping the scheduler, `main()` therefore `await sleep(20)`s: without it,
+  an idle `docker stop` would let the interpreter exit in milliseconds while the required Sheets flush was
+  mid-HTTP-request. The park is bounded so a nudge that never arrives cannot outlast the 30 s grace, and it
+  never delays a FATAL stop — the nudge arrives after the 1 s FATAL budget and ends the park early.
 - **SIGKILL (Docker grace exhausted / OOM):** threads die mid-body; no `atexit`. The last persisted queue
   state is whatever the last `_persist_queues()` wrote.
 
@@ -99,8 +105,8 @@ queue pickup→waiting → persist.
 
 Fix: commit first, archive last — after the copies: `check_box` → move queue entries → `_persist_queues()`
 → *then* `await gather(*archive_futures)`. A stop after the commit leaves an already-copied file in the
-vendor folder; `_vendor_archive_file` already handles an existing archive on a later run, and the entry is
-in waiting so it is never re-matched. Also reset `pickup_success` when `file_names` is re-matched, so a
+vendor folder. Nothing ever archives it: the entry is in waiting so it is never re-matched and there is no
+sweeper, so the copy is permanent but inert clutter. Also reset `pickup_success` when `file_names` is re-matched, so a
 persisted `True` from a previous partial run cannot satisfy `all(...)` for a smaller re-match (F6).
 
 ### F2 — base `_preprocess_files` (SAS) and `_dropoff_files`: non-idempotent renames (graceful-reachable, strands)
