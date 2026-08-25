@@ -1127,6 +1127,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
         if matched_files:
           file_meta.file_names = {idx: m.string for idx, m in enumerate(matched_files)}
+          file_meta.pickup_success = {}
+          file_meta.invoice_nums = {}
           items_to_dl[key] = file_meta
           if log_action_handler is not None:
             log_action_handler(key, StatusCode.UNKNOWN, file_meta)
@@ -1157,25 +1159,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
           )
         await gather(*dl_futures)
 
-      archive_futures = []
+      # Commit first, clean up last. Once the copies have landed, the durable facts are the sheet tick and the
+      # queue move; the vendor-side archive only removes inputs a re-run would need. A stop between the commit and
+      # the archive leaves an already-copied file in the vendor folder, which `_vendor_archive_file` reconciles
+      # on the next run; a stop before the commit re-runs the copies from intact inputs.
       items_to_advance: dict[str, FileRegisterData] = {}
       for key, file_meta in items_to_dl.items():
         if all(file_meta.pickup_success.values()):
-          if self.pickup_archive_ftp_folder is not None:
-            archive_futures.extend(
-              to_thread(
-                self._vendor_archive_file,
-                source_folder=self.pickup_ftp_folder,
-                remote_file=filename,
-                archive_folder=self.pickup_archive_ftp_folder,
-                adapted_logger=adapted_logger,
-                debug=__debug__,
-              )
-              for filename in file_meta.file_names.values()
-            )
           items_to_advance[key] = file_meta
           schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
-
           local_logger.info(
             "%s: %s: Checking off %s_%s invoice_grabbed",
             self.__class__.__name__,
@@ -1185,12 +1177,24 @@ class SupplierProcessorBase(metaclass=SingletonType):
           )
           await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_grabbed)
 
-      if self.pickup_archive_ftp_folder is not None:
-        await gather(*archive_futures)
-
       for key, item in items_to_advance.items():
         self._file_waiting_queue[key] = item
         self._file_pickup_queue.pop(key)
         local_logger.info("%s: %s: Moved %s to waiting queue", self.__class__.__name__, key, item.storenum)
 
       self._persist_queues()
+
+      if self.pickup_archive_ftp_folder is not None:
+        archive_futures = [
+          to_thread(
+            self._vendor_archive_file,
+            source_folder=self.pickup_ftp_folder,
+            remote_file=filename,
+            archive_folder=self.pickup_archive_ftp_folder,
+            adapted_logger=adapted_logger,
+            debug=__debug__,
+          )
+          for file_meta in items_to_advance.values()
+          for filename in file_meta.file_names.values()
+        ]
+        await gather(*archive_futures)

@@ -128,3 +128,41 @@ async def test_dropoff_drains_when_only_dropoff_queue_is_populated(sas: SASProce
 
   assert "k" not in sas._file_dropoff_queue
   sas.cache.schedule.check_box.assert_awaited_once()
+
+
+# ---- F1: the pickup->waiting move is persisted before any vendor archive rename ----
+
+
+async def test_pickup_persists_queue_move_before_vendor_archive(sas: SASProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+  events: list[str] = []
+  meta = _meta("/Waiting/SAS")
+  meta.pickup_success = {0: True, 1: True}  # stale flags from an earlier partial run (F6)
+  sas._file_pickup_queue["k"] = meta
+  sas.waiting_ftp.client.listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
+  monkeypatch.setattr(SASProcessor, "pickup_archive_ftp_folder", PurePosixPath("/RYO/Archive"), raising=False)
+
+  def fake_copy(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
+    events.append("copy")
+    getattr(file_meta, success_attr)[idx] = True
+    return True
+
+  def fake_archive(**kwargs: object) -> None:
+    events.append("archive")
+    assert "k" in sas._file_waiting_queue, "archive ran before the queue move was committed"
+
+  real_persist = sas._persist_queues
+
+  def recording_persist() -> None:
+    events.append("persist")
+    real_persist()
+
+  monkeypatch.setattr(sas, "_transfer_file_vend_to_main", fake_copy)
+  monkeypatch.setattr(sas, "_vendor_archive_file", fake_archive)
+  monkeypatch.setattr(sas, "_persist_queues", recording_persist)
+
+  await sas._pickup_files()
+
+  assert events == ["copy", "persist", "archive"]
+  assert "k" in sas._file_waiting_queue and "k" not in sas._file_pickup_queue
+  assert meta.pickup_success == {0: True}, "stale success flags from a previous match must be cleared on re-match"
+  sas.cache.schedule.check_box.assert_awaited_once()
