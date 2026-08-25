@@ -126,30 +126,11 @@ drag-race numbers say whether an in-flight wave of pooled transfers can finish i
 
 ## Phase 2 — deferred: A3 shutdown lifecycle
 
-Not built in Phase 1. Everything below is the **direction recorded for the Phase 2 brainstorm**, not a
-locked design; it is re-litigated with the drag-race numbers in hand.
-
-- Decision gate: from the after-run, the per-file transfer time on v8 and the wall time of one full
-  concurrent wave (16-way `to_thread` batch) tell us whether an in-flight wave can finish inside aeth_ext's
-  7 s GRACEFUL budget. If it can, a bounded wait-for-wave in shutdown may be worth building; if it cannot, the
-  master plan's "abandon in-flight FTP, rely on A2" conclusion stands and the `sleep(600)` block is simply
-  retired.
-- Shape sketched today (subject to the gate): `main()` returns after `await SHUTDOWN`; `run_app()` exits `1`
-  when `SHUTDOWN.kind >= FATAL`; two THREADED `register_for_shutdown` callbacks registered in
-  `bootstrap_runtime` — `_freeze_scheduler` (`priority=-10`: `scheduler.pause(); scheduler.shutdown(wait=False)`)
-  and `_final_sheets_flush` (`priority=0`, `required=True`: inline trail check as in A4, then a new sync
-  `DatabaseCache.flush_queued_writes()` wrapping the already-thread-safe `_api_write()`); no queue-backup
-  callback (A2 covers it); orphaned in-flight jobs accepted unless the gate says otherwise.
-- Phase 2 gets its own spec under `docs/superpowers/specs/` and its own plan; the Phase 1 plan must not
-  pre-empt any of it.
-- **Known regression carried into Phase 2 (found by the Phase 1 final review, 2026-08-25):** the pre-plan
-  commit `fba740f` replaced `await FATAL_EVENT` with `await SHUTDOWN`, which resolves on *every* `ShutdownKind`.
-  With `aeth_ext.initialize()`'s signal handlers active (production `-O` builds only; no-op under `__debug__`),
-  a `SIGTERM`/`docker stop` therefore runs the post-shutdown block as if fatal: up to `sleep(600)` when a
-  processor is `.errored`, "Fatal shutdown" warnings, and `sys.exit(1)`. Deliberately not patched in Phase 1
-  (the block is frozen "structurally as-is" and exit codes belong to Phase 2); nothing deploys on v8 until the
-  Dockerfile is bumped, so Phase 2 must resolve this before that bump. Minimal shape: branch on
-  `SHUTDOWN.kind >= ShutdownKind.FATAL`.
+Built in Phase 2 — see `docs/superpowers/specs/2026-08-25-aeth-ext-v8-migration-phase2-shutdown-design.md`
+(decision: THREADED callbacks + crash-safe queue transitions, no wait-for-wave; the "bounded by Docker's stop
+grace" premise was wrong because aeth_ext's threaded pass ends by raising `KeyboardInterrupt` on the main
+thread) and `docs/superpowers/plans/2026-08-25-aeth-ext-v8-migration-phase2.md`. The `await SHUTDOWN` regression
+noted below is closed there.
 
 ## e2e README cleanup
 
@@ -171,13 +152,8 @@ their own reviewed task and must not weaken assertions.
   renames no longer pay a connect/login per file); whole cycle 19.7 s (was 40.5 s). Raw:
   `scripts/benchmarks/dragrace_after.json`. Per-file time is dominated by the vendor server's per-transfer
   cost (SFTP open + stream + close on Bitvise), which pooling does not remove.
-- Phase 2 decision input: one concurrent wave (`pickup_files`, 7 files in parallel through the pool) took
-  **10.1 s** against the 7 s GRACEFUL budget, and a single file alone takes ~4.7 s — an in-flight wave cannot
-  be expected to finish inside the budget. The master plan's "abandon in-flight FTP, rely on A2" conclusion
-  was recorded as the default for the Phase 2 brainstorm — **but see "Phase 1 outcome and Phase 2 inputs" in
-  `.claude/plans/2026-08-13-shutdown-and-ftp-master-plan.md` (same night):** the 7 s budget bounds only the
-  THREADED callback phase; `main()`'s post-`await SHUTDOWN` code is bounded by Docker's stop grace, which
-  can be set to 30 s, so a bounded wait-for-wave in `main()` is back on the table. Decision pending.
+- Phase 2 decision input: the wave numbers above were measured against the wrong constraint (see the Phase 2
+  spec §1). Decision taken 2026-08-25: no wait-for-wave; callbacks plus the F1–F7 ordering fixes.
 - Running it needs the real credentials and writes to the testing sheet/holding tree — it is a manual
   task, not CI.
 
