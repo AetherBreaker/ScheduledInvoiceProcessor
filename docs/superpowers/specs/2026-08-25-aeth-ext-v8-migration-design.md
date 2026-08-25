@@ -44,12 +44,12 @@ behaviour proven by the e2e suite, and adopts what v8 ships: pooled FTP with `Se
 Ordered so the e2e suite goes green as early as possible; everything after step 2 is verified by the same
 suite plus new unit tests.
 
-1. **B2 + C2** — pooled FTP with per-vendor credentials (app imports and runs on v8)
-2. **A4** — exception trail replaces the hand-rolled origin check (removes the `TypeError` at decoration)
+1. **B2 + C2** — pooled FTP with per-vendor credentials (app imports and runs on v8 except for the
+   decorator `TypeError` fixed in step 2)
+2. **A3 + A4** — shutdown lifecycle with the database-origin check inlined; `err_handling.py` deleted
 3. **README cleanup** — e2e README no longer needs the `HOME`/`USERPROFILE` workaround
 4. **A2** — durable queue state
-5. **A3** — shutdown lifecycle
-6. **Drag race after-run** — same harness, record the comparison
+5. **Drag race after-run** — same harness, record the comparison
 
 ## B2 + C2 — pooled FTP, credentials grouped by vendor
 
@@ -79,18 +79,14 @@ suite plus new unit tests.
 - The `if __name__ == "__main__":` smoke script in `ftp_configs.py` is deleted with the module (the e2e
   suite supersedes it).
 
-## A4 — fatal-exception origin via `ExceptionTrail`
+## A4 — fatal-exception origin via `ExceptionTrail` (folded into A3)
 
-- `err_handling.py` shrinks to one pure function:
-  `def is_database_origin(trails: tuple[ExceptionTrail, ...]) -> bool` — true when any trail
-  `.matches("scheduled_invoice_processor.database", "**.gspread.**", "**.google.oauth2.**")` is non-empty.
-- Deleted: `_DATABASE_FATAL_PATH_MARKERS`, `_is_database_origin_exception`, `_last_fatal_details`,
-  `get_last_fatal_details`, `extract_exc_details`, and `typing_custom.FatalDetails` (its only consumer is the
-  retired `main()` block, see A3).
+- `src/scheduled_invoice_processor/err_handling.py` is **deleted** — a module for one function is not
+  worth keeping, and its only remaining use is the shutdown flush callback. The check is inlined there
+  (see A3): `any(trail.matches("scheduled_invoice_processor.database", "**.gspread.**", "**.google.oauth2.**") for trail in trails)`.
+- Also deleted: `typing_custom.FatalDetails` (no consumers once `get_last_fatal_details` is gone).
 - `scheduler_config.py`: `@handle_fatal_exc_sync` with no arguments; the `extract_exc_details` import goes.
-- Unit test: raise inside a helper defined in `scheduled_invoice_processor.database`'s namespace (or a
-  module whose `__name__` is set accordingly) vs. inside the test module, build real trails with
-  `build_exception_trail`, assert the classifier.
+- Tested through the callback (A3's unit tests), with real trails from `build_exception_trail`.
 
 ## A2 — queue state durable on every change
 
@@ -123,16 +119,19 @@ suite plus new unit tests.
   1. `_freeze_scheduler(trails)` — `priority=-10` (runs before the flush): `scheduler.pause()`,
      `scheduler.shutdown(wait=False)`. In-flight jobs are abandoned by design; A2 makes redoing them cheap and
      the Sheets checkoff ordering means nothing finished is lost.
-  2. `_final_sheets_flush(trails)` — `priority=0`, `required=True`: if `is_database_origin(trails)`, log and
-     skip; otherwise call `DatabaseCache.flush_queued_writes()`.
+  2. `_final_sheets_flush(trails)` — `priority=0`, `required=True`: if any trail matches
+     `"scheduled_invoice_processor.database"`, `"**.gspread.**"` or `"**.google.oauth2.**"` (inline, this is the
+     only place the database-origin question is asked), log and skip; otherwise call
+     `DatabaseCache.flush_queued_writes()`.
 - `DatabaseCache.flush_queued_writes() -> None` is a new public **sync** method: if any queue body is
   non-empty, call the existing `_api_write()` (already takes its aiologic locks in sync mode and is safe off
   the loop thread; `client` re-auth uses `loop.time()`, which is monotonic and works on a closed loop).
 - No queue-backup callback (A2). The FTP pools register their own teardown.
 - What changes operationally: a fatal error now stops the process within aeth_ext's 7 s graceful budget
   instead of ~10 minutes. Docker's `restart: no` behaviour is unchanged.
-- Unit tests call the two callbacks directly: with `()` and with a database-origin trail, asserting
-  scheduler state and whether `flush_queued_writes` was invoked (patched).
+- Unit tests call the two callbacks directly: with `()`, with a trail built (via `build_exception_trail`)
+  from an exception raised inside `scheduled_invoice_processor.database`, and with one raised elsewhere —
+  asserting scheduler state and whether `flush_queued_writes` was invoked (patched).
 
 ## e2e README cleanup
 

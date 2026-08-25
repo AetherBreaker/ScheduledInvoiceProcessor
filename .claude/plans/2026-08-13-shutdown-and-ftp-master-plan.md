@@ -25,9 +25,9 @@ verified against aeth_ext 8.0.0 source. Resolutions, in the order the questions 
 - **A3**: `main()` returns after `await SHUTDOWN`; teardown = two THREADED callbacks (freeze scheduler at
   priority -10; required final Sheets flush via a new sync `DatabaseCache.flush_queued_writes()`).
   `sleep(600)`/`.errored` heuristic dropped with no replacement. Orphaned in-flight jobs accepted.
-- **A4**: `err_handling.py` becomes `is_database_origin(trails)` over `ExceptionTrail.matches(...)`;
-  `_last_fatal_details`/`get_last_fatal_details` are deleted (their only consumer was the retired
-  `main()` block), not kept.
+- **A4**: `err_handling.py` is deleted; the database-origin check is inlined in A3's final-flush
+  callback via `ExceptionTrail.matches(...)` (its only use site). `_last_fatal_details`/
+  `get_last_fatal_details`/`FatalDetails` go with it. A4 is implemented as part of the A3 task.
 - **B2**: like-for-like at call sites, real pool underneath (`create_ftp_adapter`, defaults). `ftp_configs.py`
   is deleted; each vendor module owns its credentials loader; the SFT holding creds live in
   `suppliers/__init__.py`. `SFTPCredentials(host_key_policy="auto_add")` to match today's `AutoAddPolicy`.
