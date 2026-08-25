@@ -1,9 +1,10 @@
 # Local imports
+from tests.e2e import constants as C
 from tests.e2e.sheet import SheetHarness
 
 
 def test_seed_read_delete_roundtrip(sheet: SheetHarness):
-  store, customer = 9999, "99999"
+  store, customer = C.PROBE_STORE, "99999"
   sheet.seed_orders("SAS", [(store, customer)])
   try:
     assert sheet.schedule_flags(store) == (False, False)

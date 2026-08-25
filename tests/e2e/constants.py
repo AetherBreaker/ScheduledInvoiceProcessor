@@ -57,6 +57,9 @@ RYO_CYCLE_ORDERS: tuple[tuple[int, str], ...] = ((9101, "9100000001"),)
 BOTH_SAS_ORDERS: tuple[tuple[int, str], ...] = ((9003, "90003"),)
 BOTH_RYO_ORDERS: tuple[tuple[int, str], ...] = ((9102, "9100000002"),)
 
+# Store used by test_sheet.py's seed/read/delete roundtrip probe.
+PROBE_STORE = 9999
+
 ALL_RESERVED_STORES: frozenset[int] = frozenset(
   store for orders in (SAS_CYCLE_ORDERS, RYO_CYCLE_ORDERS, BOTH_SAS_ORDERS, BOTH_RYO_ORDERS) for store, _ in orders
-)
+) | {PROBE_STORE}

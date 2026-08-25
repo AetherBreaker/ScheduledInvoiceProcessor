@@ -17,7 +17,7 @@ import os
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 # Third party imports
 import pytest
@@ -69,7 +69,35 @@ def _bootstrap_environment() -> Path:
   return persisted
 
 
-PERSISTED_DIR = _bootstrap_environment()
+_REQUIRED_E2E_VARS = (
+  "E2E_DB_KEY_JSON",
+  "E2E_DATABASE_ID",
+  "E2E_DATABASE_BASE_SCHEDULE_ID",
+  "E2E_DATABASE_ORDER_LOG_ID",
+)
+_MISSING_E2E_ENV = any(not os.environ.get(name) for name in _REQUIRED_E2E_VARS)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+  """Skip every collected item when the E2E_* env isn't set, instead of raising at import time.
+
+  Raising `pytest.skip(..., allow_module_level=True)` directly in this conftest at module level (or
+  from `pytest_configure`) crashes pytest with an uncaught `Skipped`/INTERNALERROR when `tests/e2e` is
+  passed explicitly on the command line: pytest imports that directory's conftest during its early,
+  pre-collection arg processing, which does not catch `Skipped` the way the later collection/runtest
+  machinery does. Marking items here runs well after that early phase, so the skip is reported cleanly.
+  """
+  del config
+  if not _MISSING_E2E_ENV:
+    return
+  reason = "e2e suite needs E2E_* environment (see tests/e2e/README.md)"
+  for item in items:
+    item.add_marker(pytest.mark.skip(reason=reason))
+
+
+# When env is missing, pytest_collection_modifyitems() above skips every item before any fixture below
+# runs; the cast keeps that guarantee out of the type of PERSISTED_DIR itself.
+PERSISTED_DIR: Path = _bootstrap_environment() if not _MISSING_E2E_ENV else cast("Path", None)
 
 
 @pytest.fixture(scope="session", autouse=True)

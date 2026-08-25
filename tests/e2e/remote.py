@@ -87,8 +87,10 @@ class SftpBox:
     return self
 
   def __exit__(self, *exc: object) -> None:
-    self.sftp.close()
-    self.transport.close()
+    try:
+      self.sftp.close()
+    finally:
+      self.transport.close()
 
   def exists(self, path: str) -> bool:
     try:
