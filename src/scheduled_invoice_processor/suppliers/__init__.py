@@ -95,15 +95,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
   `add_log_context` for the duration of each job (and inherited by its `to_thread` workers); outside a job the
   pool falls back to its static `container_cls` label."""
 
-  # The raw credential dict lives only for the next statement and is deleted from the class namespace right after,
-  # so the password exists on the class solely as the `SecretStr` inside the pool's credentials.
   _raw = loads(SETTINGS.sft_website_creds_file.read_bytes())
-  waiting_ftp: FTPAdapter = create_ftp_adapter(
-    FTPCredentials(host=_raw["HOST"], username=_raw["USER"], password=SecretStr(_raw["PWD"]), port=int(_raw.get("PORT", 21))),
-    container_cls="SupplierProcessorBase",
-    container_cvar=ctx_var_container,
-  )
-  del _raw
+  try:
+    waiting_ftp: FTPAdapter = create_ftp_adapter(
+      FTPCredentials(host=_raw["HOST"], username=_raw["USER"], password=SecretStr(_raw["PWD"]), port=int(_raw.get("PORT", 21))),
+      container_cls="SupplierProcessorBase",
+      container_cvar=ctx_var_container,
+    )
+  finally:
+    del _raw
 
   queue_backup_prefix: str
 
