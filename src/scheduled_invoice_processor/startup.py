@@ -101,13 +101,6 @@ async def reschedule_all_tasks():
     )
 
     scheduler.add_job(
-      processor().save_queue_backups_off_thread,
-      CronTrigger(minute="8-59/10", timezone=SETTINGS.tz),
-      id=f"{supplier}_save_queue_backups",
-      replace_existing=True,
-    )
-
-    scheduler.add_job(
       processor().clean_stale_queue_entries,
       CronTrigger(hour=3, minute=0, timezone=SETTINGS.tz),
       id=f"{supplier}_cleanup_stale_queue_entries",
