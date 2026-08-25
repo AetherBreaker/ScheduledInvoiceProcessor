@@ -66,8 +66,9 @@ Both shapes below measured the wave against the wrong budget: aeth_ext's threade
 `_attempt_early_exit()` → `interrupt_main()` → `KeyboardInterrupt` on the main thread, so post-`await SHUTDOWN`
 code in `main()` is bounded by the callback pass, not Docker. Shape 1 (callbacks) was chosen, with one
 amendment found in the final review: `main()` parks in a bounded `await sleep(20)` after `await SHUTDOWN`
-because the shutdown is *requested* before aeth_ext starts the threaded pass, so without the park the required
-Sheets flush would race interpreter exit; shape 2 is unbuildable as written. The "doubled wave is idempotent"
+because the threaded pass has started but not *finished* when the `await SHUTDOWN` waiter wakes (the flush is a
+Sheets HTTP round trip; `main()`'s tail is milliseconds), so without the park the required Sheets flush would
+race interpreter exit; shape 2 is unbuildable as written. The "doubled wave is idempotent"
 claim was audited and found false for three queue transitions (F1–F3) and one drain bug (F7); all fixed in
 Phase 2.
 

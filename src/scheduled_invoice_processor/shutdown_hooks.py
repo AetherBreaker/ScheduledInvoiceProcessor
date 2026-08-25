@@ -1,7 +1,8 @@
 """aeth_ext v8 shutdown callbacks.
 
 Both run on aeth_ext's shutdown thread (`ShutdownPhase.THREADED`), concurrently with the tail of `startup.main()`
-(`await SHUTDOWN` resolves when the shutdown is *requested*, before this pass starts). They are guaranteed to
+(the pass is started in the same synchronous stretch that requests the shutdown, so it is running — not
+finished — when the `await SHUTDOWN` waiter wakes). They are guaranteed to
 finish before aeth_ext nudges the main thread to exit with `interrupt_main()`, which is why `main()` parks until
 that nudge instead of returning. Anything after `await SHUTDOWN` in `startup.main()` is best-effort: the nudge can
 pre-empt it.

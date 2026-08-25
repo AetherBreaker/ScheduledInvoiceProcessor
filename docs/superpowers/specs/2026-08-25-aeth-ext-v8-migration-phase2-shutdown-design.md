@@ -66,8 +66,10 @@ Callbacks are registered from a new module `scheduled_invoice_processor/shutdown
   `atexit` persists the queues; exit 0. What is lost: the post-`gather` bookkeeping of the cancelled job.
 - **FATAL (`_handle_fatal`):** same, with a 1 s budget for non-required callbacks; the flush still runs
   (required) unless the trail is database-origin; exit 1.
-- **`main()` parks until the nudge:** `await SHUTDOWN` resolves when the shutdown is *requested*, which is
-  before aeth_ext starts the threaded pass — so `main()`'s tail runs alongside the callbacks, not after them.
+- **`main()` parks until the nudge:** `run_shutdown()` requests the shutdown and starts the threaded pass in
+  the same synchronous stretch (inside the signal handler / `_handle_fatal`), so by the time the `await SHUTDOWN`
+  waiter wakes the thread has *started* — but not *finished*: the flush is a Sheets HTTP round trip, while
+  `main()`'s tail is milliseconds. `main()`'s tail therefore runs alongside the callbacks, not after them.
   After cancelling the heartbeat and stopping the scheduler, `main()` therefore `await sleep(20)`s: without it,
   an idle `docker stop` would let the interpreter exit in milliseconds while the required Sheets flush was
   mid-HTTP-request. The park is bounded so a nudge that never arrives cannot outlast the 30 s grace, and it

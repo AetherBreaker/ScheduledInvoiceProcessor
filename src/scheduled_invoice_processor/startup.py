@@ -375,9 +375,11 @@ async def main() -> None:
       logger.exception("Shutdown: failed to stop the scheduler cleanly")
 
     # Park until aeth_ext's threaded pass finishes and nudges this thread (`_attempt_early_exit` ->
-    # interrupt_main -> KeyboardInterrupt, caught in run_app). `await SHUTDOWN` resolves *before* that
-    # pass starts, so without this the required Sheets flush would race interpreter exit and lose on
-    # an idle stop. Bounded so a nudge that never arrives cannot hang past Docker's 30 s grace.
+    # interrupt_main -> KeyboardInterrupt, caught in run_app). The pass has *started* by the time the
+    # `await SHUTDOWN` waiter wakes (request and Thread.start happen in the same synchronous stretch),
+    # but not *finished*: the flush is a Sheets HTTP round trip and this tail is milliseconds, so
+    # without the park an idle stop would exit the interpreter under the daemon flush thread.
+    # Bounded so a nudge that never arrives cannot hang past Docker's 30 s grace.
     with suppress(CancelledError):
       await sleep(20)
 
