@@ -19,6 +19,7 @@ from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRend
 from pandas import Series, to_numeric
 
 # First party imports
+from aeth_ext.errors.exception_trail import build_exception_trail
 from aeth_ext.types.abc import SingletonType
 from aeth_ext.utils import today
 
@@ -45,6 +46,9 @@ if TYPE_CHECKING:
   from pandas import DataFrame
   from pydantic import TypeAdapter
 
+  # First party imports
+  from aeth_ext.errors.exception_trail import ExceptionTrail
+
   # Local folder imports
   from .typing_custom import CustomerID, InvoiceNum, Request, StoreNum
   from .typing_custom.dataframe_column_names import ColNameEnum, DatabaseOrderLogIndex, DatabaseScheduleIndex  # noqa: F401
@@ -55,6 +59,22 @@ logger = getLogger(__name__)
 
 
 DEFAULT_SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+
+
+DATABASE_ORIGIN_PATTERNS: tuple[str, ...] = ("scheduled_invoice_processor.database", "**.gspread.**", "**.google.oauth2.**")
+"""Dot-segment globs (see `ExceptionTrail.matches`) for "the fatal error came from the Google Sheets layer": this
+module, gspread, or the google-auth credentials stack. A fatal error from any of these means a final flush of queued
+writes at shutdown would only fail again, so `startup.main()` skips it."""
+
+
+def trail_is_database_origin(trail: ExceptionTrail) -> bool:
+  """Whether any module on *trail* (origin-first, causes/contexts included) is part of the database layer."""
+  return bool(trail.matches(*DATABASE_ORIGIN_PATTERNS))
+
+
+def exception_is_database_origin(exc: BaseException) -> bool:
+  """`trail_is_database_origin` over a raised exception (must have a live `__traceback__`)."""
+  return trail_is_database_origin(build_exception_trail(exc))
 
 
 class DatabaseCache(metaclass=SingletonType):

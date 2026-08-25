@@ -13,12 +13,11 @@ from dateutil.relativedelta import SA, relativedelta
 from rich import get_console
 
 # First party imports
-from aeth_ext.errors.shutdown import SHUTDOWN
+from aeth_ext.errors.shutdown import SHUTDOWN, get_current_fatal_trails
 from aeth_ext.monitoring import run_heartbeat_async, send_heartbeat
 from aeth_ext.rich.progress import Progress
-from scheduled_invoice_processor.database import DatabaseCache
+from scheduled_invoice_processor.database import DatabaseCache, trail_is_database_origin
 from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
-from scheduled_invoice_processor.err_handling import get_last_fatal_details
 from scheduled_invoice_processor.scheduler_config import OrderProcessingScheduler
 from scheduled_invoice_processor.suppliers.ryo import RYOProcessor
 from scheduled_invoice_processor.suppliers.sas import SASProcessor
@@ -363,9 +362,9 @@ async def main() -> NoReturn:
       with suppress(CancelledError):
         await periodic_heartbeat_task
 
-      fatal_details = get_last_fatal_details()
+      database_origin_trail = next((trail for trail in get_current_fatal_trails() if trail_is_database_origin(trail)), None)
 
-      if not fatal_details["is_database_origin"] and any(processor().errored for processor in supplier_register.values()):
+      if database_origin_trail is None and any(processor().errored for processor in supplier_register.values()):
         await sleep(
           600
         )  # Sleep for 10 minutes to allow pending operations from non-error-state processors to flush through before exiting
@@ -377,13 +376,14 @@ async def main() -> NoReturn:
       except Exception:
         logger.exception("Fatal shutdown: failed to stop scheduler cleanly")
 
-      fatal_details = get_last_fatal_details()
+      # Re-read: another fatal error may have arrived during the sleep above.
+      database_origin_trail = next((trail for trail in get_current_fatal_trails() if trail_is_database_origin(trail)), None)
 
-      if fatal_details["is_database_origin"]:
+      if database_origin_trail is not None:
         logger.warning(
-          "Fatal shutdown: skipping final Google Sheets flush because fatal error originated in database interface (type=%s, message=%s)",
-          fatal_details["exception_type"],
-          fatal_details["exception_message"],
+          "Fatal shutdown: skipping final Google Sheets flush because fatal error originated in database interface (origin=%s in %s)",
+          database_origin_trail.origin.module,
+          database_origin_trail.origin.file,
         )
       else:
         try:

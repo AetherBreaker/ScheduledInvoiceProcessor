@@ -21,7 +21,6 @@ from aeth_ext.utils import get_now
 
 # Local folder imports
 from .environment_init_vars import SETTINGS
-from .err_handling import extract_exc_details
 
 if TYPE_CHECKING:
   # Standard library imports
@@ -119,7 +118,7 @@ exec_base.run_coroutine_job = run_coroutine_job
 class CustomAsyncIOExecutor(AsyncIOExecutor):
   @override
   def _do_submit_job(self, job: Job, run_times: list[datetime]):
-    @handle_fatal_exc_sync(extract_details_callable=extract_exc_details)
+    @handle_fatal_exc_sync
     def callback(f: Future[Any]):
       self._pending_futures.discard(f)
       # try:
