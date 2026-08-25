@@ -154,9 +154,9 @@ async def test_pickup_persists_queue_move_before_vendor_archive(sas: SASProcesso
 
   real_persist = sas._persist_queues
 
-  def recording_persist() -> None:
+  def recording_persist() -> bool:
     events.append("persist")
-    real_persist()
+    return real_persist()
 
   monkeypatch.setattr(sas, "_transfer_file_vend_to_main", fake_copy)
   monkeypatch.setattr(sas, "_vendor_archive_file", fake_archive)
@@ -187,9 +187,9 @@ async def test_pickup_does_not_advance_when_no_transfer_recorded_a_result(sas: S
 
   real_persist = sas._persist_queues
 
-  def recording_persist() -> None:
+  def recording_persist() -> bool:
     events.append("persist")
-    real_persist()
+    return real_persist()
 
   monkeypatch.setattr(sas, "_transfer_file_vend_to_main", fake_copy)
   monkeypatch.setattr(sas, "_vendor_archive_file", fake_archive)
@@ -269,9 +269,9 @@ def test_preprocess_uploads_before_commit_and_archives_after(
 
   real_persist = ryo._persist_queues
 
-  def recording_persist() -> None:
+  def recording_persist() -> bool:
     events.append("persist")
-    real_persist()
+    return real_persist()
 
   monkeypatch.setattr(ryo, "_middle_archive_file", fake_archive)
   monkeypatch.setattr(ryo.waiting_ftp.client, "upload_file", recording_upload)
@@ -283,3 +283,58 @@ def test_preprocess_uploads_before_commit_and_archives_after(
   assert events == ["upload", "persist", "archive", "archive"]
   assert ryo.waiting_ftp.client.uploads == [(ryo.post_processing_waiting_folder / "merged.txt").as_posix()]
   assert "k" in ryo._file_dropoff_queue and "k" not in ryo._file_preprocess_queue
+
+
+# ---- C2: the sheet tick happens while the dropoff entry is still in the queue ----
+
+
+async def test_dropoff_ticks_invoice_applied_before_popping_the_entry(sas: SASProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+  meta = _meta("/Waiting/SAS/Processed")
+  sas._file_dropoff_queue["k"] = meta
+
+  async def no_preprocess(*args: object, **kwargs: object) -> None:
+    pass
+
+  def fake_move(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
+    getattr(file_meta, success_attr)[idx] = True
+    return True
+
+  async def assert_still_queued(*args: object, **kwargs: object) -> None:
+    assert "k" in sas._file_dropoff_queue, "entry was popped before invoice_applied was ticked"
+
+  check_box = AsyncMock(side_effect=assert_still_queued)
+  monkeypatch.setattr(sas.cache.schedule, "check_box", check_box)
+  monkeypatch.setattr(sas, "_preprocess_files", no_preprocess)
+  monkeypatch.setattr(sas, "_transfer_file_main_to_main", fake_move)
+
+  await sas._dropoff_files()
+
+  assert "k" not in sas._file_dropoff_queue
+  check_box.assert_awaited_once()
+
+
+# ---- Ledger promotion: a failed queue-backup write gates the vendor archive ----
+
+
+async def test_pickup_skips_vendor_archive_when_persist_fails(sas: SASProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+  events: list[str] = []
+  meta = _meta("/Waiting/SAS")
+  sas._file_pickup_queue["k"] = meta
+  sas.waiting_ftp.client.listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
+  monkeypatch.setattr(SASProcessor, "pickup_archive_ftp_folder", PurePosixPath("/RYO/Archive"), raising=False)
+
+  def fake_copy(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
+    getattr(file_meta, success_attr)[idx] = True
+    return True
+
+  def fake_archive(**kwargs: object) -> None:
+    events.append("archive")
+
+  monkeypatch.setattr(sas, "_transfer_file_vend_to_main", fake_copy)
+  monkeypatch.setattr(sas, "_vendor_archive_file", fake_archive)
+  monkeypatch.setattr(sas, "_persist_queues", lambda: False)
+
+  await sas._pickup_files()
+
+  assert "archive" not in events
+  assert "k" in sas._file_waiting_queue and "k" not in sas._file_pickup_queue

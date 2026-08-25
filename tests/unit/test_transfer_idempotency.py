@@ -5,6 +5,7 @@ import atexit
 import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from ftplib import error_perm
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -25,12 +26,15 @@ if TYPE_CHECKING:
 
 
 class _FakeClient:
-  """`get_size` answers from `sizes` and raises OSError for anything else.
+  """`get_size` answers from `sizes` and raises FileNotFoundError for anything else.
+
+  A `sizes` value may be an exception instance, which is raised instead of returned -- used to drive the
+  source-probe error paths of `_already_moved`.
 
   `rename` raises OSError unless `fail_rename` is False, in which case it succeeds and is merely recorded.
   """
 
-  def __init__(self, sizes: dict[str, int], fail_rename: bool = True) -> None:
+  def __init__(self, sizes: dict[str, int | BaseException], fail_rename: bool = True) -> None:
     self.sizes = sizes
     self.fail_rename = fail_rename
     self.renames: list[tuple[str, str]] = []
@@ -44,8 +48,11 @@ class _FakeClient:
   def get_size(self, path: str) -> int:
     self.get_size_calls.append(path)
     if path not in self.sizes:
-      raise OSError(f"no such file {path}")
-    return self.sizes[path]
+      raise FileNotFoundError(f"no such file {path}")
+    size = self.sizes[path]
+    if isinstance(size, BaseException):
+      raise size
+    return size
 
 
 class _FakePool:
@@ -106,7 +113,9 @@ RECV = PurePosixPath("/Waiting/SAS/Processed/inv.txt")
 _MOVE_FILES_TASK = TaskID(0, SimpleNamespace(remove_task=lambda *args: None), remove=False)
 
 
-def _run(processor: SASProcessor, sizes: dict[str, int], fail_rename: bool = True) -> tuple[FileRegisterData, _FakeClient, bool]:
+def _run(
+  processor: SASProcessor, sizes: dict[str, int | BaseException], fail_rename: bool = True
+) -> tuple[FileRegisterData, _FakeClient, bool]:
   client = _FakeClient(sizes, fail_rename=fail_rename)
   processor.__class__.waiting_ftp = _FakePool(client)  # type: ignore[assignment]
   meta = _meta()
@@ -173,3 +182,23 @@ def test_empty_destination_is_a_failure(processor: SASProcessor) -> None:
     SASProcessor.waiting_ftp = original_pool
   assert meta.preprocess_success == {0: False}
   assert result is False
+
+
+def test_source_probe_permission_error_is_not_absence(processor: SASProcessor) -> None:
+  original_pool = SASProcessor.waiting_ftp
+  try:
+    meta, _, result = _run(processor, {RECV.as_posix(): 128, SEND.as_posix(): PermissionError("permission denied")})
+  finally:
+    SASProcessor.waiting_ftp = original_pool
+  assert meta.preprocess_success == {0: False}
+  assert result is False
+
+
+def test_source_probe_550_perm_error_is_absence(processor: SASProcessor) -> None:
+  original_pool = SASProcessor.waiting_ftp
+  try:
+    meta, _, result = _run(processor, {RECV.as_posix(): 128, SEND.as_posix(): error_perm("550 No such file")})
+  finally:
+    SASProcessor.waiting_ftp = original_pool
+  assert meta.preprocess_success == {0: True}
+  assert result is True
