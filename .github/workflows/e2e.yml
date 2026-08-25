@@ -1,13 +1,10 @@
 name: e2e
 
-# No pull_request trigger: this repo is public and the job needs secrets; PR-driven runs
-# from same-repo branches could read them. Runs on pushes to main/test/** or manually.
+# Runs on PRs and manual dispatch, but the job below is gated to the repo owner (see `if:`):
+# the repo is public and the job needs secrets, so other actors must never reach the steps.
 on:
+  pull_request:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - "test/**"
 
 # The testing Google Sheet is a shared resource: never run two e2e jobs at once.
 concurrency:
@@ -19,6 +16,10 @@ permissions:
 
 jobs:
   e2e:
+    # Only the repo owner's own PRs/dispatches run; fork PRs and other actors are skipped.
+    if: >-
+      github.actor == 'AetherBreaker' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
