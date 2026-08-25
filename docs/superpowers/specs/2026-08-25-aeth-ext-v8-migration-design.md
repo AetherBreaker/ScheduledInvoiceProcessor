@@ -100,12 +100,19 @@ suite plus new unit tests.
   post-hoc `to_thread(self._save_backups)`).
 - Removed: `__del__`, `save_queue_backups_off_thread`, the `_save_backups` method, and the
   `save_queue_backups_off_thread` cron job in `startup.py`. `_load_queue_backups` is unchanged.
+- Belt and braces: `__init__` registers `atexit.register(self._persist_queues_at_exit)` once per processor
+  instance (they are singletons, so once per process per supplier). `_persist_queues_at_exit()` tries
+  `self._lock.acquire(timeout=1.0)`; on success it calls `_persist_queues()` and releases; on timeout it
+  logs a warning and calls `_persist_queues()` anyway — a possibly mid-mutation snapshot beats losing the
+  last change, and the atomic write still guarantees a parseable file. Replaces `__del__`, which CPython
+  does not guarantee to run for module-level singletons.
 - The write is a few KB and happens a handful of times per 10-minute cycle; doing it inline under the lock
   is simpler and safer than a debounced writer (rejected: reintroduces a loss window and another thread
   for A3 to coordinate).
 - Unit test on a temp `PERSISTED_DIR_LOC`: after a mutation the file reflects it immediately; a patched
   `os.replace` that raises leaves the original file unchanged and the `.tmp` file cleaned up or ignored by
-  the loader.
+  the loader; `_persist_queues_at_exit()` writes when the lock is free and still writes (with a warning) when
+  the lock is held by another thread.
 
 ## A3 — shutdown lifecycle
 
