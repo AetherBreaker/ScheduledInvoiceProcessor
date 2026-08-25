@@ -158,9 +158,15 @@ their own reviewed task and must not weaken assertions.
   resets the rows it ticked and clears `/Testing/RYO`, `/Testing/Waiting/RYO[/Archive]`, `/Testing/Processed/RYO`.
 - Baseline (aeth-ext 6.3.1, 2026-08-25 00:37, 7 current-week files): per-file mean **5.35 s**, max 5.45 s;
   `pickup_files` 10.8 s; `dropoff_files` 24.0 s; whole cycle 40.5 s.
-- After-run: same command on v8; compare **per-file mean/max** (file count depends on what is in the
-  vendor folder that day) and record the wall time of `pickup_files` as the proxy for one concurrent wave.
-  Record both in this section — they are Phase 2's decision input.
+- After-run (aeth-ext 8.0.0, 2026-08-25 02:05, the same 7 current-week files): per-file mean **4.68 s**
+  (−12.5 %), max 5.34 s; `pickup_files` 10.1 s; `dropoff_files` **3.4 s** (was 24.0 s — the pooled holding-FTP
+  renames no longer pay a connect/login per file); whole cycle 19.7 s (was 40.5 s). Raw:
+  `scripts/benchmarks/dragrace_after.json`. Per-file time is dominated by the vendor server's per-transfer
+  cost (SFTP open + stream + close on Bitvise), which pooling does not remove.
+- Phase 2 decision input: one concurrent wave (`pickup_files`, 7 files in parallel through the pool) took
+  **10.1 s** against the 7 s GRACEFUL budget, and a single file alone takes ~4.7 s — an in-flight wave cannot
+  be expected to finish inside the budget. The master plan's "abandon in-flight FTP, rely on A2" conclusion
+  stands as the default for the Phase 2 brainstorm; a bounded wait-for-wave is not worth building.
 - Running it needs the real credentials and writes to the testing sheet/holding tree — it is a manual
   task, not CI.
 
