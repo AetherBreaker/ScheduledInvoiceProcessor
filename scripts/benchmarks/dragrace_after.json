@@ -1,0 +1,60 @@
+{
+  "label": "after-v8.0.0",
+  "aeth_ext": "8.0.0",
+  "when": "2026-08-25T02:05:08-04:00",
+  "orders": 80,
+  "files_transferred": 7,
+  "stages": {
+    "refresh_cache": 2.095,
+    "register_pickup": 1.528,
+    "pickup_files": 10.091,
+    "flush_after_pickup": 0.859,
+    "register_dropoff": 0.709,
+    "dropoff_files": 3.433,
+    "flush_after_dropoff": 0.958
+  },
+  "total_cycle_secs": 19.673,
+  "per_file": [
+    {
+      "file": "9068281576_57640_20260824150326712000.txt",
+      "secs": 1.467
+    },
+    {
+      "file": "9065537448_57635_20260824150514374000.txt",
+      "secs": 5.042
+    },
+    {
+      "file": "9065537187_57636_20260824150444958000.txt",
+      "secs": 5.144
+    },
+    {
+      "file": "9069705002_57638_20260824150355949000.txt",
+      "secs": 5.184
+    },
+    {
+      "file": "9063462149_57661_20260824150056844000.txt",
+      "secs": 5.276
+    },
+    {
+      "file": "9068281441_57679_20260824145926634000.txt",
+      "secs": 5.304
+    },
+    {
+      "file": "9068752029_57637_20260824150420326000.txt",
+      "secs": 5.344
+    }
+  ],
+  "per_file_mean": 4.68,
+  "per_file_max": 5.344,
+  "rows_reset": [
+    10,
+    19,
+    27,
+    50,
+    53,
+    56,
+    60
+  ],
+  "remote_cleaned": 14,
+  "errored": false
+}
