@@ -4,8 +4,9 @@
 (`ShutdownCompletion`, waitable via `is_set`/`wait`/`await`, set in `_run_threaded_pass` once every callback has
 run or been skipped, immediately before the exit nudge) **plus** `_join_pass_at_exit`, an `atexit` join of the
 still-daemon pass thread registered by `run_shutdown`. Awaiting `SHUTDOWN_COMPLETE` also *declares a tail*: the
-nudge is held for the remaining budget (≥ `_NUDGE_GRACE_SECS` 0.25 s) and skipped once the main thread has
-returned. `SHUTDOWN`'s docstring now says resolution ≠ teardown done. Lifecycle:
+nudge is held until the GRACEFUL budget (7 s from the request — not Docker's 30 s) or completion + 0.25 s,
+whichever is later, and skipped once the main thread has finished. The wait replaces Phase 2's 20 s cap with
+no cap, deliberately: the library's own exit-time join is equally unbounded. `SHUTDOWN`'s docstring now says resolution ≠ teardown done. Lifecycle:
 `await SHUTDOWN` → tail → `await SHUTDOWN_COMPLETE` → return.
 
 **Goal:** Remove the app-side workaround for the aeth_ext gap (the `await sleep(20)` park at the tail of
