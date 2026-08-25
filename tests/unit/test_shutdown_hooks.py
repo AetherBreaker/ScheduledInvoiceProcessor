@@ -3,7 +3,7 @@
 # Standard library imports
 import logging
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 # First party imports
 import scheduled_invoice_processor.shutdown_hooks as hooks
@@ -13,6 +13,11 @@ if TYPE_CHECKING:
   # Third party imports
   import pytest
 
+  # First party imports
+  from aeth_ext.errors.exception_trail import ExceptionTrail
+  from scheduled_invoice_processor.database import DatabaseCache
+  from scheduled_invoice_processor.scheduler_config import OrderProcessingScheduler
+
 
 class _Scheduler:
   def __init__(self) -> None:
@@ -21,8 +26,22 @@ class _Scheduler:
   def pause(self) -> None:
     self.calls.append("pause")
 
-  def shutdown(self, wait: bool = True) -> None:
+  def shutdown(self, _wait: bool = True) -> None:
     self.calls.append("shutdown")
+
+
+def _as_scheduler(stub: object) -> OrderProcessingScheduler:
+  """The hooks only call `.pause()`; the stubs satisfy that structurally."""
+  return cast("OrderProcessingScheduler", stub)
+
+
+def _as_cache(stub: object) -> DatabaseCache:
+  """The hooks only call `.flush_queued_writes()`."""
+  return cast("DatabaseCache", stub)
+
+
+def _trails(*items: object) -> tuple[ExceptionTrail, ...]:
+  return cast("tuple[ExceptionTrail, ...]", tuple(items))
 
 
 class _Cache:
@@ -39,21 +58,21 @@ class _Cache:
 
 def test_freeze_pauses_and_never_shuts_down() -> None:
   scheduler = _Scheduler()
-  hooks.freeze_scheduler(scheduler)(())
+  hooks.freeze_scheduler(_as_scheduler(scheduler))(())
   assert scheduler.calls == ["pause"]
 
 
 def test_freeze_swallows_and_logs_pause_failure(caplog: pytest.LogCaptureFixture) -> None:
   scheduler = SimpleNamespace(pause=lambda: (_ for _ in ()).throw(RuntimeError("boom")))
   with caplog.at_level(logging.ERROR):
-    hooks.freeze_scheduler(scheduler)(())
+    hooks.freeze_scheduler(_as_scheduler(scheduler))(())
   assert "pause" in caplog.text.lower()
 
 
 def test_flush_runs_when_no_database_origin_trail(monkeypatch: pytest.MonkeyPatch) -> None:
   monkeypatch.setattr(hooks, "trail_is_database_origin", lambda trail: False)
   cache = _Cache()
-  hooks.final_sheets_flush(cache)((object(),))  # type: ignore[arg-type]
+  hooks.final_sheets_flush(_as_cache(cache))(_trails(object()))
   assert cache.flushed == 1
 
 
@@ -61,7 +80,7 @@ def test_flush_skipped_when_a_database_origin_trail_exists(monkeypatch: pytest.M
   monkeypatch.setattr(hooks, "trail_is_database_origin", lambda trail: True)
   cache = _Cache()
   with caplog.at_level(logging.WARNING):
-    hooks.final_sheets_flush(cache)((SimpleNamespace(origin=SimpleNamespace(module="m", file="f")),))  # type: ignore[arg-type]
+    hooks.final_sheets_flush(_as_cache(cache))(_trails(SimpleNamespace(origin=SimpleNamespace(module="m", file="f"))))
   assert cache.flushed == 0
   assert "skipping final google sheets flush" in caplog.text.lower()
 
@@ -69,7 +88,7 @@ def test_flush_skipped_when_a_database_origin_trail_exists(monkeypatch: pytest.M
 def test_flush_swallows_and_logs_failure(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
   monkeypatch.setattr(hooks, "trail_is_database_origin", lambda trail: False)
   with caplog.at_level(logging.ERROR):
-    hooks.final_sheets_flush(_Cache(fail=True))(())
+    hooks.final_sheets_flush(_as_cache(_Cache(fail=True)))(())
   assert "flush failed" in caplog.text.lower()
 
 
@@ -81,7 +100,7 @@ def test_register_shutdown_hooks_registers_freeze_then_required_flush(monkeypatc
 
   monkeypatch.setattr(hooks, "register_for_shutdown", fake_register)
   scheduler, cache = _Scheduler(), _Cache()
-  hooks.register_shutdown_hooks(scheduler, cache)  # type: ignore[arg-type]
+  hooks.register_shutdown_hooks(_as_scheduler(scheduler), _as_cache(cache))
 
   assert [r["phase"] for r in registered] == [ShutdownPhase.THREADED, ShutdownPhase.THREADED]
   assert [r["priority"] for r in registered] == [-10, 0]

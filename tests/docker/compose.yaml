@@ -7,13 +7,14 @@ services:
     container_name: e2e-sft-ftp
     ports:
       - "21:21"
-      - "30000-30009:30000-30009"
+      - "30000-30049:30000-30049"
     environment:
       PUBLICHOST: "127.0.0.1"
       FTP_USER_NAME: "sft"
       FTP_USER_PASS: "sft-test-pw"
       FTP_USER_HOME: "/home/sft"
-      FTP_PASSIVE_PORTS: "30000:30009"
+      # 50 passive ports: a parallel pickup wave right after earlier tests' sockets (TIME_WAIT) exhausted 10.
+      FTP_PASSIVE_PORTS: "30000:30049"
       FTP_MAX_CLIENTS: "50"
       FTP_MAX_CONNECTIONS: "50"
     healthcheck:
