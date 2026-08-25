@@ -32,20 +32,21 @@ logger = getLogger(__name__)
 
 
 class SASProcessor(SupplierProcessorBase):
-  # The raw credential dict lives only for the next statement and is deleted from the class namespace right after,
-  # so the password exists on the class solely as the `SecretStr` inside the pool's credentials.
+  # Keep the parsed plaintext only while constructing the redacting credentials object.
   _raw = loads(SETTINGS.sas_ftp_creds_file.read_bytes())
-  vendor_ftp = create_ftp_adapter(
-    SFTPCredentials(
-      host=_raw["HOSTNAME"],
-      username=_raw["USER"],
-      password=SecretStr(_raw["PWD"]),
-      port=int(_raw.get("PORT", 22)),
-      host_key_policy="auto_add",
-    ),
-    container_cls="SASProcessor",
-  )
-  del _raw
+  try:
+    vendor_ftp = create_ftp_adapter(
+      SFTPCredentials(
+        host=_raw["HOSTNAME"],
+        username=_raw["USER"],
+        password=SecretStr(_raw["PWD"]),
+        port=int(_raw.get("PORT", 22)),
+        host_key_policy="auto_add",
+      ),
+      container_cls="SASProcessor",
+    )
+  finally:
+    del _raw
 
   queue_backup_prefix: str = "sas"
 
