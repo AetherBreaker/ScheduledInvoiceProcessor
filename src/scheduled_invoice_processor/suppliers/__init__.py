@@ -638,16 +638,18 @@ class SupplierProcessorBase(metaclass=SingletonType):
     mid-wave lets the rename thread finish but never runs the bookkeeping that records it), the move is reported
     as a success so the re-run can advance the queue instead of stranding the entry."""
     local_logger = adapted_logger or logger
-    result = StatusCode.UNKNOWN
     if self.errored:
       local_logger.warning("%s: Disabled due to error state. Skipping transfer of files within main FTP", self.__class__.__name__)
+      getattr(file_meta, success_attr)[idx] = False
+      if log_action_handler is not None:
+        log_action_handler(key, StatusCode.FAILURE, file_meta)
       return False
     success = False
     try:
       with self.waiting_ftp.start_session() as client:
         try:
           client.rename(send_path.as_posix(), recv_path.as_posix())
-        except (*all_errors, OSError) as rename_error:
+        except (*all_errors, OSError):
           if self._already_moved(client, send_path, recv_path):
             local_logger.info(
               "%s: [yellow]%s[/] was already moved to [yellow]%s[/] by an earlier run; treating as success",
@@ -658,7 +660,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
             )
             success = True
           else:
-            raise rename_error
+            raise
         else:
           # Verify file was moved successfully
           try:
@@ -680,6 +682,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
         log_action_handler(key, result, file_meta)
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception:
+      success = False
       local_logger.exception(
         "%s: Error moving\n[yellow]%s[/] to\n[yellow]%s[/]",
         self.__class__.__name__,
