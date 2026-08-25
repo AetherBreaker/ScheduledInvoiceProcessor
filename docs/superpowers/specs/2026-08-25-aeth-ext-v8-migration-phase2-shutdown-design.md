@@ -73,9 +73,11 @@ Callbacks are registered from a new module `scheduled_invoice_processor/shutdown
   `await SHUTDOWN_COMPLETE`s — set by aeth_ext once every callback has run or been skipped — and only then
   returns. Awaiting it declares a tail, so aeth_ext holds its exit nudge for the remaining budget and skips it
   once `main()` has returned; the normal exit path is `run_app()`'s `sys.exit`, with `except KeyboardInterrupt`
-  kept for a tail that overruns the budget. aeth_ext additionally joins the pass at interpreter exit. Phase 2
-  shipped a bounded `await sleep(20)` park as a workaround before 8.0.1 existed
-  (`aeth_ext/ISSUE-shutdown-required-callbacks-race-interpreter-exit.md`).
+  kept for a tail — or `asyncio.run()`'s own close, which joins in-flight FTP threads — that overruns the
+  7 s GRACEFUL budget. aeth_ext additionally joins the pass at interpreter exit. The wait is deliberately
+  unbounded: a wedged required flush now hangs until Docker's 30 s grace, as aeth_ext's own exit join would.
+  Phase 2 shipped a bounded `await sleep(20)` park as a workaround before 8.0.1 existed (the write-up that drove
+  the library fix is in aeth_ext's history: commits `4c46856`…`5975e74`, "fix(errors): …").
 - **SIGKILL (Docker grace exhausted / OOM):** threads die mid-body; no `atexit`. The last persisted queue
   state is whatever the last `_persist_queues()` wrote.
 

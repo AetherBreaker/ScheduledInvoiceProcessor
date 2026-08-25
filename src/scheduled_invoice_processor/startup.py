@@ -373,10 +373,14 @@ async def main() -> None:
 
     # aeth_ext 8.0.1 lifecycle: wait for the threaded pass to finish before returning, so the required
     # Sheets flush can never race interpreter exit. Awaiting also declares "a tail follows", which makes
-    # aeth_ext hold its exit nudge for the remaining budget and skip it once main() has returned -- so
-    # the normal path exits via run_app's sys.exit, not via KeyboardInterrupt. (A tail that overruns the
-    # budget is still unwound by the nudge; run_app catches that too.) Replaces the Phase 2 `sleep(20)`
-    # park, which was a bounded guess at aeth_ext's own knowledge.
+    # aeth_ext hold its exit nudge until the GRACEFUL budget (7 s from the request) or a short grace
+    # after completion, whichever is later, and skip it once the main thread has finished -- so the
+    # normal path exits via run_app's sys.exit, not via KeyboardInterrupt. The window also covers
+    # asyncio.run()'s own close (which joins in-flight to_thread FTP transfers, ~5 s each): if that
+    # outlasts the window the nudge lands inside Runner.close(); run_app still catches it, the worker
+    # threads are joined at interpreter finalisation, atexit persists the queues, exit code is correct.
+    # Deliberately unbounded (Phase 2 parked for at most 20 s): a wedged required flush hangs here until
+    # Docker's 30 s grace, exactly as aeth_ext's own exit-time join would.
     await SHUTDOWN_COMPLETE
 
 

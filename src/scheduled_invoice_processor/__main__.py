@@ -32,8 +32,9 @@ def run_app() -> None:
     run(main())
   except KeyboardInterrupt:
     # aeth_ext's exit nudge (simulated SIGINT). Normally main() returns on its own after awaiting
-    # SHUTDOWN_COMPLETE and the nudge is skipped; it only lands here if main()'s tail overran the
-    # shutdown budget. Not an error either way; the kind below says how we stopped.
+    # SHUTDOWN_COMPLETE and the nudge is skipped; it lands here only if main()'s tail *or* asyncio's own
+    # close (joining in-flight FTP threads) outran the shutdown budget. Not an error either way; the kind
+    # below says how we stopped.
     pass
   sys.exit(exit_code_for_shutdown(SHUTDOWN.kind))
 
