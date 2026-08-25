@@ -14,27 +14,35 @@ import pytest
 
 # First party imports
 import scheduled_invoice_processor.suppliers as suppliers_mod
+from aeth_ext.rich.progress import TaskID
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
 from scheduled_invoice_processor.suppliers.sas import SASProcessor
 
 if TYPE_CHECKING:
   # Standard library imports
-  from collections.abc import Iterator
+  from collections.abc import Generator
 
 
 class _FakeClient:
-  """`rename` always fails; `get_size` answers from `sizes` and raises OSError for anything else."""
+  """`get_size` answers from `sizes` and raises OSError for anything else.
 
-  def __init__(self, sizes: dict[str, int]) -> None:
+  `rename` raises OSError unless `fail_rename` is False, in which case it succeeds and is merely recorded.
+  """
+
+  def __init__(self, sizes: dict[str, int], fail_rename: bool = True) -> None:
     self.sizes = sizes
+    self.fail_rename = fail_rename
     self.renames: list[tuple[str, str]] = []
+    self.get_size_calls: list[str] = []
 
   def rename(self, old: str, new: str) -> None:
     self.renames.append((old, new))
-    raise OSError("rename failed")
+    if self.fail_rename:
+      raise OSError("rename failed")
 
   def get_size(self, path: str) -> int:
+    self.get_size_calls.append(path)
     if path not in self.sizes:
       raise OSError(f"no such file {path}")
     return self.sizes[path]
@@ -45,7 +53,7 @@ class _FakePool:
     self.client = client
 
   @contextmanager
-  def start_session(self) -> Iterator[_FakeClient]:
+  def start_session(self) -> Generator[_FakeClient]:
     yield self.client
 
   def test_connection(self, logit: bool = False) -> bool:
@@ -63,7 +71,7 @@ def _drop_singleton() -> None:
 
 
 @pytest.fixture
-def processor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[SASProcessor]:
+def processor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[SASProcessor]:
   monkeypatch.setattr(suppliers_mod, "DatabaseCache", SimpleNamespace)
   monkeypatch.setattr(suppliers_mod, "HOLDING_FOLDER", tmp_path / "file_holding")
   monkeypatch.setattr(SASProcessor, "_file_queue_backup_folder", tmp_path / "queue_backups")
@@ -71,7 +79,7 @@ def processor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[SASPr
   monkeypatch.setattr(SASProcessor, "log_file_loc", tmp_path / "logs")
   _drop_singleton()
   proc = SASProcessor()
-  proc.pbar = _FakePbar()  # type: ignore[assignment]
+  proc.pbar = _FakePbar()
   yield proc
   atexit.unregister(proc._persist_queues_at_exit)
   _drop_singleton()
@@ -95,49 +103,73 @@ def _meta() -> FileRegisterData:
 SEND = PurePosixPath("/Waiting/SAS/inv.txt")
 RECV = PurePosixPath("/Waiting/SAS/Processed/inv.txt")
 
+_MOVE_FILES_TASK = TaskID(0, SimpleNamespace(remove_task=lambda *args: None), remove=False)
 
-def _run(processor: SASProcessor, sizes: dict[str, int]) -> tuple[FileRegisterData, _FakeClient]:
-  client = _FakeClient(sizes)
+
+def _run(processor: SASProcessor, sizes: dict[str, int], fail_rename: bool = True) -> tuple[FileRegisterData, _FakeClient, bool]:
+  client = _FakeClient(sizes, fail_rename=fail_rename)
   processor.__class__.waiting_ftp = _FakePool(client)  # type: ignore[assignment]
   meta = _meta()
-  processor._transfer_file_main_to_main(
-    send_path=SEND, recv_path=RECV, move_files_task=0, file_meta=meta, idx=0, key="k", success_attr="preprocess_success"
+  result = processor._transfer_file_main_to_main(
+    send_path=SEND,
+    recv_path=RECV,
+    move_files_task=_MOVE_FILES_TASK,
+    file_meta=meta,
+    idx=0,
+    key="k",
+    success_attr="preprocess_success",
   )
-  return meta, client
+  return meta, client, result
 
 
-def test_already_moved_counts_as_success(processor: SASProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rename_succeeds_is_reported_as_success(processor: SASProcessor) -> None:
   original_pool = SASProcessor.waiting_ftp
   try:
-    meta, client = _run(processor, {RECV.as_posix(): 128})
+    meta, client, result = _run(processor, {RECV.as_posix(): 128}, fail_rename=False)
   finally:
     SASProcessor.waiting_ftp = original_pool
   assert meta.preprocess_success == {0: True}
   assert client.renames == [(SEND.as_posix(), RECV.as_posix())]
+  assert client.get_size_calls == [RECV.as_posix()]
+  assert result is True
+
+
+def test_already_moved_counts_as_success(processor: SASProcessor) -> None:
+  original_pool = SASProcessor.waiting_ftp
+  try:
+    meta, client, result = _run(processor, {RECV.as_posix(): 128})
+  finally:
+    SASProcessor.waiting_ftp = original_pool
+  assert meta.preprocess_success == {0: True}
+  assert client.renames == [(SEND.as_posix(), RECV.as_posix())]
+  assert result is True
 
 
 def test_destination_present_but_source_still_there_is_a_failure(processor: SASProcessor) -> None:
   original_pool = SASProcessor.waiting_ftp
   try:
-    meta, _ = _run(processor, {RECV.as_posix(): 128, SEND.as_posix(): 128})
+    meta, _, result = _run(processor, {RECV.as_posix(): 128, SEND.as_posix(): 128})
   finally:
     SASProcessor.waiting_ftp = original_pool
   assert meta.preprocess_success == {0: False}
+  assert result is False
 
 
 def test_destination_absent_is_a_failure(processor: SASProcessor) -> None:
   original_pool = SASProcessor.waiting_ftp
   try:
-    meta, _ = _run(processor, {})
+    meta, _, result = _run(processor, {})
   finally:
     SASProcessor.waiting_ftp = original_pool
   assert meta.preprocess_success == {0: False}
+  assert result is False
 
 
 def test_empty_destination_is_a_failure(processor: SASProcessor) -> None:
   original_pool = SASProcessor.waiting_ftp
   try:
-    meta, _ = _run(processor, {RECV.as_posix(): 0})
+    meta, _, result = _run(processor, {RECV.as_posix(): 0})
   finally:
     SASProcessor.waiting_ftp = original_pool
   assert meta.preprocess_success == {0: False}
+  assert result is False
