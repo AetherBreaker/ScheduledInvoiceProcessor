@@ -61,6 +61,16 @@ holding-FTP renames were paying a connect/login per file and now don't. A wave s
 
 ### The decision to make (A3)
 
+**Resolved 2026-08-25 — see `docs/superpowers/specs/2026-08-25-aeth-ext-v8-migration-phase2-shutdown-design.md`.**
+Both shapes below measured the wave against the wrong budget: aeth_ext's threaded pass ends with
+`_attempt_early_exit()` → `interrupt_main()` → `KeyboardInterrupt` on the main thread, so post-`await SHUTDOWN`
+code in `main()` is bounded by the callback pass, not Docker. Shape 1 (callbacks) was chosen, with one
+amendment found in the final review: `main()` parks in a bounded `await sleep(20)` after `await SHUTDOWN`
+because the shutdown is *requested* before aeth_ext starts the threaded pass, so without the park the required
+Sheets flush would race interpreter exit; shape 2 is unbuildable as written. The "doubled wave is idempotent"
+claim was audited and found false for three queue transitions (F1–F3) and one drain bug (F7); all fixed in
+Phase 2.
+
 The Phase 1 spec's "Phase 2 — deferred" section sketches A3 as two THREADED `register_for_shutdown`
 callbacks and records the gate outcome as "a wave (10.1 s) cannot finish inside aeth_ext's 7 s GRACEFUL
 budget → abandon in-flight FTP, rely on A2". **That framing is under reconsideration** after the Docker
