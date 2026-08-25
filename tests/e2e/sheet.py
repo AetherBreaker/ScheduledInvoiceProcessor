@@ -1,13 +1,17 @@
 """gspread access to the TESTING spreadsheet. Only touches rows whose store number is in the reserved e2e set."""
 
 # Standard library imports
-from collections.abc import Iterable
 from datetime import datetime, timedelta
-from pathlib import Path
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 # Third party imports
 import gspread
+
+if TYPE_CHECKING:
+  # Standard library imports
+  from collections.abc import Iterable
+  from pathlib import Path
 
 SCHEDULE_TAB = "Current Week"
 LOG_TAB = "Processing Log"
@@ -64,8 +68,7 @@ class SheetHarness:
 
   def seed_orders(self, supplier: str, orders: Iterable[tuple[int, str]]) -> None:
     rows = [
-      [supplier, store, customer, "TX", "Monday", "Monday 6:00AM", "Monday 8:00AM", False, False, False]
-      for store, customer in orders
+      [supplier, store, customer, "TX", "Monday", "Monday 6:00AM", "Monday 8:00AM", False, False, False] for store, customer in orders
     ]
     self._book.worksheet(SCHEDULE_TAB).append_rows(rows, value_input_option=gspread.utils.ValueInputOption.raw)
 
@@ -93,9 +96,7 @@ class SheetHarness:
     wanted = {int(s) for s in stores}
     values = self._book.worksheet(LOG_TAB).get_all_values(value_render_option=gspread.utils.ValueRenderOption.unformatted)
     header, body = values[0], values[1:]
-    rows = [
-      {str(h): str(v) for h, v in zip(header, row, strict=False)} for row in body if _store_of(row) in wanted
-    ]
+    rows = [{str(h): str(v) for h, v in zip(header, row, strict=False)} for row in body if _store_of(row) in wanted]
     if since is None:
       return rows
     return [row for row in rows if _at_or_after(row.get("action_datetime"), since)]

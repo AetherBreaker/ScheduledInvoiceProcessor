@@ -93,6 +93,9 @@
       "scheduled_invoice_processor.suppliers.file_register_data.FixRuffTC001",
     ]
 
+  [tool.ruff.lint.per-file-ignores]
+    "tests/**" = ["N812", "PLR2004", "FBT003"]
+
 [tool.uv]
   environments = [
     "sys_platform == 'linux'",

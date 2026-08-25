@@ -1,15 +1,21 @@
 # Standard library imports
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 # Third party imports
 import pytest
 
+# First party imports
 # Local imports
 from tests.e2e import constants as C
 from tests.e2e.cycle import assert_log_has_full_trail, run_ryo_cycle
 from tests.e2e.generator import RYO_TIMESTAMP_FORMAT, now_eastern, ryo_file
-from tests.e2e.remote import FtpBox, SftpBox
-from tests.e2e.sheet import SheetHarness
+
+if TYPE_CHECKING:
+  # Local imports
+  # First party imports
+  from tests.e2e.remote import FtpBox, SftpBox
+  from tests.e2e.sheet import SheetHarness
 
 pytestmark = pytest.mark.usefixtures("clean_remote", "reset_processor_singletons")
 
@@ -21,7 +27,7 @@ def _parse_merged_name(name: str) -> tuple[str, set[str], str]:
 
 
 async def test_ryo_cycle(sheet: SheetHarness, ryo_box: SftpBox, sft_box: FtpBox):
-  (store, customer), = C.RYO_CYCLE_ORDERS
+  ((store, customer),) = C.RYO_CYCLE_ORDERS
   started = base = now_eastern()
   invoice_nums = {"57872", "57873"}
   originals: list[str] = []

@@ -1,24 +1,30 @@
 # Standard library imports
 from asyncio import gather
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 # Third party imports
 import pytest
 
+# First party imports
 # Local imports
 from tests.e2e import constants as C
 from tests.e2e.cycle import assert_log_has_full_trail, run_ryo_cycle, run_sas_cycle
 from tests.e2e.generator import now_eastern, ryo_file, sas_file
-from tests.e2e.remote import FtpBox, SftpBox
-from tests.e2e.sheet import SheetHarness
+
+if TYPE_CHECKING:
+  # Local imports
+  # First party imports
+  from tests.e2e.remote import FtpBox, SftpBox
+  from tests.e2e.sheet import SheetHarness
 
 pytestmark = pytest.mark.usefixtures("clean_remote", "reset_processor_singletons")
 
 
 async def test_both_suppliers_same_process(sheet: SheetHarness, sas_box: SftpBox, ryo_box: SftpBox, sft_box: FtpBox):
   started = base = now_eastern()
-  (sas_store, sas_customer), = C.BOTH_SAS_ORDERS
-  (ryo_store, ryo_customer), = C.BOTH_RYO_ORDERS
+  ((sas_store, sas_customer),) = C.BOTH_SAS_ORDERS
+  ((ryo_store, ryo_customer),) = C.BOTH_RYO_ORDERS
 
   sas_name, sas_content = sas_file(sas_customer, "700003", base)
   sas_box.upload(f"{C.SAS_PICKUP_DIR}/{sas_name}", sas_content)

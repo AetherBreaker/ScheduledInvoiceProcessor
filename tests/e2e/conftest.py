@@ -15,18 +15,22 @@ Required environment (CI secrets, or exported locally):
 import json
 import os
 import tempfile
-from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 # Third party imports
 import pytest
 
+# First party imports
 # Local imports
 from tests.e2e import constants as C
 from tests.e2e.remote import FtpBox, SftpBox
 
 if TYPE_CHECKING:
+  # Standard library imports
+  from collections.abc import Iterator
+
+  # First party imports
   # Local imports
   from tests.e2e.sheet import SheetHarness
 
@@ -44,9 +48,7 @@ def _bootstrap_environment() -> Path:
   secrets.mkdir()
 
   (secrets / "db-key.json").write_text(_require("E2E_DB_KEY_JSON"))
-  (secrets / "sft_creds.json").write_text(
-    json.dumps({"USER": C.SFT_USER, "PWD": C.SFT_PASS, "HOST": C.SFT_HOST, "PORT": C.SFT_PORT})
-  )
+  (secrets / "sft_creds.json").write_text(json.dumps({"USER": C.SFT_USER, "PWD": C.SFT_PASS, "HOST": C.SFT_HOST, "PORT": C.SFT_PORT}))
   (secrets / "sas_ftp_creds.json").write_text(
     json.dumps({"USER": C.SAS_USER, "PWD": C.SAS_PASS, "HOSTNAME": C.SAS_HOST, "PORT": C.SAS_PORT})
   )
@@ -185,8 +187,9 @@ def reset_processor_singletons() -> Iterator[None]:
 
 
 @pytest.fixture(scope="session")
-def sheet() -> Iterator["SheetHarness"]:
+def sheet() -> Iterator[SheetHarness]:
   # Local imports
+  # First party imports
   from tests.e2e.sheet import SheetHarness
 
   harness = SheetHarness(PERSISTED_DIR / "secrets" / "db-key.json", os.environ["DATABASE_ID"])

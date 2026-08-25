@@ -1,12 +1,18 @@
 # Standard library imports
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 # Third party imports
 import pytest
 
+# First party imports
 # Local imports
 from tests.e2e import constants as C
 from tests.e2e.remote import FtpBox, SftpBox
+
+if TYPE_CHECKING:
+  # Standard library imports
+  from collections.abc import Callable
 
 
 @pytest.mark.parametrize(
@@ -16,7 +22,7 @@ from tests.e2e.remote import FtpBox, SftpBox
     pytest.param(lambda: SftpBox(C.SAS_HOST, C.SAS_PORT, C.SAS_USER, C.SAS_PASS), id="sftp"),
   ],
 )
-def test_box_roundtrip(box_factory):
+def test_box_roundtrip(box_factory: Callable[[], FtpBox | SftpBox]):
   folder = f"/probe-{uuid4().hex[:8]}/nested"
   with box_factory() as box:
     box.mkdirs(folder)

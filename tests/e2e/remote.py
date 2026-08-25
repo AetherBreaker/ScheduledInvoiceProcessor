@@ -27,7 +27,7 @@ class FtpBox:
   def __exit__(self, *exc: object) -> None:
     try:
       self.ftp.quit()
-    except Exception:
+    except Exception:  # noqa: BLE001 fall back to a hard close on any quit() failure
       self.ftp.close()
 
   def exists(self, path: str) -> bool:

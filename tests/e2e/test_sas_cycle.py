@@ -1,15 +1,21 @@
 # Standard library imports
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 # Third party imports
 import pytest
 
+# First party imports
 # Local imports
 from tests.e2e import constants as C
 from tests.e2e.cycle import assert_log_has_full_trail, run_sas_cycle
 from tests.e2e.generator import now_eastern, sas_file
-from tests.e2e.remote import FtpBox, SftpBox
-from tests.e2e.sheet import SheetHarness
+
+if TYPE_CHECKING:
+  # Local imports
+  # First party imports
+  from tests.e2e.remote import FtpBox, SftpBox
+  from tests.e2e.sheet import SheetHarness
 
 pytestmark = pytest.mark.usefixtures("clean_remote", "reset_processor_singletons")
 
@@ -32,7 +38,7 @@ async def test_sas_cycle(sheet: SheetHarness, sas_box: SftpBox, sft_box: FtpBox)
 
   # --- assert: files ---
   vendor_now = sas_box.listdir(C.SAS_PICKUP_DIR)
-  for store, name in uploaded.items():
+  for name in uploaded.values():
     assert name in vendor_now, "vendor original must be untouched (__debug__ archive is simulated)"
     assert name not in sft_box.listdir(C.SFT_WAITING_SAS), f"{name} should have left /Testing/Waiting/SAS"
     assert name not in sft_box.listdir(C.SFT_PROCESSED_SAS), f"{name} should have left /Testing/Processed/SAS"

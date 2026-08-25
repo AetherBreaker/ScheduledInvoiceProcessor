@@ -1,6 +1,14 @@
+# Standard library imports
+from typing import TYPE_CHECKING
+
+# First party imports
 # Local imports
 from tests.e2e import constants as C
-from tests.e2e.sheet import SheetHarness
+
+if TYPE_CHECKING:
+  # Local imports
+  # First party imports
+  from tests.e2e.sheet import SheetHarness
 
 
 def test_seed_read_delete_roundtrip(sheet: SheetHarness):
