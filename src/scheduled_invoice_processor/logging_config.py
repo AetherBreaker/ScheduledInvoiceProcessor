@@ -86,7 +86,11 @@ def add_log_context[**TP, TR](
 
       log_file_loc = log_loc_final / f"{identifier}.txt"
 
-      with set_ctx_var_identifier.set(identifier), set_ctx_var_log_loc.set(log_file_loc):
+      with (
+        set_ctx_var_identifier.set(identifier),
+        set_ctx_var_log_loc.set(log_file_loc),
+        self_obj.ctx_var_container.set(type(self_obj).__name__),
+      ):
         logger = logging.getLogger(func.__module__)
         adapted_logger = logging.LoggerAdapter(
           logging.getLogger(func.__module__), extra={"ctx": set_ctx_var_identifier}, merge_extra=True

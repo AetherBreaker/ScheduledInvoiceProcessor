@@ -81,10 +81,10 @@ grace-period discussion the same night — it measured the wave against the wron
 - `main()`'s code after `await SHUTDOWN` is bounded only by **Docker's stop grace**, which we control:
   Coolify compose → `stop_grace_period: 30s`; Dockerfile/Nixpacks app → *Custom Docker Run Options*
   `--stop-timeout 30` (baked into the container config, so Coolify's plain `docker stop` honours it).
-  `STOPSIGNAL` cannot set the timeout. Rolling updates overlap two instances for at most the grace period;
-  jobs fire on fixed minute offsets every 10 min, and a doubled wave is idempotent (same destination
-  paths, same checkbox), so a 20–30 s overlap is acceptable; disabling rolling updates for this
-  single-instance service is the zero-thought alternative.
+  `STOPSIGNAL` cannot set the timeout. Rolling updates are **not** a factor: Coolify disables them
+  automatically for compose-deployed services (confirmed 2026-08-25), so there is never a second instance
+  overlapping the grace period. (Coolify's UI also exposes a stop-grace field; the compose value is the
+  versioned source of truth and the UI field is left blank -- verify with `docker inspect` → `StopTimeout`.)
 
 Two candidate shapes for the discussion:
 
@@ -121,8 +121,7 @@ Facts relevant to either shape:
 - The unit suite (`tests/unit`, network-free bootstrap) can host a shutdown test that fakes `SHUTDOWN.kind`
   and stubs the executor; the e2e suite remains the acceptance gate.
 
-Open questions for the discussion: (a) wait ceiling — 20 s vs `ceil(files/16)`-aware; (b) rolling updates
-on or off for this service; (c) whether FATAL should also wait a short bounded time (the argument against:
+Open questions for the discussion: (a) wait ceiling — 20 s vs `ceil(files/16)`-aware; (b) ~~rolling updates~~ (resolved: off automatically for compose deploys); (c) whether FATAL should also wait a short bounded time (the argument against:
 the failing job is usually the one in flight); (d) keep `run_app()` exit-code mapping in `__main__` or in
 `main()`.
 

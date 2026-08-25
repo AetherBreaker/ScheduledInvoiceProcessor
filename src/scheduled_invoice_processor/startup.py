@@ -1,8 +1,9 @@
 # Standard library imports
-from asyncio import CancelledError, create_task
+from asyncio import CancelledError, create_task, gather, run
 from contextlib import suppress
 from datetime import datetime
 from logging import INFO, WARNING, getLogger
+from sys import exit as sys_exit
 from typing import TYPE_CHECKING
 
 # Third party imports
@@ -12,13 +13,13 @@ from dateutil.relativedelta import SA, relativedelta
 from rich import get_console
 
 # First party imports
-from aeth_ext.errors.shutdown import SHUTDOWN, SHUTDOWN_COMPLETE, ShutdownKind
+from aeth_ext.errors.shutdown import SHUTDOWN, SHUTDOWN_COMPLETE, ShutdownKind, get_current_fatal_trails
 from aeth_ext.monitoring import run_heartbeat_async, send_heartbeat
 from aeth_ext.rich.progress import Progress
 from scheduled_invoice_processor.database import DatabaseCache
 from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
 from scheduled_invoice_processor.scheduler_config import OrderProcessingScheduler
-from scheduled_invoice_processor.shutdown_hooks import register_shutdown_hooks
+from scheduled_invoice_processor.shutdown_hooks import register_shutdown_hooks, trail_is_database_origin
 from scheduled_invoice_processor.suppliers.ryo import RYOProcessor
 from scheduled_invoice_processor.suppliers.sas import SASProcessor
 from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseScheduleColumns
@@ -272,6 +273,23 @@ def exit_code_for_shutdown(kind: ShutdownKind) -> int:
   return 1 if kind >= ShutdownKind.FATAL else 0
 
 
+def run_until_shutdown() -> None:
+  """Run `main()` to completion and exit the interpreter with a code that reflects how the app stopped.
+
+  Interim owner of the exit code: aeth_ext knows `SHUTDOWN.kind` and already owns the exit path, so mapping kind
+  to exit status belongs upstream (tracked in aeth_ext's TODO); until that lands it lives here rather than in
+  `__main__`, which stays import-light so `initialize()` runs as early as possible."""
+  try:
+    run(main())
+  except KeyboardInterrupt:
+    # aeth_ext's exit nudge (simulated SIGINT). Normally main() returns on its own after awaiting
+    # SHUTDOWN_COMPLETE and the nudge is skipped; it lands here only if main()'s tail *or* asyncio's own
+    # close (joining in-flight FTP threads) outran the shutdown budget. Not an error either way; the kind
+    # below says how we stopped.
+    pass
+  sys_exit(exit_code_for_shutdown(SHUTDOWN.kind))
+
+
 async def main() -> None:
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
 
@@ -365,10 +383,18 @@ async def main() -> None:
     periodic_heartbeat_task.cancel()
     with suppress(CancelledError):
       await periodic_heartbeat_task
+    # `shutdown(wait=False)` cancels the in-flight job tasks but returns before they have actually stopped;
+    # await the snapshot so every job has run its cancellation (the commit blocks are cancellation-safe by
+    # construction) before the catch-up flush below. `return_exceptions` because the expected result of each
+    # is CancelledError.
+    in_flight = scheduler.in_flight_jobs()
     try:
       scheduler.shutdown(wait=False)
     except Exception:
       logger.exception("Shutdown: failed to stop the scheduler cleanly")
+    if in_flight:
+      logger.warning("Shutdown: waiting for %d in-flight job(s) to stop", len(in_flight))
+      await gather(*in_flight, return_exceptions=True)
 
     # aeth_ext 8.0.1 lifecycle: wait for the threaded pass to finish before returning, so the required
     # Sheets flush can never race interpreter exit. Awaiting also declares "a tail follows", which makes
@@ -381,6 +407,18 @@ async def main() -> None:
     # Deliberately unbounded (Phase 2 parked for at most 20 s): a wedged required flush hangs here until
     # Docker's 30 s grace, exactly as aeth_ext's own exit-time join would.
     await SHUTDOWN_COMPLETE
+
+    # Catch-up flush. The required shutdown callback flushed the sheet on the shutdown thread, but a job that was
+    # mid-commit when the shutdown was requested may have ticked a checkbox *after* that flush and then popped
+    # its queue entry; every job has now stopped (awaited above), so anything still queued here would otherwise
+    # be lost with the process. Same database-origin gate as the callback.
+    if any(trail_is_database_origin(trail) for trail in get_current_fatal_trails()):
+      logger.warning("Shutdown: skipping catch-up Google Sheets flush because a fatal error originated in the database interface")
+    else:
+      try:
+        await cache.submit_queued_writes_to_pool()
+      except Exception:
+        logger.exception("Shutdown: catch-up Google Sheets flush failed")
 
 
 async def _run_debug_code(cache: DatabaseCache) -> None:

@@ -8,7 +8,6 @@ import atexit
 import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-from ftplib import error_perm
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
@@ -25,26 +24,38 @@ from scheduled_invoice_processor.suppliers.sas import SASProcessor
 
 if TYPE_CHECKING:
   # Standard library imports
-  from collections.abc import Generator
+  from collections.abc import Generator, Iterator
 
   # First party imports
   from aeth_ext.rich.progress import Progress
 
 
 class _FakeClient:
-  """`get_size` answers from `sizes` and raises FileNotFoundError for anything else.
+  """`sizes` is the remote filesystem: `get_size` answers from it and raises FileNotFoundError for anything else;
+  `listdir(folder)` yields the entries whose parent is `folder`.
 
-  A `sizes` value may be an exception instance, which is raised instead of returned -- used to drive the
-  source-probe error paths of `_already_moved`.
+  A `sizes` value may be an exception instance, which `get_size` raises instead of returning. `fail_listdir`
+  makes every listing raise, to drive the source-probe error path of `_already_moved`.
 
   `rename` raises OSError unless `fail_rename` is False, in which case it succeeds and is merely recorded.
   """
 
-  def __init__(self, sizes: dict[str, int | BaseException], fail_rename: bool = True) -> None:
+  def __init__(self, sizes: dict[str, int | BaseException], fail_rename: bool = True, fail_listdir: bool = False) -> None:
     self.sizes = sizes
     self.fail_rename = fail_rename
+    self.fail_listdir = fail_listdir
     self.renames: list[tuple[str, str]] = []
     self.get_size_calls: list[str] = []
+    self.listdir_calls: list[str] = []
+
+  def listdir(self, path: str) -> Iterator[SimpleNamespace]:
+    self.listdir_calls.append(path)
+    if self.fail_listdir:
+      raise OSError("listing failed")
+    for remote in self.sizes:
+      remote_path = PurePosixPath(remote)
+      if remote_path.parent.as_posix() == path:
+        yield SimpleNamespace(filename=remote_path.name)
 
   def rename(self, old: str, new: str) -> None:
     self.renames.append((old, new))
@@ -127,9 +138,9 @@ _MOVE_FILES_TASK = TaskID(0, cast("Progress", SimpleNamespace(remove_task=lambda
 
 
 def _run(
-  processor: SASProcessor, sizes: dict[str, int | BaseException], fail_rename: bool = True
+  processor: SASProcessor, sizes: dict[str, int | BaseException], fail_rename: bool = True, fail_listdir: bool = False
 ) -> tuple[FileRegisterData, _FakeClient, bool]:
-  client = _FakeClient(sizes, fail_rename=fail_rename)
+  client = _FakeClient(sizes, fail_rename=fail_rename, fail_listdir=fail_listdir)
   processor.__class__.waiting_ftp = _FakePool(client)  # type: ignore[assignment]
   meta = _meta()
   result = processor._transfer_file_main_to_main(
@@ -153,6 +164,7 @@ def test_rename_succeeds_is_reported_as_success(processor: SASProcessor) -> None
   assert meta.preprocess_success == {0: True}
   assert client.renames == [(SEND.as_posix(), RECV.as_posix())]
   assert client.get_size_calls == [RECV.as_posix()]
+  assert client.listdir_calls == []
   assert result is True
 
 
@@ -164,6 +176,9 @@ def test_already_moved_counts_as_success(processor: SASProcessor) -> None:
     SASProcessor.waiting_ftp = original_pool
   assert meta.preprocess_success == {0: True}
   assert client.renames == [(SEND.as_posix(), RECV.as_posix())]
+  # The source is proven absent by listing its folder, never by interpreting a SIZE reply code.
+  assert client.get_size_calls == [RECV.as_posix()]
+  assert client.listdir_calls == [SEND.parent.as_posix()]
   assert result is True
 
 
@@ -197,24 +212,17 @@ def test_empty_destination_is_a_failure(processor: SASProcessor) -> None:
   assert result is False
 
 
-def test_source_probe_permission_error_is_not_absence(processor: SASProcessor) -> None:
+def test_source_listing_failure_is_not_absence(processor: SASProcessor) -> None:
+  """A folder we cannot list says nothing about whether the source is gone (FTP's 550 covers both "no such
+  file" and "permission denied"), so the move is not treated as done."""
   original_pool = SASProcessor.waiting_ftp
   try:
-    meta, _, result = _run(processor, {RECV.as_posix(): 128, SEND.as_posix(): PermissionError("permission denied")})
+    meta, client, result = _run(processor, {RECV.as_posix(): 128}, fail_listdir=True)
   finally:
     SASProcessor.waiting_ftp = original_pool
+  assert client.listdir_calls == [SEND.parent.as_posix()]
   assert meta.preprocess_success == {0: False}
   assert result is False
-
-
-def test_source_probe_550_perm_error_is_absence(processor: SASProcessor) -> None:
-  original_pool = SASProcessor.waiting_ftp
-  try:
-    meta, _, result = _run(processor, {RECV.as_posix(): 128, SEND.as_posix(): error_perm("550 No such file")})
-  finally:
-    SASProcessor.waiting_ftp = original_pool
-  assert meta.preprocess_success == {0: True}
-  assert result is True
 
 
 @pytest.mark.parametrize(

@@ -1,8 +1,13 @@
-"""Credential loaders: one per vendor module, returning aeth_ext value objects with the password wrapped."""
+"""Each pool is built straight from its JSON secrets file, with the password wrapped in a `SecretStr` and no
+plaintext copy left on any processor class."""
+
+# The pools keep their credentials on a private connector; reading them back is the point of these tests.
+# pyright: reportPrivateUsage=false
 
 # Standard library imports
 import importlib
 import json
+from typing import Any
 
 # Third party imports
 import pytest
@@ -11,12 +16,16 @@ import pytest
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
 
 
+def _credentials(pool: Any) -> Any:
+  return pool._connector._credentials
+
+
 def test_sft_credentials_match_json() -> None:
   # First party imports
-  from scheduled_invoice_processor.suppliers import load_sft_credentials
+  from scheduled_invoice_processor.suppliers import SupplierProcessorBase
 
   raw = json.loads(SETTINGS.sft_website_creds_file.read_text())
-  creds = load_sft_credentials()
+  creds = _credentials(SupplierProcessorBase.waiting_ftp)
   assert (creds.host, creds.username, creds.port) == (raw["HOST"], raw["USER"], int(raw["PORT"]))
   assert creds.password.get_secret_value() == raw["PWD"]
   assert raw["PWD"] not in repr(creds)
@@ -25,10 +34,10 @@ def test_sft_credentials_match_json() -> None:
 
 def test_sas_credentials_match_json() -> None:
   # First party imports
-  from scheduled_invoice_processor.suppliers.sas import load_credentials
+  from scheduled_invoice_processor.suppliers.sas import SASProcessor
 
   raw = json.loads(SETTINGS.sas_ftp_creds_file.read_text())
-  creds = load_credentials()
+  creds = _credentials(SASProcessor.vendor_ftp)
   assert (creds.host, creds.username, creds.port) == (raw["HOSTNAME"], raw["USER"], int(raw.get("PORT", 22)))
   assert creds.password is not None
   assert creds.password.get_secret_value() == raw["PWD"]
@@ -38,10 +47,10 @@ def test_sas_credentials_match_json() -> None:
 
 def test_ryo_credentials_match_json() -> None:
   # First party imports
-  from scheduled_invoice_processor.suppliers.ryo import load_credentials
+  from scheduled_invoice_processor.suppliers.ryo import RYOProcessor
 
   raw = json.loads(SETTINGS.ryo_ftp_creds_file.read_text())
-  creds = load_credentials()
+  creds = _credentials(RYOProcessor.vendor_ftp)
   assert (creds.host, creds.username, creds.port) == (raw["HOSTNAME"], raw["USER"], int(raw.get("PORT", 22)))
   assert creds.password is not None
   assert creds.password.get_secret_value() == raw["PWD"]
@@ -70,6 +79,7 @@ def test_plaintext_credential_attributes_are_gone() -> None:
   for cls in (SupplierProcessorBase, SASProcessor, RYOProcessor, CoremarkProcessor):
     assert not hasattr(cls, "pickup_ftp_creds")
     assert not hasattr(cls, "creds")
+    assert "_raw" not in cls.__dict__, "the raw credential dict must be deleted from the class namespace"
 
 
 def test_ftp_configs_module_is_gone() -> None:

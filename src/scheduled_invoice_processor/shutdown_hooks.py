@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 
 # First party imports
 from aeth_ext.errors.shutdown import ShutdownPhase, register_for_shutdown
-from scheduled_invoice_processor.database import trail_is_database_origin
 
 if TYPE_CHECKING:
   # First party imports
@@ -33,6 +32,27 @@ FREEZE_SCHEDULER_PRIORITY = -10
 """Runs first: no new job may start while the sheet is being flushed."""
 
 FINAL_SHEETS_FLUSH_PRIORITY = 0
+
+DATABASE_ORIGIN_PATTERNS: tuple[str, ...] = ("scheduled_invoice_processor.database", "**.gspread.**", "**.google.oauth2.**")
+"""Dot-segment globs (see `ExceptionTrail.matches`) for "the fatal error came from the Google Sheets layer": the
+database module, gspread, or the google-auth credentials stack. A fatal error from any of these means a final flush
+of queued writes would only fail again, so both the shutdown callback and `startup.main()`'s tail skip it."""
+
+
+def trail_is_database_origin(trail: ExceptionTrail) -> bool:
+  """Whether any module on *trail* (origin-first, causes/contexts included) is part of the database layer."""
+  return bool(trail.matches(*DATABASE_ORIGIN_PATTERNS))
+
+
+def has_queued_sheet_writes(cache: DatabaseCache) -> bool:
+  """Reads the queued flags without `_db_write_queue_lock`; benign -- `api_write` re-checks them under the lock, so a
+  racing enqueue at worst costs one extra no-op call."""
+  return bool(
+    cache.queued_values_raw_updates
+    or cache.queued_values_user_entered_updates
+    or cache.queued_before_write_update_requests
+    or cache.queued_after_write_update_requests
+  )
 
 
 def freeze_scheduler(scheduler: OrderProcessingScheduler) -> ShutdownCallback:
@@ -51,7 +71,8 @@ def freeze_scheduler(scheduler: OrderProcessingScheduler) -> ShutdownCallback:
 
 def final_sheets_flush(cache: DatabaseCache) -> ShutdownCallback:
   """Write the in-memory Sheets update queue. Skipped when a fatal error originated inside the database interface
-  (A4): the write would only fail again."""
+  (A4): the write would only fail again. `api_write` is synchronous and safe from this thread: it takes `aiologic`
+  locks, which work from plain threads as well as coroutines."""
 
   def _flush(trails: tuple[ExceptionTrail, ...]) -> None:
     database_origin_trail = next((trail for trail in trails if trail_is_database_origin(trail)), None)
@@ -62,11 +83,12 @@ def final_sheets_flush(cache: DatabaseCache) -> ShutdownCallback:
         database_origin_trail.origin.file,
       )
       return
+    if not has_queued_sheet_writes(cache):
+      logger.info("Shutdown: no queued Google Sheets writes to flush")
+      return
     try:
-      if cache.flush_queued_writes():
-        logger.warning("Shutdown: final Google Sheets flush completed")
-      else:
-        logger.info("Shutdown: no queued Google Sheets writes to flush")
+      cache.api_write()
+      logger.warning("Shutdown: final Google Sheets flush completed")
     except Exception:
       logger.exception("Shutdown: final Google Sheets flush failed")
 

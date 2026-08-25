@@ -362,6 +362,42 @@ async def test_dropoff_ticks_invoice_applied_before_popping_the_entry(sas: SASPr
   check_box.assert_awaited_once()
 
 
+async def test_dropoff_pops_and_persists_after_every_tick_with_no_await_between(
+  sas: SASProcessor, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """All ticks are awaited first; then every popped entry and the ledger write happen in one synchronous stretch,
+  so a cancellation can never leave an in-memory pop unpersisted."""
+  sas._file_dropoff_queue["a"] = _meta("/Waiting/SAS/Processed")
+  sas._file_dropoff_queue["b"] = _meta("/Waiting/SAS/Processed")
+  events: list[str] = []
+
+  async def no_preprocess(*args: object, **kwargs: object) -> None:
+    pass
+
+  def fake_move(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
+    getattr(file_meta, success_attr)[idx] = True
+    return True
+
+  async def tick(*args: object, **kwargs: object) -> None:
+    events.append(f"tick:{sorted(sas._file_dropoff_queue)}")
+
+  real_persist = sas._persist_queues
+
+  def recording_persist() -> bool:
+    events.append(f"persist:{sorted(sas._file_dropoff_queue)}")
+    return real_persist()
+
+  monkeypatch.setattr(sas.cache.schedule, "check_box", AsyncMock(side_effect=tick))
+  monkeypatch.setattr(sas, "_preprocess_files", no_preprocess)
+  monkeypatch.setattr(sas, "_transfer_file_main_to_main", fake_move)
+  monkeypatch.setattr(sas, "_persist_queues", recording_persist)
+
+  await sas._dropoff_files()
+
+  # Both ticks saw both entries still queued; the single persist saw neither.
+  assert events == ["tick:['a', 'b']", "tick:['a', 'b']", "persist:[]"]
+
+
 # ---- Ledger promotion: a failed queue-backup write gates the vendor archive ----
 
 
