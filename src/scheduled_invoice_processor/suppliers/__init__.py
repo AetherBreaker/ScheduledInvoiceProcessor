@@ -2,6 +2,7 @@
 # pyright: reportUninitializedInstanceVariable=false
 # Standard library imports
 from asyncio import gather, to_thread
+from atexit import register as register_at_exit
 from copy import deepcopy
 from datetime import datetime
 from errno import EACCES
@@ -9,6 +10,7 @@ from ftplib import all_errors
 from io import BytesIO
 from json import loads
 from logging import Logger, getLogger
+from os import replace
 from time import sleep
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -143,6 +145,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self._load_queue_backups()
 
+    # Replaces __del__, which CPython does not guarantee to run for module-level singletons.
+    register_at_exit(self._persist_queues_at_exit)
+
     self.cache: DatabaseCache = DatabaseCache()
 
     self.__post_init__()
@@ -150,48 +155,39 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def __post_init__(self) -> None:
     pass
 
-  def __del__(self) -> None:
-    self._save_backups()
+  def _persist_queues(self) -> None:
+    """Write all four queues to their backup files, atomically per file.
 
-  async def save_queue_backups_off_thread(self) -> None:
-    await to_thread(self._save_backups)
+    Sync and lock-free by design: every caller either holds `self._lock` (the queue-mutating blocks) or is the
+    at-exit path. Each file is written to `<name>.tmp` and then `os.replace`d onto the real path, so a crash
+    mid-write leaves the previous backup intact and the loader's quarantine path only ever sees real corruption.
+    """
+    for backup_file, queue in (
+      (self.pickup_queue_backup_file, self._file_pickup_queue),
+      (self.preprocess_queue_backup_file, self._file_preprocess_queue),
+      (self.waiting_queue_backup_file, self._file_waiting_queue),
+      (self.dropoff_queue_backup_file, self._file_dropoff_queue),
+    ):
+      tmp_file = backup_file.with_name(f"{backup_file.name}.tmp")
+      tmp_file.write_bytes(self._queue_ta.dump_json(queue, indent=2, round_trip=True))
+      replace(tmp_file, backup_file)
 
-  def _save_backups(self) -> None:
+  def _persist_queues_at_exit(self) -> None:
+    """Final save at interpreter exit. Waits up to 1 s for the queue lock; if it is still held (a transfer was
+    mid-flight when the process was told to exit) the snapshot is written anyway — a possibly mid-mutation but
+    always parseable file beats losing the last change."""
+    acquired = self._lock.green_acquire(timeout=1.0)
+    if not acquired:
+      logger.warning(
+        "%s: queue lock still held at interpreter exit; persisting a possibly mid-mutation snapshot", self.__class__.__name__
+      )
     try:
-      with self._lock:
-        backup = (
-          (
-            self.pickup_queue_backup_file,
-            self._queue_ta.dump_json(self._file_pickup_queue, indent=2, round_trip=True),
-          ),
-          (
-            self.preprocess_queue_backup_file,
-            self._queue_ta.dump_json(self._file_preprocess_queue, indent=2, round_trip=True),
-          ),
-          (
-            self.waiting_queue_backup_file,
-            self._queue_ta.dump_json(self._file_waiting_queue, indent=2, round_trip=True),
-          ),
-          (
-            self.dropoff_queue_backup_file,
-            self._queue_ta.dump_json(self._file_dropoff_queue, indent=2, round_trip=True),
-          ),
-        )
-
-        # for _, bak in backup:
-        #   for k, v in bak.items():
-        #     v["file_pattern"] = v["file_pattern"].pattern
-        #     v["_waiting_folder"] = str(v["_waiting_folder"])
-        #     v["pickup_date"] = v["pickup_date"].isoformat()
-        #     v["dropoff_date"] = v["dropoff_date"].isoformat()
-
-        for file, data in backup:
-          with file.open("wb") as f:
-            f.write(data)
-    # Ensure that exceptions actually get logged while executing off main thread
-    except Exception as e:
-      logger.error("%s: Error saving queue backups: %s", self.__class__.__name__, exc_info=e)
-      raise
+      self._persist_queues()
+    except Exception:
+      logger.exception("%s: Error persisting queue backups at interpreter exit", self.__class__.__name__)
+    finally:
+      if acquired:
+        self._lock.green_release()
 
   def _load_queue_backups(self) -> None:
     # Note: Called during __init__, no need for lock protection
@@ -254,9 +250,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return
     async with self._lock:
       changed_entries = await self._clean_stale_queue_entries()
-
-    if changed_entries:
-      await to_thread(self._save_backups)
+      if changed_entries:
+        self._persist_queues()
 
   async def _clean_stale_queue_entries(self) -> int:
     # Note: Called during __init__, no need for lock protection
@@ -426,6 +421,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
           self._file_preprocess_queue.pop(key)
           self._file_dropoff_queue[key] = file_meta
 
+      self._persist_queues()
+
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_DROPPED_OFF, log_subfolder=LogActionEnum.FILE_DROPPED_OFF)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_DROPPED_OFF)
   async def _dropoff_files(
@@ -493,6 +490,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
           local_logger.info("%s: Checking off %s_%s invoice_applied", self.__class__.__name__, self.supplier_name, file_meta.storenum)
           await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_applied)
+
+      self._persist_queues()
 
   def _transfer_file_vend_to_main(  # noqa: PLR0917
     self,
@@ -745,6 +744,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     # Protect queue modification with lock for consistency
     async with self._lock:
       self._file_pickup_queue[queue_key] = register_data
+      self._persist_queues()
     local_logger.info("%s: Added %s to pickup queue", self.__class__.__name__, storenum)
 
     if log_action_handler is not None:
@@ -862,6 +862,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
       self._file_preprocess_queue[key] = matched_item
       local_logger.info("%s: %s: Registered dropoff for: %s", self.__class__.__name__, key, matched_item.storenum)
+      self._persist_queues()
 
   def assemble_queue_key(self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime) -> SupplierQueueKey:
     return f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
@@ -1133,7 +1134,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
       if self.pickup_archive_ftp_folder is not None:
         await gather(*archive_futures)
 
-    for key, item in items_to_advance.items():
-      self._file_waiting_queue[key] = item
-      self._file_pickup_queue.pop(key)
-      local_logger.info("%s: %s: Moved %s to waiting queue", self.__class__.__name__, key, item.storenum)
+      for key, item in items_to_advance.items():
+        self._file_waiting_queue[key] = item
+        self._file_pickup_queue.pop(key)
+        local_logger.info("%s: %s: Moved %s to waiting queue", self.__class__.__name__, key, item.storenum)
+
+      self._persist_queues()

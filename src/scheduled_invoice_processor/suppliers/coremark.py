@@ -185,6 +185,7 @@ class CoremarkProcessor(SupplierProcessorBase):
       # Update the queues with the new file meta
       self._file_dropoff_queue[key] = new_file_meta
       old_file_meta = self._file_preprocess_queue.pop(key)
+      self._persist_queues()  # the event-loop caller of this worker holds self._lock for the whole preprocess step
       local_logger.info("%s: %s: Updated queues", self.__class__.__name__, key)
 
       # Then we clean up the old invoice files left on the remote waiting folder
