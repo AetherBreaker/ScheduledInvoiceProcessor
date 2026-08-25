@@ -38,6 +38,83 @@ verified against aeth_ext 8.0.0 source. Resolutions, in the order the questions 
 - **Drag race**: baseline on 6.3.1 = 5.35 s mean per file (7 files, real RYO server, testing folders);
   after-run is the last plan task with the same harness (`scripts/benchmarks/dragrace_ryo.py`).
 
+## Phase 1 outcome and Phase 2 inputs (2026-08-25, for the A3 decision discussion)
+
+Phase 1 is complete on `chore/update-to-aeth-ext-v8` (PR #10, head `9d744aa` + this doc commit; **not
+merged** — Jacob reviews). Plan: `docs/superpowers/plans/2026-08-25-aeth-ext-v8-migration-phase1.md`.
+Both suites green locally (unit 21/21, e2e 10/10); CI runs unit + e2e on the PR.
+
+### Drag race results (real RYO server, testing folders, same 7 current-week files both runs)
+
+| Metric | 6.3.1 (before) | 8.0.0 (after) | Δ |
+|---|---|---|---|
+| per-file transfer, mean | 5.35 s | **4.68 s** | −12.5 % |
+| per-file transfer, max | 5.45 s | 5.34 s | −2 % |
+| `pickup_files` (one 7-file wave incl. listdir + checkbox) | 10.8 s | **10.1 s** | −7 % |
+| `dropoff_files` (preprocess renames + dropoff renames) | 24.0 s | **3.4 s** | −86 % |
+| whole cycle | 40.5 s | **19.7 s** | −51 % |
+
+Raw: `scripts/benchmarks/dragrace_before.json`, `dragrace_after.json`. Reading: per-file time is dominated
+by the vendor SFTP's per-transfer cost (open + stream + close on Bitvise), which pooling cannot remove; the
+holding-FTP renames were paying a connect/login per file and now don't. A wave scales with
+`ceil(files / 16)` × ~5 s; the day of the run had 22 files in `/RYOtoSFT`, 7 of which matched orders.
+
+### The decision to make (A3)
+
+The Phase 1 spec's "Phase 2 — deferred" section sketches A3 as two THREADED `register_for_shutdown`
+callbacks and records the gate outcome as "a wave (10.1 s) cannot finish inside aeth_ext's 7 s GRACEFUL
+budget → abandon in-flight FTP, rely on A2". **That framing is under reconsideration** after the Docker
+grace-period discussion the same night — it measured the wave against the wrong budget:
+
+- aeth_ext's 7 s / 1 s / 0 s budgets bound the **THREADED callback phase** only (fixed, not configurable).
+- `main()`'s code after `await SHUTDOWN` is bounded only by **Docker's stop grace**, which we control:
+  Coolify compose → `stop_grace_period: 30s`; Dockerfile/Nixpacks app → *Custom Docker Run Options*
+  `--stop-timeout 30` (baked into the container config, so Coolify's plain `docker stop` honours it).
+  `STOPSIGNAL` cannot set the timeout. Rolling updates overlap two instances for at most the grace period;
+  jobs fire on fixed minute offsets every 10 min, and a doubled wave is idempotent (same destination
+  paths, same checkbox), so a 20–30 s overlap is acceptable; disabling rolling updates for this
+  single-instance service is the zero-thought alternative.
+
+Two candidate shapes for the discussion:
+
+1. **Spec sketch (callbacks):** `main()` returns after `await SHUTDOWN`; `run_app()` exits 1 when
+   `SHUTDOWN.kind >= FATAL`; `_freeze_scheduler` (priority −10) and `_final_sheets_flush` (priority 0,
+   `required=True`, new sync `DatabaseCache.flush_queued_writes()`); in-flight jobs orphaned.
+2. **Controller's recommendation (sequential in `main()`), written 2026-08-25 ~02:30:**
+   `kind = SHUTDOWN.kind; scheduler.pause()`; if GRACEFUL, `await asyncio.wait(executor._pending_futures,
+   timeout≈20)` so the in-flight wave runs its post-`gather` bookkeeping (queue moves, checkbox, vendor
+   archive, A2 persist); if `kind < FORCED` and no database-origin fatal trail, `await
+   cache.submit_queued_writes_to_pool()` (existing method, no new sync flush); `scheduler.shutdown(wait=False)`;
+   `sys.exit(0 if GRACEFUL else 1)`. No app-level `register_for_shutdown` callbacks (the pools' own teardown
+   stays aeth_ext's). `sleep(600)` and the `.errored` heuristic are deleted. Docker `--stop-timeout 30`
+   (20 s wait + ~1 s flush + 7 s pool teardown). Rationale: ordering wave → persist → flush is only
+   guaranteed sequentially; the 7 s callback budget can't hold a wait; idle shutdowns return instantly.
+
+Facts relevant to either shape:
+
+- **Known regression already on the branch** (found by the Phase 1 final review): pre-plan commit `fba740f`
+  replaced `await FATAL_EVENT` with `await SHUTDOWN`, which resolves on *every* `ShutdownKind`. With
+  `aeth_ext.initialize()`'s SIGTERM handler active (production `-O` builds only; no-op under `__debug__`),
+  `docker stop` today runs the post-shutdown block as if fatal: `sleep(600)` if any processor is
+  `.errored`, "Fatal shutdown" warnings, `sys.exit(1)`. Deliberately not patched in Phase 1; nothing deploys
+  on v8 until the Dockerfile bump, so A3 must land before that bump.
+- What a hard kill loses today: in-flight `to_thread` transfers actually complete (Python joins the default
+  executor's workers at interpreter exit), but the code after `await gather(...)` in
+  `_pickup_files`/`_dropoff_files` never runs, so the persisted queue (A2) still says "not picked up" and
+  the next boot redoes the wave — idempotent, just wasted work. The bounded wait is what turns that into a
+  clean stop.
+- `CustomAsyncIOExecutor._pending_futures` (`scheduler_config.py`) already tracks every running job, so the
+  wait needs no new state. A2 means queue state is durable the moment a job finishes.
+- `database.trail_is_database_origin` / `DATABASE_ORIGIN_PATTERNS` (Phase 1, A4) is the flush gate in
+  either shape.
+- The unit suite (`tests/unit`, network-free bootstrap) can host a shutdown test that fakes `SHUTDOWN.kind`
+  and stubs the executor; the e2e suite remains the acceptance gate.
+
+Open questions for the discussion: (a) wait ceiling — 20 s vs `ceil(files/16)`-aware; (b) rolling updates
+on or off for this service; (c) whether FATAL should also wait a short bounded time (the argument against:
+the failing job is usually the one in flight); (d) keep `run_app()` exit-code mapping in `__main__` or in
+`main()`.
+
 ## How this started
 
 A routine v7 upgrade turned up a real race condition: `startup.py::main()` drives its own

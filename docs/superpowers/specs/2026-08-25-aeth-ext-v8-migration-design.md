@@ -174,7 +174,10 @@ their own reviewed task and must not weaken assertions.
 - Phase 2 decision input: one concurrent wave (`pickup_files`, 7 files in parallel through the pool) took
   **10.1 s** against the 7 s GRACEFUL budget, and a single file alone takes ~4.7 s — an in-flight wave cannot
   be expected to finish inside the budget. The master plan's "abandon in-flight FTP, rely on A2" conclusion
-  stands as the default for the Phase 2 brainstorm; a bounded wait-for-wave is not worth building.
+  was recorded as the default for the Phase 2 brainstorm — **but see "Phase 1 outcome and Phase 2 inputs" in
+  `.claude/plans/2026-08-13-shutdown-and-ftp-master-plan.md` (same night):** the 7 s budget bounds only the
+  THREADED callback phase; `main()`'s post-`await SHUTDOWN` code is bounded by Docker's stop grace, which
+  can be set to 30 s, so a bounded wait-for-wave in `main()` is back on the table. Decision pending.
 - Running it needs the real credentials and writes to the testing sheet/holding tree — it is a manual
   task, not CI.
 
