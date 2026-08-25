@@ -142,6 +142,14 @@ locked design; it is re-litigated with the drag-race numbers in hand.
   callback (A2 covers it); orphaned in-flight jobs accepted unless the gate says otherwise.
 - Phase 2 gets its own spec under `docs/superpowers/specs/` and its own plan; the Phase 1 plan must not
   pre-empt any of it.
+- **Known regression carried into Phase 2 (found by the Phase 1 final review, 2026-08-25):** the pre-plan
+  commit `fba740f` replaced `await FATAL_EVENT` with `await SHUTDOWN`, which resolves on *every* `ShutdownKind`.
+  With `aeth_ext.initialize()`'s signal handlers active (production `-O` builds only; no-op under `__debug__`),
+  a `SIGTERM`/`docker stop` therefore runs the post-shutdown block as if fatal: up to `sleep(600)` when a
+  processor is `.errored`, "Fatal shutdown" warnings, and `sys.exit(1)`. Deliberately not patched in Phase 1
+  (the block is frozen "structurally as-is" and exit codes belong to Phase 2); nothing deploys on v8 until the
+  Dockerfile is bumped, so Phase 2 must resolve this before that bump. Minimal shape: branch on
+  `SHUTDOWN.kind >= ShutdownKind.FATAL`.
 
 ## e2e README cleanup
 
