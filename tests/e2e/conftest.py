@@ -77,6 +77,16 @@ def e2e_env() -> Path:
   return PERSISTED_DIR
 
 
+@pytest.fixture(scope="session", autouse=True)
+def app_monkey_patches(e2e_env: Path) -> None:
+  """Production installs the app's monkey patches via aeth_ext.initialize() in __main__; the e2e
+  process must install the same ones. Only the app-owned patch is applied here (no aeth_ext import)."""
+  # First party imports
+  from scheduled_invoice_processor.monkey_patches import Patches
+
+  Patches.patch_the_monkey()
+
+
 @pytest.fixture
 def sft_box() -> Iterator[FtpBox]:
   with FtpBox(C.SFT_HOST, C.SFT_PORT, C.SFT_USER, C.SFT_PASS) as box:
