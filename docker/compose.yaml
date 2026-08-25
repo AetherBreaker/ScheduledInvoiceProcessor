@@ -9,6 +9,9 @@ services:
         GIT_TAG: v2.3.2
         GIT_REPO: https://github.com/AetherBreaker/ScheduledInvoiceProcessor.git
     restart: no
+    # Shutdown = aeth_ext callbacks (<=7 s) + join of in-flight FTP threads (~5 s per vendor transfer)
+    # + atexit queue save. Docker's default 10 s can SIGKILL during the join and lose the final save.
+    stop_grace_period: 30s
     volumes:
       - type: bind
         source: /data/scheduled_invoice_processor_files
