@@ -1,5 +1,8 @@
 """Queue backups are written atomically on every change, and once more at interpreter exit."""
 
+# This file drives the private queues, locks and persistence hooks by design.
+# pyright: reportPrivateUsage=false
+
 # Standard library imports
 import atexit
 import json

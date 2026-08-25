@@ -1,5 +1,8 @@
 """A holding-FTP rename that already happened (e.g. before a stop mid-wave) is reported as success on re-run."""
 
+# This file tests a private method by design.
+# pyright: reportPrivateUsage=false
+
 # Standard library imports
 import atexit
 import re
@@ -8,7 +11,7 @@ from datetime import datetime, timedelta
 from ftplib import error_perm
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 # Third party imports
 import pytest
@@ -23,6 +26,9 @@ from scheduled_invoice_processor.suppliers.sas import SASProcessor
 if TYPE_CHECKING:
   # Standard library imports
   from collections.abc import Generator
+
+  # First party imports
+  from aeth_ext.rich.progress import Progress
 
 
 class _FakeClient:
@@ -110,7 +116,8 @@ def _meta() -> FileRegisterData:
 SEND = PurePosixPath("/Waiting/SAS/inv.txt")
 RECV = PurePosixPath("/Waiting/SAS/Processed/inv.txt")
 
-_MOVE_FILES_TASK = TaskID(0, SimpleNamespace(remove_task=lambda *args: None), remove=False)
+# TaskID only ever calls `prog_instance.remove_task`; a namespace with that one method stands in for Progress.
+_MOVE_FILES_TASK = TaskID(0, cast("Progress", SimpleNamespace(remove_task=lambda *args: None)), remove=False)
 
 
 def _run(

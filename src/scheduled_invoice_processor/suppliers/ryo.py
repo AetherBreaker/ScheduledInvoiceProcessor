@@ -246,16 +246,26 @@ class RYOProcessor(SupplierProcessorBase):
       with self._persist_lock:
         self._file_dropoff_queue[key] = new_file_meta
         old_file_meta = self._file_preprocess_queue.pop(key)
-        self._persist_queues()
+        persisted = self._persist_queues()
       local_logger.info("%s: %s: Updated queues", self.__class__.__name__, key)
 
-      # 3. Cleanup: archive the originals on the holding FTP, delete local copies.
-      for remote_file_loc in old_file_meta.remote_file_locs.values():
-        self._middle_archive_file(
-          source_folder=self.pre_processing_waiting_folder,
-          remote_file=remote_file_loc.name,
-          archive_folder=self.pre_processing_archive_folder,
-          adapted_logger=adapted_logger,
+      # 3. Cleanup: archive the originals on the holding FTP, delete local copies. Same gate as `_pickup_files`:
+      # if the backup could not be written, the on-disk ledger still says "preprocess", so the originals must
+      # stay where a re-run from that ledger would look for them.
+      if persisted:
+        for remote_file_loc in old_file_meta.remote_file_locs.values():
+          self._middle_archive_file(
+            source_folder=self.pre_processing_waiting_folder,
+            remote_file=remote_file_loc.name,
+            archive_folder=self.pre_processing_archive_folder,
+            adapted_logger=adapted_logger,
+          )
+      else:
+        local_logger.warning(
+          "%s: %s: queue backup could not be persisted; leaving the original files in %s un-archived",
+          self.__class__.__name__,
+          key,
+          self.pre_processing_waiting_folder,
         )
 
       for local_file_loc in (*old_file_meta.local_copy_loc.values(), *new_file_meta.local_copy_loc.values()):

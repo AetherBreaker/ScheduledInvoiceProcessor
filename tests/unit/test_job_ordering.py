@@ -1,6 +1,9 @@
 """Queue transitions are committed after the remote side effect they describe and before any cleanup a re-run
 would need (spec §3, findings F1/F3/F7)."""
 
+# This file drives the private job methods and queues by design.
+# pyright: reportPrivateUsage=false
+
 # Standard library imports
 import atexit
 import re
@@ -8,7 +11,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock
 
 # Third party imports
@@ -24,7 +27,10 @@ from scheduled_invoice_processor.suppliers.sas import SASProcessor
 
 if TYPE_CHECKING:
   # Standard library imports
-  from collections.abc import Iterator
+  from collections.abc import Generator
+
+  # First party imports
+  from scheduled_invoice_processor.suppliers import SupplierProcessorBase
 
 
 class _FakeClient:
@@ -50,7 +56,7 @@ class _FakePool:
     self.client = client
 
   @contextmanager
-  def start_session(self) -> Iterator[_FakeClient]:
+  def start_session(self) -> Generator[_FakeClient]:
     yield self.client
 
   def test_connection(self, logit: bool = False) -> bool:
@@ -59,7 +65,7 @@ class _FakePool:
 
 class _FakePbar:
   @contextmanager
-  def add_task(self, *args: object, **kwargs: object) -> Iterator[int]:
+  def add_task(self, *args: object, **kwargs: object) -> Generator[int]:
     yield 0
 
   def update(self, *args: object, **kwargs: object) -> None:
@@ -71,8 +77,26 @@ def _drop_singleton(cls: type) -> None:
     delattr(cls, "__shared_instance__")
 
 
+def _client(proc: SupplierProcessorBase) -> _FakeClient:
+  """The fixtures install one `_FakePool` (sharing one client) as both pools; the class attribute is typed as the
+  real adapter, so reach the fake through a cast."""
+  return cast("_FakePool", proc.waiting_ftp).client
+
+
+def _check_box(proc: SupplierProcessorBase) -> AsyncMock:
+  return cast("AsyncMock", proc.cache.schedule.check_box)
+
+
+def _fake_cache() -> Any:
+  return SimpleNamespace(
+    schedule=SimpleNamespace(check_box=AsyncMock()),
+    prev_week_schedule=SimpleNamespace(check_box=AsyncMock()),
+    order_log=SimpleNamespace(log_action=AsyncMock()),
+  )
+
+
 @pytest.fixture
-def sas(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[SASProcessor]:
+def sas(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[SASProcessor]:
   monkeypatch.setattr(suppliers_mod, "DatabaseCache", SimpleNamespace)
   monkeypatch.setattr(suppliers_mod, "HOLDING_FOLDER", tmp_path / "file_holding")
   monkeypatch.setattr(SASProcessor, "_file_queue_backup_folder", tmp_path / "queue_backups")
@@ -83,12 +107,8 @@ def sas(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[SASProcesso
   monkeypatch.setattr(SASProcessor, "vendor_ftp", _FakePool(client))
   _drop_singleton(SASProcessor)
   proc = SASProcessor()
-  proc.pbar = _FakePbar()  # type: ignore[assignment]
-  proc.cache = SimpleNamespace(  # type: ignore[assignment]
-    schedule=SimpleNamespace(check_box=AsyncMock()),
-    prev_week_schedule=SimpleNamespace(check_box=AsyncMock()),
-    order_log=SimpleNamespace(log_action=AsyncMock()),
-  )
+  proc.pbar = cast("Any", _FakePbar())
+  proc.cache = _fake_cache()
   yield proc
   atexit.unregister(proc._persist_queues_at_exit)
   _drop_singleton(SASProcessor)
@@ -129,7 +149,7 @@ async def test_dropoff_drains_when_only_dropoff_queue_is_populated(sas: SASProce
   await sas._dropoff_files()
 
   assert "k" not in sas._file_dropoff_queue
-  sas.cache.schedule.check_box.assert_awaited_once()
+  _check_box(sas).assert_awaited_once()
 
 
 # ---- F1: the pickup->waiting move is persisted before any vendor archive rename ----
@@ -140,8 +160,7 @@ async def test_pickup_persists_queue_move_before_vendor_archive(sas: SASProcesso
   meta = _meta("/Waiting/SAS")
   meta.pickup_success = {0: True, 1: True}  # stale flags from an earlier partial run (F6)
   sas._file_pickup_queue["k"] = meta
-  sas.waiting_ftp.client.listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
-  monkeypatch.setattr(SASProcessor, "pickup_archive_ftp_folder", PurePosixPath("/RYO/Archive"), raising=False)
+  _client(sas).listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
 
   def fake_copy(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
     events.append("copy")
@@ -167,7 +186,7 @@ async def test_pickup_persists_queue_move_before_vendor_archive(sas: SASProcesso
   assert events == ["copy", "persist", "archive"]
   assert "k" in sas._file_waiting_queue and "k" not in sas._file_pickup_queue
   assert meta.pickup_success == {0: True}, "stale success flags from a previous match must be cleared on re-match"
-  sas.cache.schedule.check_box.assert_awaited_once()
+  _check_box(sas).assert_awaited_once()
 
 
 async def test_pickup_does_not_advance_when_no_transfer_recorded_a_result(sas: SASProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -175,8 +194,7 @@ async def test_pickup_does_not_advance_when_no_transfer_recorded_a_result(sas: S
   meta = _meta("/Waiting/SAS")
   meta.pickup_success = {0: True, 1: True}  # stale flags from an earlier partial run (F6)
   sas._file_pickup_queue["k"] = meta
-  sas.waiting_ftp.client.listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
-  monkeypatch.setattr(SASProcessor, "pickup_archive_ftp_folder", PurePosixPath("/RYO/Archive"), raising=False)
+  _client(sas).listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
 
   def fake_copy(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
     # Simulates the `self.errored` early return in `_transfer_file_vend_to_main`: no flag is written.
@@ -199,7 +217,7 @@ async def test_pickup_does_not_advance_when_no_transfer_recorded_a_result(sas: S
 
   assert "k" in sas._file_pickup_queue
   assert "k" not in sas._file_waiting_queue
-  sas.cache.schedule.check_box.assert_not_awaited()
+  _check_box(sas).assert_not_awaited()
   assert "archive" not in events
 
 
@@ -207,7 +225,7 @@ async def test_pickup_does_not_advance_when_no_transfer_recorded_a_result(sas: S
 
 
 @pytest.fixture
-def ryo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[RYOProcessor]:
+def ryo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[RYOProcessor]:
   if not hasattr(Path, "without_cwd"):
     Patches.patch_the_monkey()
 
@@ -221,12 +239,8 @@ def ryo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[RYOProcesso
   monkeypatch.setattr(RYOProcessor, "vendor_ftp", _FakePool(client))
   _drop_singleton(RYOProcessor)
   proc = RYOProcessor()
-  proc.pbar = _FakePbar()  # type: ignore[assignment]
-  proc.cache = SimpleNamespace(  # type: ignore[assignment]
-    schedule=SimpleNamespace(check_box=AsyncMock()),
-    prev_week_schedule=SimpleNamespace(check_box=AsyncMock()),
-    order_log=SimpleNamespace(log_action=AsyncMock()),
-  )
+  proc.pbar = cast("Any", _FakePbar())
+  proc.cache = _fake_cache()
   yield proc
   atexit.unregister(proc._persist_queues_at_exit)
   _drop_singleton(RYOProcessor)
@@ -260,7 +274,7 @@ def test_preprocess_uploads_before_commit_and_archives_after(
     events.append("archive")
     assert "k" in ryo._file_dropoff_queue, "originals archived before the queue commit"
 
-  real_upload = ryo.waiting_ftp.client.upload_file
+  real_upload = _client(ryo).upload_file
 
   def recording_upload(remote_path: str, callback: Any, file_size: int, task_msg: str = "") -> None:
     events.append("upload")
@@ -274,14 +288,49 @@ def test_preprocess_uploads_before_commit_and_archives_after(
     return real_persist()
 
   monkeypatch.setattr(ryo, "_middle_archive_file", fake_archive)
-  monkeypatch.setattr(ryo.waiting_ftp.client, "upload_file", recording_upload)
+  monkeypatch.setattr(_client(ryo), "upload_file", recording_upload)
   monkeypatch.setattr(ryo, "_persist_queues", recording_persist)
 
   key, result = ryo._preprocess_off_thread("k", old)
 
   assert (key, result) == ("k", new)
   assert events == ["upload", "persist", "archive", "archive"]
-  assert ryo.waiting_ftp.client.uploads == [(ryo.post_processing_waiting_folder / "merged.txt").as_posix()]
+  assert _client(ryo).uploads == [(ryo.post_processing_waiting_folder / "merged.txt").as_posix()]
+  assert "k" in ryo._file_dropoff_queue and "k" not in ryo._file_preprocess_queue
+
+
+def test_preprocess_skips_original_archive_when_persist_fails(
+  ryo: RYOProcessor, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """Same gate as pickup: a queue backup that could not be written leaves the originals where the on-disk ledger
+  (still 'preprocess') would look for them on the next run."""
+  events: list[str] = []
+  old = _meta("/Waiting/RYO", {0: "inv-a.txt"})
+  ryo._file_preprocess_queue["k"] = old
+
+  merged_dir = tmp_path / "merged"
+  merged_dir.mkdir()
+  (merged_dir / "merged.txt").write_text("merged")
+  new = FileRegisterData(
+    storenum=old.storenum,
+    customer_id=old.customer_id,
+    pickup_date=old.pickup_date,
+    dropoff_date=old.dropoff_date,
+    file_pattern=old.file_pattern,
+    _current_week=True,
+    _waiting_folder=ryo.post_processing_waiting_folder,
+    _local_copy_folder=merged_dir,
+    file_names={0: "merged.txt"},
+  )
+  monkeypatch.setattr(ryo, "_create_new_merged_file", lambda key, old_file_meta, adapted_logger=None: new)
+  monkeypatch.setattr(ryo, "_middle_archive_file", lambda **kwargs: events.append("archive"))
+  monkeypatch.setattr(ryo, "_persist_queues", lambda: False)
+
+  key, result = ryo._preprocess_off_thread("k", old)
+
+  assert (key, result) == ("k", new)
+  assert "archive" not in events
+  assert _client(ryo).uploads == [(ryo.post_processing_waiting_folder / "merged.txt").as_posix()]
   assert "k" in ryo._file_dropoff_queue and "k" not in ryo._file_preprocess_queue
 
 
@@ -320,8 +369,7 @@ async def test_pickup_skips_vendor_archive_when_persist_fails(sas: SASProcessor,
   events: list[str] = []
   meta = _meta("/Waiting/SAS")
   sas._file_pickup_queue["k"] = meta
-  sas.waiting_ftp.client.listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
-  monkeypatch.setattr(SASProcessor, "pickup_archive_ftp_folder", PurePosixPath("/RYO/Archive"), raising=False)
+  _client(sas).listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
 
   def fake_copy(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
     getattr(file_meta, success_attr)[idx] = True

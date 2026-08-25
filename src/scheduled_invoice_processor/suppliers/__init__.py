@@ -58,6 +58,9 @@ TRANSIENT_TRANSFER_ERROR_STRINGS = (
   "server disconnected",
   "timed out",
   "timeout",
+  # FTP 425 "can't open data connection" -- passive-port exhaustion on the holding server under a parallel wave;
+  # the next attempt lands on a freed port.
+  "425",
   "broken pipe",
   "socket is closed",
   "eof",
@@ -648,6 +651,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     if self.errored:
       local_logger.warning("%s: Disabled due to error state. Skipping transfer of files within main FTP", self.__class__.__name__)
       getattr(file_meta, success_attr)[idx] = False
+      self.pbar.update(move_files_task, advance=1, refresh=True)
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.FAILURE, file_meta)
       return False
@@ -657,7 +661,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
         try:
           client.rename(send_path.as_posix(), recv_path.as_posix())
         except (*all_errors, OSError):
-          if self._already_moved(client, send_path, recv_path):
+          if self._already_moved(client, send_path, recv_path, local_logger):
             local_logger.info(
               "%s: [yellow]%s[/] was already moved to [yellow]%s[/] by an earlier run; treating as success",
               self.__class__.__name__,
@@ -698,14 +702,22 @@ class SupplierProcessorBase(metaclass=SingletonType):
         extra={"markup": True},
       )
       getattr(file_meta, success_attr)[idx] = False
+      # A failed move still consumes its slot in the task total, so the bar can reach 100 % on a partial wave.
+      self.pbar.update(move_files_task, advance=1, refresh=True)
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.FAILURE, file_meta)
     return success
 
   @staticmethod
-  def _already_moved(client: AdapterBase, send_path: PurePosixPath, recv_path: PurePosixPath) -> bool:
+  def _already_moved(
+    client: AdapterBase,
+    send_path: PurePosixPath,
+    recv_path: PurePosixPath,
+    adapted_logger: LoggerAdapter[Any] | Logger | None = None,
+  ) -> bool:
     """True only when the destination holds a non-empty file *and* the source is gone. A destination beside a
     still-present source is a genuine conflict and is never treated as done (nothing here ever overwrites)."""
+    local_logger = adapted_logger or logger
     try:
       recv_size = client.get_size(recv_path.as_posix())
     except (*all_errors, OSError):
@@ -721,7 +733,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       # a permission denial -- says nothing about whether the source still exists, so the move is not "done".
       if isinstance(exc, error_perm) and str(exc).startswith("550"):
         return True
-      logger.warning("could not confirm %s is gone (%s); not treating the move as done", send_path, exc)
+      local_logger.warning("could not confirm %s is gone (%s); not treating the move as done", send_path, exc)
     return False
 
   def assemble_filename_pattern(
