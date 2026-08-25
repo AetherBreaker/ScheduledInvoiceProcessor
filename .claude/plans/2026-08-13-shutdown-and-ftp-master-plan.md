@@ -10,9 +10,31 @@ adoption work (not yet started):
 - **Pillar B — FTP connection-pooling performance.**
 - **Pillar C — secret redaction (`SecretStr` credential typing).**
 
-This repo currently pins `aeth-ext[sftp, async]>=7.0.0` (`pyproject.toml`) and is mid-upgrade on branch
-`chore/update-to-aeth-ext-v7`. Everything below is what's still needed to move that pin to a real
+This repo's migration branch `chore/update-to-aeth-ext-v8` pins `aeth-ext[sftp, async]>=8.0.0` (`pyproject.toml`). Everything below is what's still needed to move that pin to a real
 `8.0.0` release and actually adopt what it ships, not just avoid breaking on import.
+
+## Decisions made 2026-08-25 (supersede the open questions below)
+
+The buildable design lives in `docs/superpowers/specs/2026-08-25-aeth-ext-v8-migration-design.md`,
+verified against aeth_ext 8.0.0 source. Resolutions, in the order the questions appear below:
+
+- **Pin**: this branch is on `>=8.0.0` (locked 8.0.0); `main` is capped `<7` and carries the e2e gate
+  suite (`tests/e2e`, PR #11, merged 2026-08-25). **PR #10 is never merged by an agent** — Jacob reviews.
+- **A2**: full atomic save (`.tmp` + `os.replace`) after every mutation, inline under the existing lock;
+  four files stay separate; cron job, `__del__` and `save_queue_backups_off_thread` removed.
+- **A3**: `main()` returns after `await SHUTDOWN`; teardown = two THREADED callbacks (freeze scheduler at
+  priority -10; required final Sheets flush via a new sync `DatabaseCache.flush_queued_writes()`).
+  `sleep(600)`/`.errored` heuristic dropped with no replacement. Orphaned in-flight jobs accepted.
+- **A4**: `err_handling.py` becomes `is_database_origin(trails)` over `ExceptionTrail.matches(...)`;
+  `_last_fatal_details`/`get_last_fatal_details` are deleted (their only consumer was the retired
+  `main()` block), not kept.
+- **B2**: like-for-like at call sites, real pool underneath (`create_ftp_adapter`, defaults). `ftp_configs.py`
+  is deleted; each vendor module owns its credentials loader; the SFT holding creds live in
+  `suppliers/__init__.py`. `SFTPCredentials(host_key_policy="auto_add")` to match today's `AutoAddPolicy`.
+- **C2**: satisfied by B2 (SecretStr value objects, raw dicts gone); `USER`/`HOSTNAME` not treated as secrets.
+- **Dockerfile**: **not touched** — stays pinned pre-v8 until deployment is ready (Jacob, 2026-08-25).
+- **Drag race**: baseline on 6.3.1 = 5.35 s mean per file (7 files, real RYO server, testing folders);
+  after-run is the last plan task with the same harness (`scripts/benchmarks/dragrace_ryo.py`).
 
 ## How this started
 
