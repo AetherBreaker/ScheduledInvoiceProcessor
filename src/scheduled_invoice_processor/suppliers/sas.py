@@ -10,11 +10,12 @@ from typing import TYPE_CHECKING, override
 # Third party imports
 from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
+from pydantic import SecretStr
 
 # First party imports
-from aeth_ext.ftp.adapter import AdaptedSFTP, FTPAdapter
+from aeth_ext.ftp import create_ftp_adapter
+from aeth_ext.ftp.credentials import SFTPCredentials
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
-from scheduled_invoice_processor.ftp_configs import SASSFTPClient
 from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
 
 # Local folder imports
@@ -30,8 +31,20 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
+def load_credentials() -> SFTPCredentials:
+  """SAS SFTP credentials (Files.com), read from `sas_ftp_creds.json`; the password is wrapped in a `SecretStr`."""
+  raw = loads(SETTINGS.sas_ftp_creds_file.read_text())
+  return SFTPCredentials(
+    host=raw["HOSTNAME"],
+    username=raw["USER"],
+    password=SecretStr(raw["PWD"]),
+    port=int(raw.get("PORT", 22)),
+    host_key_policy="auto_add",
+  )
+
+
 class SASProcessor(SupplierProcessorBase):
-  vendor_ftp: FTPAdapter[AdaptedSFTP] = FTPAdapter(SASSFTPClient, container_cls="SASProcessor")
+  vendor_ftp = create_ftp_adapter(load_credentials(), container_cls="SASProcessor")
 
   queue_backup_prefix: str = "sas"
 
@@ -45,8 +58,6 @@ class SASProcessor(SupplierProcessorBase):
     r"(?P<invoice_total>\d{9})"
     r"(?P<customer_num>\d{6})\s*$"
   )
-
-  pickup_ftp_creds: dict[str, str] = loads(SETTINGS.sas_ftp_creds_file.read_text())
 
   checks_date_in_filename = True
 

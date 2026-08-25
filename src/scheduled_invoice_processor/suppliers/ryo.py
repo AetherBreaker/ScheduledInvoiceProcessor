@@ -12,11 +12,12 @@ from typing import TYPE_CHECKING, override
 # Third party imports
 from dateutil.relativedelta import SA, SU, relativedelta
 from dateutil.rrule import DAILY, rrule
+from pydantic import SecretStr
 
 # First party imports
-from aeth_ext.ftp.adapter import AdaptedSFTP, FTPAdapter
+from aeth_ext.ftp import create_ftp_adapter
+from aeth_ext.ftp.credentials import SFTPCredentials
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
-from scheduled_invoice_processor.ftp_configs import RYOSFTPClient
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
@@ -42,8 +43,20 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
+def load_credentials() -> SFTPCredentials:
+  """RYO SFTP credentials (Bitvise), read from `ryo_ftp_creds.json`; the password is wrapped in a `SecretStr`."""
+  raw = loads(SETTINGS.ryo_ftp_creds_file.read_text())
+  return SFTPCredentials(
+    host=raw["HOSTNAME"],
+    username=raw["USER"],
+    password=SecretStr(raw["PWD"]),
+    port=int(raw.get("PORT", 22)),
+    host_key_policy="auto_add",
+  )
+
+
 class RYOProcessor(SupplierProcessorBase):
-  vendor_ftp: FTPAdapter[AdaptedSFTP] = FTPAdapter(RYOSFTPClient, container_cls="RYOProcessor")
+  vendor_ftp = create_ftp_adapter(load_credentials(), container_cls="RYOProcessor")
 
   queue_backup_prefix: str = "ryo"
 
@@ -58,8 +71,6 @@ class RYOProcessor(SupplierProcessorBase):
   file_name_format = "{customer_id}_{invoice_num}_{timestamp}.txt"
 
   supplier_name: SuppliersEnum = SuppliersEnum.RYO
-
-  pickup_ftp_creds: dict[str, str] = loads(SETTINGS.ryo_ftp_creds_file.read_text())
 
   checks_date_in_filename: bool = True
 
@@ -215,7 +226,6 @@ class RYOProcessor(SupplierProcessorBase):
       )
 
       # TODO Upload the original invoice files to a shared store specific google drive
-      ...
 
       # Update the queues with the new file meta
       self._file_dropoff_queue[key] = new_file_meta

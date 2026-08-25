@@ -33,15 +33,6 @@ The suite refuses to run within an hour of the Sunday 00:00 (US/Eastern) week fl
 
 ## Local-run quirks
 
-- The app's paramiko client auto-loads `~/.ssh` keys; SFTPGo drops the session after a failed
-  public-key attempt, so locally run pytest with an empty profile:
-
-  ```bash
-  mkdir -p .cache/e2e-home
-  USERPROFILE="$(pwd)/.cache/e2e-home" HOME="$(pwd)/.cache/e2e-home" uv run --frozen pytest tests/e2e -v --no-cov
-  ```
-
-  CI runners have no keys and don't need this.
 - `.env` values may be quoted; when extracting `E2E_*` from it, strip quotes and CRs, e.g.:
 
   ```bash

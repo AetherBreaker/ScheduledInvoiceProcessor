@@ -7,6 +7,7 @@ from datetime import datetime
 from errno import EACCES
 from ftplib import all_errors
 from io import BytesIO
+from json import loads
 from logging import Logger, getLogger
 from time import sleep
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -15,15 +16,15 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 from aiologic import Lock
 from dateutil.relativedelta import SA, SU, relativedelta
 from paramiko import SSHException
-from pydantic import TypeAdapter
+from pydantic import SecretStr, TypeAdapter
 
 # First party imports
 from aeth_ext.errors.send_alert_email import send_alert_email
-from aeth_ext.ftp.adapter import FTPAdapter
+from aeth_ext.ftp import create_ftp_adapter
+from aeth_ext.ftp.credentials import FTPCredentials
 from aeth_ext.types.abc import SingletonType
 from scheduled_invoice_processor.database import DatabaseCache
 from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
-from scheduled_invoice_processor.ftp_configs import SFTFTPClient
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
 from scheduled_invoice_processor.suppliers.log_action import log_actions
@@ -38,8 +39,9 @@ if TYPE_CHECKING:
   from re import Match, Pattern
 
   # First party imports
-  from aeth_ext.ftp.adapter import AdaptedFTP
-  from aeth_ext.ftp.types import AdapterProtocol
+  from aeth_ext.ftp.pool.ftp_adapter import FTPAdapter
+  from aeth_ext.ftp.pool.sftp_adapter import SFTPAdapter
+  from aeth_ext.ftp.session import AdapterBase
   from aeth_ext.rich.progress import Progress, TaskID
   from scheduled_invoice_processor.suppliers.log_action import LogActionHandlerType
   from scheduled_invoice_processor.typing_custom import CustomerID, StoreNum, SupplierQueueKey
@@ -62,6 +64,16 @@ TRANSIENT_TRANSFER_ERROR_STRINGS = (
 HOLDING_FOLDER = CWD / "file_holding"
 
 
+def load_sft_credentials() -> FTPCredentials:
+  """Credentials for the shared SFT holding FTP server (`waiting_ftp`), read from `sft_creds.json`.
+
+  The raw JSON never outlives this call: the password leaves here wrapped in a `SecretStr`, so nothing on the
+  processor classes holds a plaintext credential.
+  """
+  raw = loads(SETTINGS.sft_website_creds_file.read_text())
+  return FTPCredentials(host=raw["HOST"], username=raw["USER"], password=SecretStr(raw["PWD"]), port=int(raw.get("PORT", 21)))
+
+
 class SupplierProcessorBase(metaclass=SingletonType):
   _file_pickup_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_preprocess_queue: dict[SupplierQueueKey, FileRegisterData]
@@ -73,8 +85,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _transient_transfer_retries = 3
   _lock: Lock = Lock()
 
-  vendor_ftp: FTPAdapter
-  waiting_ftp: FTPAdapter[AdaptedFTP] = FTPAdapter(SFTFTPClient, container_cls="SupplierProcessorBase")
+  vendor_ftp: FTPAdapter | SFTPAdapter
+  waiting_ftp: FTPAdapter = create_ftp_adapter(load_sft_credentials(), container_cls="SupplierProcessorBase")
 
   queue_backup_prefix: str
 
@@ -111,7 +123,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     if pbar is not None:  # pyright: ignore[reportUnnecessaryComparison]
       self.waiting_ftp.pbar = pbar
-      if vendor_ftp := cast("FTPAdapter", getattr(self, "vendor_ftp", None)):
+      if vendor_ftp := cast("FTPAdapter | SFTPAdapter | None", getattr(self, "vendor_ftp", None)):
         vendor_ftp.pbar = pbar
 
     self._file_queue_backup_folder.mkdir(exist_ok=True, parents=True)
@@ -165,7 +177,6 @@ class SupplierProcessorBase(metaclass=SingletonType):
             self._queue_ta.dump_json(self._file_dropoff_queue, indent=2, round_trip=True),
           ),
         )
-        pass
 
         # for _, bak in backup:
         #   for k, v in bak.items():
@@ -857,7 +868,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   def _handle_existing_archive(  # noqa: PLR0917
     self,
-    client: AdapterProtocol,
+    client: AdapterBase,
     source_loc: str,
     archive_loc: str,
     archive_size: int | None,
@@ -1050,15 +1061,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
               matched_files.append(match)
             else:
               file_date = remote_file.modified_time
-              if file_date is not None:
-                start_date = (
-                  file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
-                ) - relativedelta(weeks=1 if file_meta.current_week else 0)
-                end_date = (
-                  file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
-                ) - relativedelta(weeks=0 if file_meta.current_week else 1)
-                if start_date <= file_date < end_date:
-                  matched_files.append(match)
+              start_date = (
+                file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
+              ) - relativedelta(weeks=1 if file_meta.current_week else 0)
+              end_date = (
+                file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
+              ) - relativedelta(weeks=0 if file_meta.current_week else 1)
+              if start_date <= file_date < end_date:
+                matched_files.append(match)
 
         if matched_files:
           file_meta.file_names = {idx: m.string for idx, m in enumerate(matched_files)}

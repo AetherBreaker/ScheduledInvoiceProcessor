@@ -32,7 +32,6 @@ def log_action_handler(
 ) -> None:
   """Handles logging of actions for a given supplier queue key, status, and file metadata."""
   items_to_log[queue_key] = (status, file_meta)
-  pass
 
 
 def log_actions[**TP, TR](
