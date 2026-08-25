@@ -435,7 +435,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       # Now that the transfers are complete, clear the items to log
 
       for key, file_meta in tuple(self._file_preprocess_queue.items()):
-        if all(file_meta.preprocess_success.values()):
+        if file_meta.preprocess_success and all(file_meta.preprocess_success.values()):
           file_meta._waiting_folder = self.post_processing_waiting_folder  # pyright: ignore[reportPrivateUsage]
           self._file_preprocess_queue.pop(key)
           self._file_dropoff_queue[key] = file_meta
@@ -503,7 +503,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       # Now that the transfers are complete, clear the items to log
 
       for key, file_meta in tuple(self._file_dropoff_queue.items()):
-        if all(file_meta.dropoff_success.values()):
+        if file_meta.dropoff_success and all(file_meta.dropoff_success.values()):
           self._file_dropoff_queue.pop(key)
           schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
 
@@ -1165,7 +1165,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       # on the next run; a stop before the commit re-runs the copies from intact inputs.
       items_to_advance: dict[str, FileRegisterData] = {}
       for key, file_meta in items_to_dl.items():
-        if all(file_meta.pickup_success.values()):
+        if file_meta.pickup_success and all(file_meta.pickup_success.values()):
           items_to_advance[key] = file_meta
           schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
           local_logger.info(
