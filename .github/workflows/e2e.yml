@@ -43,7 +43,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Run e2e suite
-        run: uv run pytest tests/e2e -v --no-cov
+        run: uv run --frozen pytest tests/e2e -v --no-cov
 
       - name: Server logs on failure
         if: failure()

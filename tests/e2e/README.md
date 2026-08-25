@@ -25,7 +25,7 @@ servers and the *testing* Google Sheet. Design: `docs/superpowers/specs/2026-08-
 export E2E_DB_KEY_JSON="$(cat path/to/db-key.json)"
 export E2E_DATABASE_ID=... E2E_DATABASE_BASE_SCHEDULE_ID=... E2E_DATABASE_ORDER_LOG_ID=...
 docker compose -f tests/docker/compose.yaml up -d --wait
-uv run pytest tests/e2e -v --no-cov
+uv run --frozen pytest tests/e2e -v --no-cov
 docker compose -f tests/docker/compose.yaml down -v
 ```
 
@@ -38,7 +38,7 @@ The suite refuses to run within an hour of the Sunday 00:00 (US/Eastern) week fl
 
   ```bash
   mkdir -p .cache/e2e-home
-  USERPROFILE="$(pwd)/.cache/e2e-home" HOME="$(pwd)/.cache/e2e-home" uv run pytest tests/e2e -v --no-cov
+  USERPROFILE="$(pwd)/.cache/e2e-home" HOME="$(pwd)/.cache/e2e-home" uv run --frozen pytest tests/e2e -v --no-cov
   ```
 
   CI runners have no keys and don't need this.
