@@ -6,7 +6,7 @@ from atexit import register as register_at_exit
 from copy import deepcopy
 from datetime import datetime
 from errno import EACCES
-from ftplib import all_errors
+from ftplib import all_errors, error_perm
 from io import BytesIO
 from json import loads
 from logging import Logger, getLogger
@@ -162,8 +162,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def __post_init__(self) -> None:
     pass
 
-  def _persist_queues(self) -> None:
-    """Write all four queues to their backup files, atomically per file.
+  def _persist_queues(self) -> bool:
+    """Write all four queues to their backup files, atomically per file. Returns True only when every file was
+    written and replaced; callers that gate a destructive cleanup on a durable ledger check the result.
 
     Callers either hold `self._lock` (the queue-mutating blocks) or are the at-exit path; the write itself is
     additionally serialised by `self._persist_lock` so concurrent `_preprocess_off_thread` workers (which run on
@@ -174,6 +175,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     -- a one-cycle-stale backup beats aborting the business operation mid-way -- and the remaining files are still
     attempted.
     """
+    all_written = True
     with self._persist_lock:
       for backup_file, queue in (
         (self.pickup_queue_backup_file, self._file_pickup_queue),
@@ -190,6 +192,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
             "%s: Failed to persist queue backup %s; the previous backup file is left intact", self.__class__.__name__, backup_file
           )
           tmp_file.unlink(missing_ok=True)
+          all_written = False
+    return all_written
 
   def _persist_queues_at_exit(self) -> None:
     """Final save at interpreter exit. Waits up to 1 s for the queue lock; if it is still held (a transfer was
@@ -434,6 +438,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
       # Now that the transfers are complete, clear the items to log
 
+      # No `await` between the queue mutation and `_persist_queues()` -- a cancellation here must not be able to split them (F2/F5).
       for key, file_meta in tuple(self._file_preprocess_queue.items()):
         if file_meta.preprocess_success and all(file_meta.preprocess_success.values()):
           file_meta._waiting_folder = self.post_processing_waiting_folder  # pyright: ignore[reportPrivateUsage]
@@ -504,11 +509,13 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
       for key, file_meta in tuple(self._file_dropoff_queue.items()):
         if file_meta.dropoff_success and all(file_meta.dropoff_success.values()):
-          self._file_dropoff_queue.pop(key)
           schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
 
           local_logger.info("%s: Checking off %s_%s invoice_applied", self.__class__.__name__, self.supplier_name, file_meta.storenum)
+          # Tick the sheet before dropping the entry: a stop between the two must leave the entry queued
+          # (clean-stale drops it once the sheet says applied), never ticked-but-forgotten.
           await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_applied)
+          self._file_dropoff_queue.pop(key)
 
       self._persist_queues()
 
@@ -707,8 +714,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return False
     try:
       client.get_size(send_path.as_posix())
-    except (*all_errors, OSError):
+    except FileNotFoundError:
       return True
+    except (*all_errors, OSError) as exc:
+      # 550 is FTP's "no such file / not available". Any other reply -- a permanent 530/553, a transient error,
+      # a permission denial -- says nothing about whether the source still exists, so the move is not "done".
+      if isinstance(exc, error_perm) and str(exc).startswith("550"):
+        return True
+      logger.warning("could not confirm %s is gone (%s); not treating the move as done", send_path, exc)
     return False
 
   def assemble_filename_pattern(
@@ -1161,8 +1174,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
       # Commit first, clean up last. Once the copies have landed, the durable facts are the sheet tick and the
       # queue move; the vendor-side archive only removes inputs a re-run would need. A stop between the commit and
-      # the archive leaves an already-copied file in the vendor folder, which `_vendor_archive_file` reconciles
-      # on the next run; a stop before the commit re-runs the copies from intact inputs.
+      # the archive leaves a permanently un-archived copy in the vendor folder; harmless -- nothing re-matches it
+      # -- and there is no sweeper. A stop before the commit re-runs the copies from intact inputs.
       items_to_advance: dict[str, FileRegisterData] = {}
       for key, file_meta in items_to_dl.items():
         if file_meta.pickup_success and all(file_meta.pickup_success.values()):
@@ -1182,9 +1195,15 @@ class SupplierProcessorBase(metaclass=SingletonType):
         self._file_pickup_queue.pop(key)
         local_logger.info("%s: %s: Moved %s to waiting queue", self.__class__.__name__, key, item.storenum)
 
-      self._persist_queues()
+      persisted = self._persist_queues()
 
-      if self.pickup_archive_ftp_folder is not None:
+      if not persisted:
+        local_logger.warning(
+          "%s: Queue backup could not be written; leaving the vendor files in place instead of archiving them so a "
+          "restart from the stale backup can still re-match them",
+          self.__class__.__name__,
+        )
+      elif self.pickup_archive_ftp_folder is not None:
         archive_futures = [
           to_thread(
             self._vendor_archive_file,
