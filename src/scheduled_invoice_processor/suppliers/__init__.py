@@ -11,6 +11,7 @@ from io import BytesIO
 from json import loads
 from logging import Logger, getLogger
 from os import replace
+from threading import RLock
 from time import sleep
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -86,6 +87,12 @@ class SupplierProcessorBase(metaclass=SingletonType):
   _corrupted_queue_backup_folder: Path = _file_queue_backup_folder / "corrupted"
   _transient_transfer_retries = 3
   _lock: Lock = Lock()
+  _persist_lock: RLock = RLock()
+  """Serialises queue-dict mutation-plus-persist across OS threads. `_lock` (aiologic) only excludes the event loop;
+  `_preprocess_off_thread` workers run concurrently in the default thread pool while the loop holds `_lock`, so the
+  swap-and-persist in those workers and every `_persist_queues()` write take this lock. Re-entrant because event-loop
+  callers already hold `_lock` when they call `_persist_queues()`; lock order is always `_lock` -> `_persist_lock`
+  (workers never take `_lock`), so there is no deadlock."""
 
   vendor_ftp: FTPAdapter | SFTPAdapter
   waiting_ftp: FTPAdapter = create_ftp_adapter(load_sft_credentials(), container_cls="SupplierProcessorBase")
@@ -158,19 +165,22 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def _persist_queues(self) -> None:
     """Write all four queues to their backup files, atomically per file.
 
-    Sync and lock-free by design: every caller either holds `self._lock` (the queue-mutating blocks) or is the
-    at-exit path. Each file is written to `<name>.tmp` and then `os.replace`d onto the real path, so a crash
-    mid-write leaves the previous backup intact and the loader's quarantine path only ever sees real corruption.
+    Callers either hold `self._lock` (the queue-mutating blocks) or are the at-exit path; the write itself is
+    additionally serialised by `self._persist_lock` so concurrent `_preprocess_off_thread` workers (which run on
+    the default thread pool while the event loop holds `_lock`) never iterate/dump the same dict at once. Each
+    file is written to `<name>.tmp` and then `os.replace`d onto the real path, so a crash mid-write leaves the
+    previous backup intact and the loader's quarantine path only ever sees real corruption.
     """
-    for backup_file, queue in (
-      (self.pickup_queue_backup_file, self._file_pickup_queue),
-      (self.preprocess_queue_backup_file, self._file_preprocess_queue),
-      (self.waiting_queue_backup_file, self._file_waiting_queue),
-      (self.dropoff_queue_backup_file, self._file_dropoff_queue),
-    ):
-      tmp_file = backup_file.with_name(f"{backup_file.name}.tmp")
-      tmp_file.write_bytes(self._queue_ta.dump_json(queue, indent=2, round_trip=True))
-      replace(tmp_file, backup_file)
+    with self._persist_lock:
+      for backup_file, queue in (
+        (self.pickup_queue_backup_file, self._file_pickup_queue),
+        (self.preprocess_queue_backup_file, self._file_preprocess_queue),
+        (self.waiting_queue_backup_file, self._file_waiting_queue),
+        (self.dropoff_queue_backup_file, self._file_dropoff_queue),
+      ):
+        tmp_file = backup_file.with_name(f"{backup_file.name}.tmp")
+        tmp_file.write_bytes(self._queue_ta.dump_json(queue, indent=2, round_trip=True))
+        replace(tmp_file, backup_file)
 
   def _persist_queues_at_exit(self) -> None:
     """Final save at interpreter exit. Waits up to 1 s for the queue lock; if it is still held (a transfer was

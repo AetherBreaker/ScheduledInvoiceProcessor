@@ -183,6 +183,39 @@ async def test_clean_stale_entries_persists_under_lock(processor: SASProcessor) 
   assert _read(processor.pickup_queue_backup_file) == {}
 
 
+def test_concurrent_off_thread_persists_are_serialised(processor: SASProcessor) -> None:
+  """`_persist_lock` must serialise concurrent OS-thread mutation-plus-persist, the way `_preprocess_off_thread`
+  workers do, against sibling workers and against plain `_persist_queues()` callers alike."""
+  errors: list[BaseException] = []
+
+  def _mutate_and_persist(key: str) -> None:
+    try:
+      with processor._persist_lock:
+        processor._file_dropoff_queue[key] = _entry()
+        processor._persist_queues()
+    except BaseException as e:  # noqa: BLE001
+      errors.append(e)
+
+  def _persist_only() -> None:
+    try:
+      processor._persist_queues()
+    except BaseException as e:  # noqa: BLE001
+      errors.append(e)
+
+  mutators = [threading.Thread(target=_mutate_and_persist, args=(f"k{i}",)) for i in range(8)]
+  persisters = [threading.Thread(target=_persist_only) for _ in range(8)]
+  threads = mutators + persisters
+
+  for t in threads:
+    t.start()
+  for t in threads:
+    t.join(timeout=10)
+
+  assert errors == []
+  assert set(_read(processor.dropoff_queue_backup_file)) == {f"k{i}" for i in range(8)}
+  assert not list(processor._file_queue_backup_folder.glob("*.tmp"))
+
+
 def test_legacy_save_paths_are_gone() -> None:
   assert not hasattr(SASProcessor, "_save_backups")
   assert not hasattr(SASProcessor, "save_queue_backups_off_thread")
