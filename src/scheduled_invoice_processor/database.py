@@ -314,6 +314,20 @@ class DatabaseCache(metaclass=SingletonType):
       # self.order_log._cache.to_csv("debug_order_log.csv")
       # pass
 
+  def flush_queued_writes(self) -> bool:
+    """Synchronously write every queued Sheets update. Safe from any thread: `_api_write` takes `aiologic` locks,
+    which work from plain threads as well as coroutines. Used by the shutdown callback, which runs on aeth_ext's
+    shutdown thread, not the event loop. Returns whether anything was written."""
+    if not (
+      self.queued_values_raw_updates
+      or self.queued_values_user_entered_updates
+      or self.queued_before_write_update_requests
+      or self.queued_after_write_update_requests
+    ):
+      return False
+    self._api_write()
+    return True
+
   async def submit_queued_writes_to_pool(self) -> None:
     if (
       self.queued_values_raw_updates
