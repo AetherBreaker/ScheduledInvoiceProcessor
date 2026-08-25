@@ -7,9 +7,10 @@ Usage (from the repo root, real `.env` with the *testing* DATABASE_ID and USE_TE
 What it does: copies `persisted_data/secrets` into a temp PERSISTED_DIR_LOC, registers pickups for every RYO row on the
 testing sheet, runs pickup_files (vendor -> /Testing/Waiting/RYO), register_dropoff and dropoff_files, then undoes its
 own footprint: rows it ticked are restored and `/Testing/RYO`, `/Testing/Waiting/RYO[/Archive]`, `/Testing/Processed/RYO`
-are emptied. `__debug__` must be on (the default) so the vendor-side archive is only simulated. Writes `<out>.partial.json`
-before cleanup so a cleanup failure never loses the numbers; cleanup runs even if a stage fails, so a failed run never
-leaves ticked rows or files behind. Manual only — never run this from CI.
+are emptied. `__debug__` must be on (the default) so the vendor-side archive is only simulated. `<out>.partial.json` is
+written before cleanup on both the success and failure paths, so a cleanup failure -- or a failed stage -- never loses
+the numbers captured so far; cleanup runs even if a stage fails, so a failed run never leaves ticked rows or files
+behind. Manual only — never run this from CI.
 """
 
 # Standard library imports
@@ -139,9 +140,9 @@ async def main() -> dict[str, Any]:
         await ryo.dropoff_files()
       with Stage("flush_after_dropoff"):
         await cache.submit_queued_writes_to_pool()
-
-      OUT_PATH.with_suffix(".partial.json").write_text(json.dumps({"stages": dict(STAGES), "per_file": list(PER_FILE)}, indent=2))
     finally:
+      # Written before cleanup on both the success and failure paths, so the numbers captured so far are never lost.
+      OUT_PATH.with_suffix(".partial.json").write_text(json.dumps({"stages": dict(STAGES), "per_file": list(PER_FILE)}, indent=2))
       # Undo the footprint so the run is repeatable: restore the rows we ticked, empty the testing folders.
       # Runs even if a stage above raised, so a failed run never leaves ticked rows or files behind.
       for order in orders:

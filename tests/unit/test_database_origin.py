@@ -63,5 +63,13 @@ def test_chained_cause_from_database_module_counts(fresh_database_singleton: Non
     pytest.fail("no exception raised")
 
 
-def test_patterns_cover_the_three_origins() -> None:
-  assert database.DATABASE_ORIGIN_PATTERNS == ("scheduled_invoice_processor.database", "**.gspread.**", "**.google.oauth2.**")
+def test_exception_raised_inside_gspread_is_database_origin() -> None:
+  # Third party imports
+  from gspread.utils import a1_to_rowcol
+
+  try:
+    a1_to_rowcol("this is not an A1 reference")
+  except Exception as exc:  # noqa: BLE001 - whatever gspread raises, its frame is what matters
+    assert database.exception_is_database_origin(exc) is True
+  else:  # pragma: no cover
+    pytest.fail("gspread did not raise")

@@ -94,7 +94,9 @@ def test_persist_reflects_each_change_immediately(processor: SASProcessor) -> No
   assert set(_read(processor.pickup_queue_backup_file)) == {"second"}
 
 
-def test_failed_replace_leaves_previous_file_intact(processor: SASProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_failed_replace_leaves_previous_file_intact(
+  processor: SASProcessor, backup_dir: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
   processor._file_pickup_queue["kept"] = _entry()
   processor._persist_queues()
   before = processor.pickup_queue_backup_file.read_text()
@@ -104,10 +106,12 @@ def test_failed_replace_leaves_previous_file_intact(processor: SASProcessor, mon
 
   monkeypatch.setattr(suppliers_mod, "replace", _boom)
   processor._file_pickup_queue["lost"] = _entry()
-  with pytest.raises(OSError, match="simulated replace failure"):
+  with caplog.at_level(logging.ERROR):
     processor._persist_queues()
 
   assert processor.pickup_queue_backup_file.read_text() == before
+  assert not list(backup_dir.glob("*.tmp"))
+  assert "Failed to persist queue backup" in caplog.text
 
 
 def test_loader_ignores_stale_tmp_files(
@@ -210,6 +214,7 @@ def test_concurrent_off_thread_persists_are_serialised(processor: SASProcessor) 
     t.start()
   for t in threads:
     t.join(timeout=10)
+    assert not t.is_alive(), "thread did not finish (possible deadlock)"
 
   assert errors == []
   assert set(_read(processor.dropoff_queue_backup_file)) == {f"k{i}" for i in range(8)}
