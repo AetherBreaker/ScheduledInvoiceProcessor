@@ -17,7 +17,9 @@ import pytest
 # First party imports
 import scheduled_invoice_processor.suppliers as suppliers_mod
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
+from scheduled_invoice_processor.monkey_patches import Patches
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
+from scheduled_invoice_processor.suppliers.ryo import RYOProcessor
 from scheduled_invoice_processor.suppliers.sas import SASProcessor
 
 if TYPE_CHECKING:
@@ -199,3 +201,85 @@ async def test_pickup_does_not_advance_when_no_transfer_recorded_a_result(sas: S
   assert "k" not in sas._file_waiting_queue
   sas.cache.schedule.check_box.assert_not_awaited()
   assert "archive" not in events
+
+
+# ---- F3: the merged file is on the holding FTP before the dropoff queue says it is ----
+
+
+@pytest.fixture
+def ryo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[RYOProcessor]:
+  if not hasattr(Path, "without_cwd"):
+    Patches.patch_the_monkey()
+
+  monkeypatch.setattr(suppliers_mod, "DatabaseCache", SimpleNamespace)
+  monkeypatch.setattr(suppliers_mod, "HOLDING_FOLDER", tmp_path / "file_holding")
+  monkeypatch.setattr(RYOProcessor, "_file_queue_backup_folder", tmp_path / "queue_backups")
+  monkeypatch.setattr(RYOProcessor, "_corrupted_queue_backup_folder", tmp_path / "queue_backups" / "corrupted")
+  monkeypatch.setattr(RYOProcessor, "log_file_loc", tmp_path / "logs")
+  client = _FakeClient()
+  monkeypatch.setattr(RYOProcessor, "waiting_ftp", _FakePool(client))
+  monkeypatch.setattr(RYOProcessor, "vendor_ftp", _FakePool(client))
+  _drop_singleton(RYOProcessor)
+  proc = RYOProcessor()
+  proc.pbar = _FakePbar()  # type: ignore[assignment]
+  proc.cache = SimpleNamespace(  # type: ignore[assignment]
+    schedule=SimpleNamespace(check_box=AsyncMock()),
+    prev_week_schedule=SimpleNamespace(check_box=AsyncMock()),
+    order_log=SimpleNamespace(log_action=AsyncMock()),
+  )
+  yield proc
+  atexit.unregister(proc._persist_queues_at_exit)
+  _drop_singleton(RYOProcessor)
+
+
+def test_preprocess_uploads_before_commit_and_archives_after(
+  ryo: RYOProcessor, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  events: list[str] = []
+  old = _meta("/Waiting/RYO", {0: "inv-a.txt", 1: "inv-b.txt"})
+  ryo._file_preprocess_queue["k"] = old
+
+  merged_dir = tmp_path / "merged"
+  merged_dir.mkdir()
+  (merged_dir / "merged.txt").write_text("merged")
+  new = FileRegisterData(
+    storenum=old.storenum,
+    customer_id=old.customer_id,
+    pickup_date=old.pickup_date,
+    dropoff_date=old.dropoff_date,
+    file_pattern=old.file_pattern,
+    _current_week=True,
+    _waiting_folder=ryo.post_processing_waiting_folder,
+    _local_copy_folder=merged_dir,
+    file_names={0: "merged.txt"},
+  )
+
+  monkeypatch.setattr(ryo, "_create_new_merged_file", lambda key, old_file_meta, adapted_logger=None: new)
+
+  def fake_archive(**kwargs: object) -> None:
+    events.append("archive")
+    assert "k" in ryo._file_dropoff_queue, "originals archived before the queue commit"
+
+  real_upload = ryo.waiting_ftp.client.upload_file
+
+  def recording_upload(remote_path: str, callback: Any, file_size: int, task_msg: str = "") -> None:
+    events.append("upload")
+    assert "k" not in ryo._file_dropoff_queue, "queue committed before the merged file was uploaded"
+    real_upload(remote_path, callback, file_size, task_msg)
+
+  real_persist = ryo._persist_queues
+
+  def recording_persist() -> None:
+    events.append("persist")
+    real_persist()
+
+  monkeypatch.setattr(ryo, "_middle_archive_file", fake_archive)
+  monkeypatch.setattr(ryo.waiting_ftp.client, "upload_file", recording_upload)
+  monkeypatch.setattr(ryo, "_persist_queues", recording_persist)
+
+  key, result = ryo._preprocess_off_thread("k", old)
+
+  assert (key, result) == ("k", new)
+  assert events == ["upload", "persist", "archive", "archive"]
+  assert ryo.waiting_ftp.client.uploads == [(ryo.post_processing_waiting_folder / "merged.txt").as_posix()]
+  assert "k" in ryo._file_dropoff_queue and "k" not in ryo._file_preprocess_queue

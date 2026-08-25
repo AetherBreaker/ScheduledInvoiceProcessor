@@ -212,10 +212,16 @@ class RYOProcessor(SupplierProcessorBase):
     old_file_meta: FileRegisterData,
     adapted_logger: LoggerAdapter[Any] | None = None,
   ) -> tuple[SupplierQueueKey, FileRegisterData]:
+    """Merge one entry's files and move it from the preprocess queue to the dropoff queue.
+
+    Ordering is the whole point: **upload → commit → cleanup**. The merged file must exist on the holding FTP
+    before the dropoff queue claims it does, and the originals must survive until the commit so a stop before it
+    re-runs from intact inputs (the re-upload overwrites). A stop after the commit at worst leaves un-archived
+    originals in the pre-processing folder, which nothing re-matches.
+    """
     try:
       local_logger = adapted_logger or logger
 
-      # Create the merged filed
       new_file_meta = self._create_new_merged_file(key, old_file_meta, adapted_logger)
       local_logger.info(
         "%s: %s: Created merged file at location [yellow]%s[/]",
@@ -227,35 +233,7 @@ class RYOProcessor(SupplierProcessorBase):
 
       # TODO Upload the original invoice files to a shared store specific google drive
 
-      # Update the queues with the new file meta
-      with self._persist_lock:
-        self._file_dropoff_queue[key] = new_file_meta
-        old_file_meta = self._file_preprocess_queue.pop(key)
-        self._persist_queues()
-      local_logger.info("%s: %s: Updated queues", self.__class__.__name__, key)
-
-      # Then we clean up the old invoice files left on the remote waiting folder
-      for remote_file_loc in old_file_meta.remote_file_locs.values():
-        self._middle_archive_file(
-          source_folder=self.pre_processing_waiting_folder,
-          remote_file=remote_file_loc.name,
-          archive_folder=self.pre_processing_archive_folder,
-          adapted_logger=adapted_logger,
-        )
-
-      for local_file_loc in old_file_meta.local_copy_loc.values():
-        try:
-          local_file_loc.unlink()
-          local_logger.info("%s: %s: Deleted local file %s", self.__class__.__name__, key, local_file_loc.without_cwd())
-        except Exception:
-          local_logger.exception(
-            "%s: %s: Failed to delete local file %s",
-            self.__class__.__name__,
-            key,
-            local_file_loc.without_cwd(),
-          )
-
-      # Uploaded the new file to the remote waiting folder, replacing the old invoice files.
+      # 1. Upload the merged file to the post-processing waiting folder.
       for new_file_loc in new_file_meta.local_copy_loc.values():
         send_path = self.post_processing_waiting_folder / new_file_loc.name
         with new_file_loc.open("rb") as f, self.waiting_ftp.start_session() as waiting_client:
@@ -264,15 +242,29 @@ class RYOProcessor(SupplierProcessorBase):
           )
         local_logger.info("%s: %s: Uploaded merged file to remote location %s", self.__class__.__name__, key, send_path)
 
-        try:
-          new_file_loc.unlink()
-          local_logger.info("%s: %s: Deleted local merged file %s", self.__class__.__name__, key, new_file_loc.without_cwd())
-        except Exception:
-          local_logger.exception(
-            "%s: %s: Failed to delete local merged file %s", self.__class__.__name__, key, new_file_loc.without_cwd()
-          )
+      # 2. Commit: the dropoff queue now describes a file that really exists.
+      with self._persist_lock:
+        self._file_dropoff_queue[key] = new_file_meta
+        old_file_meta = self._file_preprocess_queue.pop(key)
+        self._persist_queues()
+      local_logger.info("%s: %s: Updated queues", self.__class__.__name__, key)
 
-      # return the new file meta and queue key to be updated in the logging list
+      # 3. Cleanup: archive the originals on the holding FTP, delete local copies.
+      for remote_file_loc in old_file_meta.remote_file_locs.values():
+        self._middle_archive_file(
+          source_folder=self.pre_processing_waiting_folder,
+          remote_file=remote_file_loc.name,
+          archive_folder=self.pre_processing_archive_folder,
+          adapted_logger=adapted_logger,
+        )
+
+      for local_file_loc in (*old_file_meta.local_copy_loc.values(), *new_file_meta.local_copy_loc.values()):
+        try:
+          local_file_loc.unlink()
+          local_logger.info("%s: %s: Deleted local file %s", self.__class__.__name__, key, local_file_loc.without_cwd())
+        except Exception:
+          local_logger.exception("%s: %s: Failed to delete local file %s", self.__class__.__name__, key, local_file_loc.without_cwd())
+
       return key, new_file_meta
     except Exception:
       logger.exception("%s: %s: Unexpected error in preprocessing off thread", self.__class__.__name__, key)
