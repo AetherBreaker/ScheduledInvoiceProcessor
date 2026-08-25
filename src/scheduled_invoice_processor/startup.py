@@ -355,7 +355,6 @@ async def main() -> None:
     scheduler.print_jobs()
 
     RICH_CONSOLE.rule("[bold red]Boot Done[/]", style="bold red")
-
     with RICH_CONSOLE.status("Application is running."):
       await SHUTDOWN
 
