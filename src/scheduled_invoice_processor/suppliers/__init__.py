@@ -634,33 +634,47 @@ class SupplierProcessorBase(metaclass=SingletonType):
     adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
+    """Move a file within the holding FTP. Idempotent: if the rename fails because it already happened (a stop
+    mid-wave lets the rename thread finish but never runs the bookkeeping that records it), the move is reported
+    as a success so the re-run can advance the queue instead of stranding the entry."""
     local_logger = adapted_logger or logger
     result = StatusCode.UNKNOWN
     if self.errored:
       local_logger.warning("%s: Disabled due to error state. Skipping transfer of files within main FTP", self.__class__.__name__)
       return False
+    success = False
     try:
       with self.waiting_ftp.start_session() as client:
-        client.rename(send_path.as_posix(), recv_path.as_posix())
-
-        # Verify file was moved successfully
-        success = False
         try:
-          client.get_size(recv_path.as_posix())
-          success = True
-          result = StatusCode.SUCCESS
-          local_logger.info(
-            "%s: Moved [yellow]%s[/] to [yellow]%s[/]",
-            self.__class__.__name__,
-            send_path,
-            recv_path,
-            extra={"markup": True},
-          )
-        except (*all_errors, OSError) as e:
-          local_logger.warning("%s: Failed to verify move of %s", self.__class__.__name__, send_path.name, exc_info=e)
-          result = StatusCode.FAILURE
-        getattr(file_meta, success_attr)[idx] = success
-
+          client.rename(send_path.as_posix(), recv_path.as_posix())
+        except (*all_errors, OSError) as rename_error:
+          if self._already_moved(client, send_path, recv_path):
+            local_logger.info(
+              "%s: [yellow]%s[/] was already moved to [yellow]%s[/] by an earlier run; treating as success",
+              self.__class__.__name__,
+              send_path,
+              recv_path,
+              extra={"markup": True},
+            )
+            success = True
+          else:
+            raise rename_error
+        else:
+          # Verify file was moved successfully
+          try:
+            client.get_size(recv_path.as_posix())
+            success = True
+            local_logger.info(
+              "%s: Moved [yellow]%s[/] to [yellow]%s[/]",
+              self.__class__.__name__,
+              send_path,
+              recv_path,
+              extra={"markup": True},
+            )
+          except (*all_errors, OSError) as e:
+            local_logger.warning("%s: Failed to verify move of %s", self.__class__.__name__, send_path.name, exc_info=e)
+      result = StatusCode.SUCCESS if success else StatusCode.FAILURE
+      getattr(file_meta, success_attr)[idx] = success
       self.pbar.update(move_files_task, advance=1, refresh=True)
       if log_action_handler is not None:
         log_action_handler(key, result, file_meta)
@@ -673,8 +687,26 @@ class SupplierProcessorBase(metaclass=SingletonType):
         recv_path,
         extra={"markup": True},
       )
+      getattr(file_meta, success_attr)[idx] = False
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.FAILURE, file_meta)
+    return success
+
+  @staticmethod
+  def _already_moved(client: AdapterBase, send_path: PurePosixPath, recv_path: PurePosixPath) -> bool:
+    """True only when the destination holds a non-empty file *and* the source is gone. A destination beside a
+    still-present source is a genuine conflict and is never treated as done (nothing here ever overwrites)."""
+    try:
+      recv_size = client.get_size(recv_path.as_posix())
+    except (*all_errors, OSError):
+      return False
+    if not recv_size:
+      return False
+    try:
+      client.get_size(send_path.as_posix())
+    except (*all_errors, OSError):
+      return True
+    return False
 
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
