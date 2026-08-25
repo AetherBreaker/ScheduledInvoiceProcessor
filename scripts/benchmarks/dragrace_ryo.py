@@ -8,7 +8,8 @@ What it does: copies `persisted_data/secrets` into a temp PERSISTED_DIR_LOC, reg
 testing sheet, runs pickup_files (vendor -> /Testing/Waiting/RYO), register_dropoff and dropoff_files, then undoes its
 own footprint: rows it ticked are restored and `/Testing/RYO`, `/Testing/Waiting/RYO[/Archive]`, `/Testing/Processed/RYO`
 are emptied. `__debug__` must be on (the default) so the vendor-side archive is only simulated. Writes `<out>.partial.json`
-before cleanup so a cleanup failure never loses the numbers. Manual only — never run this from CI.
+before cleanup so a cleanup failure never loses the numbers; cleanup runs even if a stage fails, so a failed run never
+leaves ticked rows or files behind. Manual only — never run this from CI.
 """
 
 # Standard library imports
@@ -115,50 +116,53 @@ async def main() -> dict[str, Any]:
     orders = [order async for order in cache.schedule.walk_typed_rows() if order.supplier == SuppliersEnum.RYO]
     before = {order.store: (order.invoice_grabbed, order.invoice_applied) for order in orders}
 
-    with Stage("register_pickup"):
-      for order in orders:
-        await ryo.register_pickup(
-          storenum=order.store, customer_id=order.customer, pickup_date=now, dropoff_date=now, current_week=True
-        )
-      await cache.submit_queued_writes_to_pool()
-    with Stage("pickup_files"):
-      await ryo.pickup_files()
-    with Stage("flush_after_pickup"):
-      await cache.submit_queued_writes_to_pool()
-    with Stage("register_dropoff"):
-      for order in orders:
-        await ryo.register_dropoff(
-          storenum=order.store, customer_id=order.customer, pickup_date=now, dropoff_date=now, current_week=True
-        )
-      await cache.submit_queued_writes_to_pool()
-    with Stage("dropoff_files"):
-      await ryo.dropoff_files()
-    with Stage("flush_after_dropoff"):
-      await cache.submit_queued_writes_to_pool()
-
-    OUT_PATH.with_suffix(".partial.json").write_text(json.dumps({"stages": dict(STAGES), "per_file": list(PER_FILE)}, indent=2))
-
-    # Undo the footprint so the run is repeatable: restore the rows we ticked, empty the testing folders.
     touched: list[int] = []
-    for order in orders:
-      grabbed = await cache.schedule.read_value((SuppliersEnum.RYO, order.store), Cols.invoice_grabbed)
-      applied = await cache.schedule.read_value((SuppliersEnum.RYO, order.store), Cols.invoice_applied)
-      if (bool(grabbed), bool(applied)) != tuple(map(bool, before[order.store])):
-        touched.append(order.store)
-        await cache.schedule.write_value(
-          (SuppliersEnum.RYO, order.store),
-          Cols.invoice_grabbed,
-          before[order.store][0],
-          cache.schedule._field_type_adapters["invoice_grabbed"],
-        )
-        await cache.schedule.write_value(
-          (SuppliersEnum.RYO, order.store),
-          Cols.invoice_applied,
-          before[order.store][1],
-          cache.schedule._field_type_adapters["invoice_applied"],
-        )
-    await cache.submit_queued_writes_to_pool()
-    removed = _clear_remote_testing_folders(ryo)
+    removed = 0
+    try:
+      with Stage("register_pickup"):
+        for order in orders:
+          await ryo.register_pickup(
+            storenum=order.store, customer_id=order.customer, pickup_date=now, dropoff_date=now, current_week=True
+          )
+        await cache.submit_queued_writes_to_pool()
+      with Stage("pickup_files"):
+        await ryo.pickup_files()
+      with Stage("flush_after_pickup"):
+        await cache.submit_queued_writes_to_pool()
+      with Stage("register_dropoff"):
+        for order in orders:
+          await ryo.register_dropoff(
+            storenum=order.store, customer_id=order.customer, pickup_date=now, dropoff_date=now, current_week=True
+          )
+        await cache.submit_queued_writes_to_pool()
+      with Stage("dropoff_files"):
+        await ryo.dropoff_files()
+      with Stage("flush_after_dropoff"):
+        await cache.submit_queued_writes_to_pool()
+
+      OUT_PATH.with_suffix(".partial.json").write_text(json.dumps({"stages": dict(STAGES), "per_file": list(PER_FILE)}, indent=2))
+    finally:
+      # Undo the footprint so the run is repeatable: restore the rows we ticked, empty the testing folders.
+      # Runs even if a stage above raised, so a failed run never leaves ticked rows or files behind.
+      for order in orders:
+        grabbed = await cache.schedule.read_value((SuppliersEnum.RYO, order.store), Cols.invoice_grabbed)
+        applied = await cache.schedule.read_value((SuppliersEnum.RYO, order.store), Cols.invoice_applied)
+        if (bool(grabbed), bool(applied)) != tuple(map(bool, before[order.store])):
+          touched.append(order.store)
+          await cache.schedule.write_value(
+            (SuppliersEnum.RYO, order.store),
+            Cols.invoice_grabbed,
+            before[order.store][0],
+            cache.schedule._field_type_adapters["invoice_grabbed"],
+          )
+          await cache.schedule.write_value(
+            (SuppliersEnum.RYO, order.store),
+            Cols.invoice_applied,
+            before[order.store][1],
+            cache.schedule._field_type_adapters["invoice_applied"],
+          )
+      await cache.submit_queued_writes_to_pool()
+      removed = _clear_remote_testing_folders(ryo)
 
   per_file_secs = [entry["secs"] for entry in PER_FILE]
   return {
