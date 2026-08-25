@@ -169,7 +169,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
     additionally serialised by `self._persist_lock` so concurrent `_preprocess_off_thread` workers (which run on
     the default thread pool while the event loop holds `_lock`) never iterate/dump the same dict at once. Each
     file is written to `<name>.tmp` and then `os.replace`d onto the real path, so a crash mid-write leaves the
-    previous backup intact and the loader's quarantine path only ever sees real corruption.
+    previous backup intact and the loader's quarantine path only ever sees real corruption. An `OSError` on any
+    single file's write/replace is logged and that file's previous backup is left intact rather than propagating
+    -- a one-cycle-stale backup beats aborting the business operation mid-way -- and the remaining files are still
+    attempted.
     """
     with self._persist_lock:
       for backup_file, queue in (
@@ -179,8 +182,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
         (self.dropoff_queue_backup_file, self._file_dropoff_queue),
       ):
         tmp_file = backup_file.with_name(f"{backup_file.name}.tmp")
-        tmp_file.write_bytes(self._queue_ta.dump_json(queue, indent=2, round_trip=True))
-        replace(tmp_file, backup_file)
+        try:
+          tmp_file.write_bytes(self._queue_ta.dump_json(queue, indent=2, round_trip=True))
+          replace(tmp_file, backup_file)
+        except OSError:
+          logger.exception(
+            "%s: Failed to persist queue backup %s; the previous backup file is left intact", self.__class__.__name__, backup_file
+          )
+          tmp_file.unlink(missing_ok=True)
 
   def _persist_queues_at_exit(self) -> None:
     """Final save at interpreter exit. Waits up to 1 s for the queue lock; if it is still held (a transfer was

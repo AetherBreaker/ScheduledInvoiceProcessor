@@ -4,8 +4,10 @@ Top-level code runs when pytest imports this conftest, before any test module un
 is load-bearing: scheduled_invoice_processor reads SETTINGS and the credential JSON files at import time (the
 supplier modules build their FTP pools at class level from those files).
 
-When tests/e2e/conftest.py has already bootstrapped this process (PERSISTED_DIR_LOC set), that environment is
-reused untouched; the unit tests never assume specific credential values, they read the JSON back.
+When tests/e2e/conftest.py has already bootstrapped this process (PERSISTED_DIR_LOC pointing at the e2e suite's
+own temp dir), that environment is reused untouched; the unit tests never assume specific credential values, they
+read the JSON back. A developer's real PERSISTED_DIR_LOC is never reused by the unit tests -- it is always
+overwritten with a fresh dummy environment.
 """
 
 # Standard library imports
@@ -49,7 +51,8 @@ def _dummy_service_account_key() -> str:
 
 
 def _bootstrap_environment() -> None:
-  if os.environ.get("PERSISTED_DIR_LOC"):
+  existing = os.environ.get("PERSISTED_DIR_LOC")
+  if existing and Path(existing).name.startswith("sip-e2e-persisted-"):
     return
   persisted = Path(tempfile.mkdtemp(prefix="sip-unit-persisted-"))
   secrets = persisted / "secrets"
