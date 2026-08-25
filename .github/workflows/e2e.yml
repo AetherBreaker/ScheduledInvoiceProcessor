@@ -1,8 +1,13 @@
 name: e2e
 
+# No pull_request trigger: this repo is public and the job needs secrets; PR-driven runs
+# from same-repo branches could read them. Runs on pushes to main/test/** or manually.
 on:
-  pull_request:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "test/**"
 
 # The testing Google Sheet is a shared resource: never run two e2e jobs at once.
 concurrency:

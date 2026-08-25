@@ -12,7 +12,7 @@ servers and the *testing* Google Sheet. Design: `docs/superpowers/specs/2026-08-
 
 ## Running in CI
 
-`.github/workflows/e2e.yml` runs on every pull request and via *Run workflow*. Required repository secrets:
+`.github/workflows/e2e.yml` runs on pushes to `main` and `test/**` and via *Run workflow* (no `pull_request` trigger: the repo is public and the job needs secrets). Required repository secrets:
 
 - `SFTPYPI_USERNAME`, `SFTPYPI_PASSWORD` — internal package index (for `aeth-ext`); the workflow
   surfaces these to `uv` as `UV_INDEX_SFTPYPI_USERNAME` / `UV_INDEX_SFTPYPI_PASSWORD`
