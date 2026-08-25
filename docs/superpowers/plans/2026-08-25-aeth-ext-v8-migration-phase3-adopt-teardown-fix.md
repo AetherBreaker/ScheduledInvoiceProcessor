@@ -1,74 +1,65 @@
 # aeth_ext v8 Migration — Phase 3: adopt the aeth_ext teardown-completion fix
 
-**Status:** in progress (2026-08-25). aeth_ext **8.0.1** shipped **option C**: `SHUTDOWN_COMPLETE`
-(`ShutdownCompletion`, waitable via `is_set`/`wait`/`await`, set in `_run_threaded_pass` once every callback has
-run or been skipped, immediately before the exit nudge) **plus** `_join_pass_at_exit`, an `atexit` join of the
-still-daemon pass thread registered by `run_shutdown`. Awaiting `SHUTDOWN_COMPLETE` also *declares a tail*: the
-nudge is held until the GRACEFUL budget (7 s from the request — not Docker's 30 s) or completion + 0.25 s,
-whichever is later, and skipped once the main thread has finished. The wait replaces Phase 2's 20 s cap with
-no cap, deliberately: the library's own exit-time join is equally unbounded. `SHUTDOWN`'s docstring now says resolution ≠ teardown done. Lifecycle:
+**Status:** done 2026-08-25 (pending push / PR #10 update). aeth_ext **8.0.1** shipped **option C** of the
+issue write-up: `SHUTDOWN_COMPLETE` (`ShutdownCompletion`, waitable via `is_set`/`wait`/`await`, set in
+`_run_threaded_pass` once every callback has run or been skipped, immediately before the exit nudge) **plus**
+`_join_pass_at_exit`, an `atexit` join of the still-daemon pass thread registered by `run_shutdown`. Awaiting
+`SHUTDOWN_COMPLETE` also *declares a tail*: the nudge is held until the GRACEFUL budget (7 s from the request —
+not Docker's 30 s) or completion + 0.25 s, whichever is later, and skipped once the main thread has finished.
+`SHUTDOWN`'s docstring now says resolution ≠ teardown done. Lifecycle:
 `await SHUTDOWN` → tail → `await SHUTDOWN_COMPLETE` → return.
 
 **Goal:** Remove the app-side workaround for the aeth_ext gap (the `await sleep(20)` park at the tail of
-`startup.main()`) and replace it with whatever lifecycle aeth_ext ships, so that "the required Sheets flush
-completes before the process exits" is guaranteed by the library rather than by a timer we picked.
+`startup.main()`) and replace it with the library's lifecycle, so that "the required Sheets flush completes
+before the process exits" is guaranteed by aeth_ext rather than by a timer we picked.
 
-**Why this is its own phase:** the exact steps depend on the shape aeth_ext chooses — see the issue doc's §4:
-(A) a new `TEARDOWN_COMPLETE` awaitable, (B) a non-daemon shutdown thread, or (C) both. The plan below is
-written per option; delete the branches that don't apply once the fix is known.
+**Spec:** `docs/superpowers/specs/2026-08-25-aeth-ext-v8-migration-phase2-shutdown-design.md` §2.1–2.2 (the
+"`main()` waits for `SHUTDOWN_COMPLETE`" bullet is this phase's outcome).
 
-**Spec:** `docs/superpowers/specs/2026-08-25-aeth-ext-v8-migration-phase2-shutdown-design.md` §2.1–2.2 — the
-"main() parks until the nudge" bullet is what this phase retires.
+## What was done
 
-## Global Constraints
+| Task | Commit | Outcome |
+|---|---|---|
+| 1. Bump to `aeth-ext>=8.0.1`, refresh `uv.lock`, confirm contract | `d674193` | 44/44 unit on 8.0.1; option C confirmed by reading `shutdown.py` |
+| 2. `await SHUTDOWN_COMPLETE` replaces the park; comments, `shutdown_hooks` docstring, spec §2.2 updated; `run_app()` unchanged except its comment | `5742ada` | reviewed (opus, adversarial): mechanism correct, "with fixes" = doc accuracy |
+| 2b. Review fixes: nudge window also spans `asyncio.run()`'s close (in-flight FTP joins); unbounded wait is deliberate; dead issue link | `be9b148` | — |
+| 3. Proof | — | see below |
+| 4. Close-out | this commit | option branches pruned from this plan |
 
-- Branch off `main` after Phase 2 (PR #10) has merged; bump `aeth-ext` in `pyproject.toml` / `uv.lock` to the
-  release that carries the fix (Linux extra from the internal index, Windows editable path unchanged).
-- The exit-code mapping in `__main__.run_app()` (`except KeyboardInterrupt` → `sys.exit(exit_code_for_shutdown(...))`)
-  stays regardless of option: aeth_ext decides *when* the process exits, the app maps *how* to a code.
-- Unit suite (`uv run pytest tests/unit`) and e2e (`tests/e2e`, docker compose) remain the gates; ruff clean.
+The exit-code mapping in `__main__.run_app()` (`except KeyboardInterrupt` → `sys.exit(exit_code_for_shutdown(...))`)
+stays: aeth_ext decides *when* the process exits, the app maps *how* to a code. The `except` is now the
+exceptional path (tail or `Runner.close()` outran the budget), not the normal one.
 
-## Tasks
+## Task 3 — proof (2026-08-25, local, docker compose fixtures + testing sheet)
 
-### Task 1: Bump aeth_ext and confirm the new contract
+- **e2e:** 9/10 on the first run — `test_ryo_cycle` failed with pure-ftpd `425 Unable to identify the local data
+  socket: Address already in use`; passed alone on rerun. Fixture limit (10 passive ports `30000-30009`, parallel
+  RYO wave right after earlier tests' sockets in TIME_WAIT), not a regression; `425` is also not in
+  `TRANSIENT_TRANSFER_ERROR_STRINGS` so it is not retried. Follow-up: widen `FTP_PASSIVE_PORTS` in
+  `tests/docker/compose.yaml` and/or add `"425"` to the transient list. All other 9 green, including `test_sas_cycle`.
+- **Graceful stop, idle, `-O`, real `startup.main()`** (harness: `DatabaseCache.flush_queued_writes` wrapped with a
+  1.5 s delay to widen the race window; `CTRL_BREAK_EVENT` sent 3 s after "Boot Done" — Windows' SIGTERM stand-in,
+  aeth_ext registers `SIGBREAK`):
 
-- Bump the dependency; `uv sync`; run the unit suite (expect 44+ green, nothing else changed).
-- Read the released `aeth_ext/errors/shutdown.py` and record in this file which option shipped and the exact
-  names (e.g. `TEARDOWN_COMPLETE`, its `__await__`/`wait`/`is_set` surface, and whether the shutdown thread is
-  still `daemon=True`).
+  | event | t (s from boot) |
+  |---|---|
+  | signal sent | ~15.15 |
+  | `flush_queued_writes` entered (shutdown thread) | 15.178 |
+  | flush returned | 16.678 |
+  | `main()` returned | **16.686** (8 ms *after* the flush) |
+  | interpreter `atexit` | 16.798 |
 
-### Task 2: Replace the park
+  `SHUTDOWN_COMPLETE.is_set()` = True at exit; **no `KeyboardInterrupt`** (nudge skipped because `main()` returned
+  within its window); kind GRACEFUL; exit code **0**; aeth_ext banner "teardown complete; 5 run, 0 skipped"; 1.9 s
+  wall from signal to exit. Under the Phase 2 code before the park, `main()` would have returned at ~15.2 s, mid-flush.
+- **FATAL exit code:** not driven end-to-end (no safe way to raise a fatal in the running app without a code hook);
+  covered by `tests/unit/test_exit_code.py` (mapping) and aeth_ext's own `tests/errors/test_shutdown.py`
+  (required callbacks run under the 1 s FATAL budget; declared tail gets ≥ 0.25 s). The graceful run exercises the
+  same path with a larger budget.
 
-- **Option A (awaitable):** in `startup.main()`, replace
-  `with suppress(CancelledError): await sleep(20)` with `await TEARDOWN_COMPLETE` (import from
-  `aeth_ext.errors.shutdown`). Keep it under `suppress(CancelledError)` only if the awaitable can raise it on
-  the nudge; otherwise plain. Delete the `sleep` import if unused. Rewrite the comment: "aeth_ext signals when
-  every shutdown callback has run; the nudge follows."
-- **Option B (non-daemon thread):** delete the park entirely; `main()` returns after its tail. Comment: "the
-  interpreter joins aeth_ext's non-daemon shutdown thread before `atexit`, so the required flush cannot race
-  exit." Verify `run_app()`'s `except KeyboardInterrupt` is still reachable (the nudge may now land during
-  interpreter shutdown instead) and that the exit code is still what `exit_code_for_shutdown` returns — if the
-  nudge no longer reaches `run_app`, move the mapping to an `atexit` hook or accept that the code comes from the
-  interpreter's own handling, and document which.
-- **Option C:** do A; B is the safety net and needs no app change.
-- Update `shutdown_hooks.py`'s module docstring and spec §2.2 ("`main()` parks until the nudge" bullet) to
-  describe the new mechanism; note in the spec that the Phase 2 park was a workaround and cite the aeth_ext issue.
+## Follow-ups (not blocking)
 
-### Task 3: Prove it
-
-- Unit: if option A, a test that `main()`'s tail awaits `TEARDOWN_COMPLETE` is hard to write without booting
-  the app; instead assert the import and the absence of `sleep(20)` via a small source-level test, or skip
-  unit coverage and rely on the next step. Do not fake the awaitable.
-- Manual (the check that matters, same as Phase 2 Task 7 step 3): with the e2e compose fixtures up, run
-  `python -O -m scheduled_invoice_processor`, wait for "Boot Done", `docker stop` / SIGTERM it while idle, and
-  confirm the log shows `scheduler paused` and `final Google Sheets flush completed` (or "no queued … to
-  flush") **before** the process exits, exit code 0. Repeat with a forced fatal → exit code 1. Record both
-  timings here.
-- e2e suite green.
-
-### Task 4: Close out
-
-- Remove this file's option branches that did not apply; commit; PR titled "chore: adopt aeth_ext <version>
-  teardown-completion fix; drop the shutdown park".
-- If aeth_ext also changed `SHUTDOWN`'s docstring or added a lint/deprecation for "returning on `await SHUTDOWN`",
-  address any warning it emits.
+- e2e fixture passive-port range / `425` retry (above).
+- Phase 2 ledger deferred minors (see `.superpowers/sdd/2026-08-25-aeth-ext-v8-migration-phase2/progress.md`),
+  notably: RYO `_middle_archive_file` cleanup not gated on the persist result the way pickup is; Pyright noise in
+  the new unit tests.
