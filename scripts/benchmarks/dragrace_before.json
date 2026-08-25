@@ -1,0 +1,60 @@
+{
+  "label": "before-v6.3.1",
+  "aeth_ext": "6.3.1",
+  "when": "2026-08-25T00:37:34",
+  "orders": 80,
+  "files_transferred": 7,
+  "stages": {
+    "refresh_cache": 1.394,
+    "register_pickup": 1.331,
+    "pickup_files": 10.828,
+    "flush_after_pickup": 1.05,
+    "register_dropoff": 0.87,
+    "dropoff_files": 23.95,
+    "flush_after_dropoff": 1.094
+  },
+  "total_cycle_secs": 40.517,
+  "per_file": [
+    {
+      "file": "9068281441_57679_20260824145926634000.txt",
+      "secs": 5.269
+    },
+    {
+      "file": "9068752029_57637_20260824150420326000.txt",
+      "secs": 5.293
+    },
+    {
+      "file": "9063462149_57661_20260824150056844000.txt",
+      "secs": 5.297
+    },
+    {
+      "file": "9065537187_57636_20260824150444958000.txt",
+      "secs": 5.326
+    },
+    {
+      "file": "9065537448_57635_20260824150514374000.txt",
+      "secs": 5.397
+    },
+    {
+      "file": "9068281576_57640_20260824150326712000.txt",
+      "secs": 5.412
+    },
+    {
+      "file": "9069705002_57638_20260824150355949000.txt",
+      "secs": 5.445
+    }
+  ],
+  "per_file_mean": 5.348,
+  "per_file_max": 5.445,
+  "rows_reset": [
+    10,
+    19,
+    27,
+    50,
+    53,
+    56,
+    60
+  ],
+  "remote_cleaned": 14,
+  "errored": false
+}
