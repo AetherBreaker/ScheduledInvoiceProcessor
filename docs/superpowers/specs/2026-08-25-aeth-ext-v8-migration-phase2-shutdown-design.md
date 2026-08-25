@@ -66,14 +66,16 @@ Callbacks are registered from a new module `scheduled_invoice_processor/shutdown
   `atexit` persists the queues; exit 0. What is lost: the post-`gather` bookkeeping of the cancelled job.
 - **FATAL (`_handle_fatal`):** same, with a 1 s budget for non-required callbacks; the flush still runs
   (required) unless the trail is database-origin; exit 1.
-- **`main()` parks until the nudge:** `run_shutdown()` requests the shutdown and starts the threaded pass in
-  the same synchronous stretch (inside the signal handler / `_handle_fatal`), so by the time the `await SHUTDOWN`
-  waiter wakes the thread has *started* — but not *finished*: the flush is a Sheets HTTP round trip, while
-  `main()`'s tail is milliseconds. `main()`'s tail therefore runs alongside the callbacks, not after them.
-  After cancelling the heartbeat and stopping the scheduler, `main()` therefore `await sleep(20)`s: without it,
-  an idle `docker stop` would let the interpreter exit in milliseconds while the required Sheets flush was
-  mid-HTTP-request. The park is bounded so a nudge that never arrives cannot outlast the 30 s grace, and it
-  never delays a FATAL stop — the nudge arrives after the 1 s FATAL budget and ends the park early.
+- **`main()` waits for `SHUTDOWN_COMPLETE` (Phase 3, aeth_ext ≥ 8.0.1):** `run_shutdown()` requests the
+  shutdown and starts the threaded pass in the same synchronous stretch, so when the `await SHUTDOWN` waiter
+  wakes the pass has *started* but not *finished* (the flush is a Sheets HTTP round trip; `main()`'s tail is
+  milliseconds). After cancelling the heartbeat and stopping the scheduler, `main()` therefore
+  `await SHUTDOWN_COMPLETE`s — set by aeth_ext once every callback has run or been skipped — and only then
+  returns. Awaiting it declares a tail, so aeth_ext holds its exit nudge for the remaining budget and skips it
+  once `main()` has returned; the normal exit path is `run_app()`'s `sys.exit`, with `except KeyboardInterrupt`
+  kept for a tail that overruns the budget. aeth_ext additionally joins the pass at interpreter exit. Phase 2
+  shipped a bounded `await sleep(20)` park as a workaround before 8.0.1 existed
+  (`aeth_ext/ISSUE-shutdown-required-callbacks-race-interpreter-exit.md`).
 - **SIGKILL (Docker grace exhausted / OOM):** threads die mid-body; no `atexit`. The last persisted queue
   state is whatever the last `_persist_queues()` wrote.
 

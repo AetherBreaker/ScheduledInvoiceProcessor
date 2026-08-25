@@ -1,5 +1,5 @@
 # Standard library imports
-from asyncio import CancelledError, create_task, sleep
+from asyncio import CancelledError, create_task
 from contextlib import suppress
 from datetime import datetime
 from logging import INFO, WARNING, getLogger
@@ -12,7 +12,7 @@ from dateutil.relativedelta import SA, relativedelta
 from rich import get_console
 
 # First party imports
-from aeth_ext.errors.shutdown import SHUTDOWN, ShutdownKind
+from aeth_ext.errors.shutdown import SHUTDOWN, SHUTDOWN_COMPLETE, ShutdownKind
 from aeth_ext.monitoring import run_heartbeat_async, send_heartbeat
 from aeth_ext.rich.progress import Progress
 from scheduled_invoice_processor.database import DatabaseCache
@@ -359,12 +359,9 @@ async def main() -> None:
     with RICH_CONSOLE.status("Application is running."):
       await SHUTDOWN
 
-    # `await SHUTDOWN` resolves as soon as `SHUTDOWN.request()` is called -- *before* aeth_ext starts its
-    # threaded pass. So the shutdown_hooks callbacks (pause the scheduler, flush the sheet) run on aeth_ext's
-    # shutdown thread concurrently with this tail, and are guaranteed to finish before the nudge. Everything
-    # below is best-effort: the nudge ends by raising KeyboardInterrupt on this thread
-    # (`_attempt_early_exit`), which can land before any of it runs. Queue backups are persisted on every
-    # change and once more at atexit (A2).
+    # `await SHUTDOWN` resolves when the shutdown is *requested*; aeth_ext's threaded pass (which runs the
+    # shutdown_hooks callbacks: pause the scheduler, flush the sheet) has started but not finished. This
+    # tail runs alongside it. Queue backups are persisted on every change and once more at atexit (A2).
     logger.log(INFO if SHUTDOWN.kind is ShutdownKind.GRACEFUL else WARNING, "Shutdown requested (%s); stopping", SHUTDOWN.kind.name)
     periodic_heartbeat_task.cancel()
     with suppress(CancelledError):
@@ -374,14 +371,13 @@ async def main() -> None:
     except Exception:
       logger.exception("Shutdown: failed to stop the scheduler cleanly")
 
-    # Park until aeth_ext's threaded pass finishes and nudges this thread (`_attempt_early_exit` ->
-    # interrupt_main -> KeyboardInterrupt, caught in run_app). The pass has *started* by the time the
-    # `await SHUTDOWN` waiter wakes (request and Thread.start happen in the same synchronous stretch),
-    # but not *finished*: the flush is a Sheets HTTP round trip and this tail is milliseconds, so
-    # without the park an idle stop would exit the interpreter under the daemon flush thread.
-    # Bounded so a nudge that never arrives cannot hang past Docker's 30 s grace.
-    with suppress(CancelledError):
-      await sleep(20)
+    # aeth_ext 8.0.1 lifecycle: wait for the threaded pass to finish before returning, so the required
+    # Sheets flush can never race interpreter exit. Awaiting also declares "a tail follows", which makes
+    # aeth_ext hold its exit nudge for the remaining budget and skip it once main() has returned -- so
+    # the normal path exits via run_app's sys.exit, not via KeyboardInterrupt. (A tail that overruns the
+    # budget is still unwound by the nudge; run_app catches that too.) Replaces the Phase 2 `sleep(20)`
+    # park, which was a bounded guess at aeth_ext's own knowledge.
+    await SHUTDOWN_COMPLETE
 
 
 async def _run_debug_code(cache: DatabaseCache) -> None:
