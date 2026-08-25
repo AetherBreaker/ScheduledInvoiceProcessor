@@ -17,6 +17,7 @@ import os
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # Third party imports
 import pytest
@@ -24,6 +25,10 @@ import pytest
 # Local imports
 from tests.e2e import constants as C
 from tests.e2e.remote import FtpBox, SftpBox
+
+if TYPE_CHECKING:
+  # Local imports
+  from tests.e2e.sheet import SheetHarness
 
 
 def _require(name: str) -> str:
@@ -139,3 +144,15 @@ def reset_processor_singletons() -> Iterator[None]:
   _drop()
   yield
   _drop()
+
+
+@pytest.fixture(scope="session")
+def sheet() -> Iterator["SheetHarness"]:
+  # Local imports
+  from tests.e2e.sheet import SheetHarness
+
+  harness = SheetHarness(PERSISTED_DIR / "secrets" / "db-key.json", os.environ["DATABASE_ID"])
+  harness.assert_not_near_week_flip()
+  harness.delete_orders(C.ALL_RESERVED_STORES)
+  yield harness
+  harness.delete_orders(C.ALL_RESERVED_STORES)
