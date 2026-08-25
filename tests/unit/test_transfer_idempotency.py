@@ -74,8 +74,14 @@ class _FakePool:
 
 
 class _FakePbar:
+  def __init__(self, raise_on_update: bool = False) -> None:
+    self.raise_on_update = raise_on_update
+    self.advances = 0
+
   def update(self, *args: object, **kwargs: object) -> None:
-    pass
+    self.advances += 1
+    if self.raise_on_update:
+      raise RuntimeError("progress bar exploded")
 
 
 def _drop_singleton() -> None:
@@ -209,3 +215,26 @@ def test_source_probe_550_perm_error_is_absence(processor: SASProcessor) -> None
     SASProcessor.waiting_ftp = original_pool
   assert meta.preprocess_success == {0: True}
   assert result is True
+
+
+@pytest.mark.parametrize(
+  ("sizes", "fail_rename", "expected"),
+  [
+    ({RECV.as_posix(): 128}, False, True),  # plain success
+    ({}, True, False),  # rename failed, destination absent
+  ],
+)
+def test_progress_advances_exactly_once_per_move_even_if_the_bar_raises(
+  processor: SASProcessor, sizes: dict[str, int | BaseException], fail_rename: bool, expected: bool
+) -> None:
+  """A progress-bar failure must neither flip a successful move to failure nor double-advance the bar."""
+  pbar = _FakePbar(raise_on_update=True)
+  processor.pbar = pbar  # type: ignore[assignment]
+  original_pool = SASProcessor.waiting_ftp
+  try:
+    meta, _, result = _run(processor, sizes, fail_rename=fail_rename)
+  finally:
+    SASProcessor.waiting_ftp = original_pool
+  assert meta.preprocess_success == {0: expected}
+  assert result is expected
+  assert pbar.advances == 1

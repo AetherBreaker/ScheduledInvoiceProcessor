@@ -6,7 +6,7 @@ from atexit import register as register_at_exit
 from copy import deepcopy
 from datetime import datetime
 from errno import EACCES
-from ftplib import all_errors, error_perm
+from ftplib import all_errors, error_perm, error_temp
 from io import BytesIO
 from json import loads
 from logging import Logger, getLogger
@@ -58,9 +58,6 @@ TRANSIENT_TRANSFER_ERROR_STRINGS = (
   "server disconnected",
   "timed out",
   "timeout",
-  # FTP 425 "can't open data connection" -- passive-port exhaustion on the holding server under a parallel wave;
-  # the next attempt lands on a freed port.
-  "425",
   "broken pipe",
   "socket is closed",
   "eof",
@@ -571,7 +568,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
         self.extract_invoice_num(transient_file, file_meta, idx, adapted_logger=adapted_logger)
         if log_action_handler is not None:
           log_action_handler(key, result, file_meta)
-        self.pbar.update(move_files_task, advance=1, refresh=True)
+        self._advance_progress(move_files_task)
         return success
       except Exception as e:
         if self._is_transient_transfer_error(e) and attempt <= self._transient_transfer_retries:
@@ -594,11 +591,26 @@ class SupplierProcessorBase(metaclass=SingletonType):
           log_action_handler(key, StatusCode.FAILURE, file_meta)
         raise
 
+  def _advance_progress(self, move_files_task: TaskID) -> None:
+    """Advance the file-move task by one. Every outcome of a move (success, failure, skipped-because-errored)
+    consumes exactly one slot in the task total, so the bar can reach 100 % on a partial wave. Never raises: a
+    progress-bar failure must not turn a completed move into a logged failure."""
+    try:
+      self.pbar.update(move_files_task, advance=1, refresh=True)
+    except Exception:
+      logger.debug("%s: progress bar update failed", self.__class__.__name__, exc_info=True)
+
   def _is_transient_transfer_error(self, exc: BaseException) -> bool:
     if isinstance(
       exc,
       (TimeoutError, ConnectionError, BrokenPipeError, EOFError, SSHException),
     ):
+      return True
+
+    # FTP 425 "can't open data connection": passive-port exhaustion on the holding server under a parallel wave;
+    # the next attempt lands on a freed port. Anchored to the reply code, not a substring, so a "425" inside a
+    # size or path in some other error cannot trigger a retry.
+    if isinstance(exc, error_temp) and str(exc).startswith("425"):
       return True
 
     message = str(exc).lower()
@@ -651,7 +663,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     if self.errored:
       local_logger.warning("%s: Disabled due to error state. Skipping transfer of files within main FTP", self.__class__.__name__)
       getattr(file_meta, success_attr)[idx] = False
-      self.pbar.update(move_files_task, advance=1, refresh=True)
+      self._advance_progress(move_files_task)
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.FAILURE, file_meta)
       return False
@@ -688,7 +700,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
             local_logger.warning("%s: Failed to verify move of %s", self.__class__.__name__, send_path.name, exc_info=e)
       result = StatusCode.SUCCESS if success else StatusCode.FAILURE
       getattr(file_meta, success_attr)[idx] = success
-      self.pbar.update(move_files_task, advance=1, refresh=True)
+      self._advance_progress(move_files_task)
       if log_action_handler is not None:
         log_action_handler(key, result, file_meta)
     # Ensure that exceptions actually get logged while executing off main thread
@@ -703,7 +715,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       )
       getattr(file_meta, success_attr)[idx] = False
       # A failed move still consumes its slot in the task total, so the bar can reach 100 % on a partial wave.
-      self.pbar.update(move_files_task, advance=1, refresh=True)
+      self._advance_progress(move_files_task)
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.FAILURE, file_meta)
     return success
