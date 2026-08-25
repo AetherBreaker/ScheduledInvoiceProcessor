@@ -16,7 +16,7 @@ pytestmark = pytest.mark.usefixtures("clean_remote", "reset_processor_singletons
 
 
 async def test_both_suppliers_same_process(sheet: SheetHarness, sas_box: SftpBox, ryo_box: SftpBox, sft_box: FtpBox):
-  base = now_eastern()
+  started = base = now_eastern()
   (sas_store, sas_customer), = C.BOTH_SAS_ORDERS
   (ryo_store, ryo_customer), = C.BOTH_RYO_ORDERS
 
@@ -39,5 +39,5 @@ async def test_both_suppliers_same_process(sheet: SheetHarness, sas_box: SftpBox
 
   assert sheet.schedule_flags(sas_store) == (True, True)
   assert sheet.schedule_flags(ryo_store) == (True, True)
-  assert_log_has_full_trail(sheet.log_rows([sas_store]), {"700003"})
-  assert_log_has_full_trail(sheet.log_rows([ryo_store]), {"58001", "58002"})
+  assert_log_has_full_trail(sheet.log_rows([sas_store], since=started), {"700003"})
+  assert_log_has_full_trail(sheet.log_rows([ryo_store], since=started), {"58001", "58002"})

@@ -2,7 +2,7 @@
 
 # Standard library imports
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -13,6 +13,36 @@ SCHEDULE_TAB = "Current Week"
 LOG_TAB = "Processing Log"
 STORE_COL = 2  # 1-based column index of `store` in both tabs
 TZ = ZoneInfo("US/Eastern")
+
+
+_SHEETS_SERIAL_EPOCH = datetime(1899, 12, 30)  # noqa: DTZ001
+
+
+def _serial_to_datetime(value: str) -> datetime | None:
+  """Google Sheets' UNFORMATTED_VALUE returns a bare serial day-number (days since 1899-12-30, tz-naive
+  wall-clock) for any cell it auto-detected as a date/time -- including `action_datetime`, even though the
+  app writes it as an ISO-8601 string: Sheets silently reinterprets the ISO text on write. Assume the
+  wall-clock reading is in TZ, matching the app's own SETTINGS.tz."""
+  try:
+    serial = float(value)
+  except ValueError:
+    return None
+  return (_SHEETS_SERIAL_EPOCH + timedelta(days=serial)).replace(tzinfo=TZ)
+
+
+def _at_or_after(value: object, since: datetime) -> bool:
+  """True if `value` parses to a datetime >= since; not-parseable values do not match."""
+  if value is None:
+    return False
+  text = str(value)
+  try:
+    parsed = datetime.fromisoformat(text)
+  except ValueError:
+    maybe = _serial_to_datetime(text)
+    if maybe is None:
+      return False
+    parsed = maybe
+  return parsed >= since
 
 
 def _store_of(row: list[object]) -> int | None:
@@ -59,13 +89,16 @@ class SheetHarness:
 
   # --- processing log ------------------------------------------------------------------------------------------------
 
-  def log_rows(self, stores: Iterable[int]) -> list[dict[str, str]]:
+  def log_rows(self, stores: Iterable[int], since: datetime | None = None) -> list[dict[str, str]]:
     wanted = {int(s) for s in stores}
     values = self._book.worksheet(LOG_TAB).get_all_values(value_render_option=gspread.utils.ValueRenderOption.unformatted)
     header, body = values[0], values[1:]
-    return [
+    rows = [
       {str(h): str(v) for h, v in zip(header, row, strict=False)} for row in body if _store_of(row) in wanted
     ]
+    if since is None:
+      return rows
+    return [row for row in rows if _at_or_after(row.get("action_datetime"), since)]
 
   # --- guards --------------------------------------------------------------------------------------------------------
 

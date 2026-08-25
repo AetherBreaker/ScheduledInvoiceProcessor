@@ -22,7 +22,7 @@ def _parse_merged_name(name: str) -> tuple[str, set[str], str]:
 
 async def test_ryo_cycle(sheet: SheetHarness, ryo_box: SftpBox, sft_box: FtpBox):
   (store, customer), = C.RYO_CYCLE_ORDERS
-  base = now_eastern()
+  started = base = now_eastern()
   invoice_nums = {"57872", "57873"}
   originals: list[str] = []
   latest_stamp = ""
@@ -62,4 +62,4 @@ async def test_ryo_cycle(sheet: SheetHarness, ryo_box: SftpBox, sft_box: FtpBox)
   assert len([b for b in body if b]) == 6
 
   assert sheet.schedule_flags(store) == (True, True)
-  assert_log_has_full_trail(sheet.log_rows([store]), invoice_nums)
+  assert_log_has_full_trail(sheet.log_rows([store], since=started), invoice_nums)

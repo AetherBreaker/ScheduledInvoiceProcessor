@@ -16,7 +16,7 @@ pytestmark = pytest.mark.usefixtures("clean_remote", "reset_processor_singletons
 
 async def test_sas_cycle(sheet: SheetHarness, sas_box: SftpBox, sft_box: FtpBox):
   # --- arrange: one invoice file per reserved SAS order on the vendor server, one schedule row per order ---
-  base = now_eastern()
+  started = base = now_eastern()
   uploaded: dict[int, str] = {}  # store -> filename
   invoice_nums: set[str] = set()
   for i, (store, customer) in enumerate(C.SAS_CYCLE_ORDERS):
@@ -42,4 +42,4 @@ async def test_sas_cycle(sheet: SheetHarness, sas_box: SftpBox, sft_box: FtpBox)
   # --- assert: sheet ---
   for store, _ in C.SAS_CYCLE_ORDERS:
     assert sheet.schedule_flags(store) == (True, True), f"store {store} should be grabbed+applied"
-  assert_log_has_full_trail(sheet.log_rows([s for s, _ in C.SAS_CYCLE_ORDERS]), invoice_nums)
+  assert_log_has_full_trail(sheet.log_rows([s for s, _ in C.SAS_CYCLE_ORDERS], since=started), invoice_nums)
