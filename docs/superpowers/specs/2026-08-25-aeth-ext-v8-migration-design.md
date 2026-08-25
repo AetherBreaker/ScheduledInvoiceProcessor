@@ -8,9 +8,10 @@ rather than the plan's snapshot. The e2e suite from
 ## Goal and hard constraints
 
 **Goal:** `scheduled-invoice-processor` runs on `aeth-ext[sftp, async]>=8.0.0` with the same production
-behaviour proven by the e2e suite, and adopts what v8 ships: pooled FTP with `SecretStr` credentials
-(Pillars B/C), the fatal-exception trail (A4), durable queue state (A2), and a callback-driven shutdown
-(A3).
+behaviour proven by the e2e suite, and adopts what v8 ships in two phases: **Phase 1** — pooled FTP with `SecretStr` credentials
+(Pillars B/C), the minimal fatal-exception-trail adoption that unblocks the pin (A4), durable queue state
+(A2), and the before/after drag race; **Phase 2** — the shutdown lifecycle (A3), specced separately once the
+drag-race numbers say whether an in-flight wave of pooled transfers can finish inside the shutdown budget.
 
 **Constraints (binding on every task):**
 - Work happens on branch `chore/update-to-aeth-ext-v8` and is pushed to **PR #10 only. The PR is never
@@ -41,15 +42,16 @@ behaviour proven by the e2e suite, and adopts what v8 ships: pooled FTP with `Se
 
 ## Sequencing
 
-Ordered so the e2e suite goes green as early as possible; everything after step 2 is verified by the same
-suite plus new unit tests.
+**Phase 1 (this spec's implementation plan)**, ordered so the e2e suite goes green as early as possible:
 
-1. **B2 + C2** — pooled FTP with per-vendor credentials (app imports and runs on v8 except for the
-   decorator `TypeError` fixed in step 2)
-2. **A3 + A4** — shutdown lifecycle with the database-origin check inlined; `err_handling.py` deleted
+1. **B2 + C2** — pooled FTP with per-vendor credentials
+2. **A4 (minimal)** — decorator fix, `err_handling.py` deleted, interim origin check inlined in `main()`
+   (app imports and runs on v8 after steps 1–2)
 3. **README cleanup** — e2e README no longer needs the `HOME`/`USERPROFILE` workaround
-4. **A2** — durable queue state
-5. **Drag race after-run** — same harness, record the comparison
+4. **A2** — durable queue state (+ `atexit` safety net)
+5. **Drag race after-run** — same harness on v8; results recorded here. **This is the decision gate for Phase 2.**
+
+**Phase 2 (separate spec, after step 5)**: A3 shutdown lifecycle — see "Phase 2 — deferred" below.
 
 ## B2 + C2 — pooled FTP, credentials grouped by vendor
 
@@ -79,14 +81,22 @@ suite plus new unit tests.
 - The `if __name__ == "__main__":` smoke script in `ftp_configs.py` is deleted with the module (the e2e
   suite supersedes it).
 
-## A4 — fatal-exception origin via `ExceptionTrail` (folded into A3)
+## A4 (minimal, Phase 1) — unblock the pin bump
 
-- `src/scheduled_invoice_processor/err_handling.py` is **deleted** — a module for one function is not
-  worth keeping, and its only remaining use is the shutdown flush callback. The check is inlined there
-  (see A3): `any(trail.matches("scheduled_invoice_processor.database", "**.gspread.**", "**.google.oauth2.**") for trail in trails)`.
-- Also deleted: `typing_custom.FatalDetails` (no consumers once `get_last_fatal_details` is gone).
-- `scheduler_config.py`: `@handle_fatal_exc_sync` with no arguments; the `extract_exc_details` import goes.
-- Tested through the callback (A3's unit tests), with real trails from `build_exception_trail`.
+- `scheduler_config.py`: `@handle_fatal_exc_sync` with no arguments (the kwarg raises `TypeError` at
+  decoration on v8); the `extract_exc_details` import goes.
+- `src/scheduled_invoice_processor/err_handling.py` is **deleted** — a module for one function is not worth
+  keeping. `typing_custom.FatalDetails` goes with it.
+- `startup.main()`'s existing post-`await SHUTDOWN` block is kept **structurally as-is for Phase 1**
+  (including the `sleep(600)`/`.errored` heuristic — its fate is a Phase 2 decision), with exactly one
+  substitution: every `get_last_fatal_details()["is_database_origin"]` read becomes an inline check over
+  `get_current_fatal_trails()` from `aeth_ext.errors.shutdown`:
+  `any(trail.matches("scheduled_invoice_processor.database", "**.gspread.**", "**.google.oauth2.**") for trail in trails)`.
+  The `exception_type`/`exception_message` log fields are replaced by `trail.origin` of the first matching
+  trail. This is the master plan's own "step 1: unblock the pin bump" shape.
+- Unit test: build real trails with `build_exception_trail` from an exception raised inside
+  `scheduled_invoice_processor.database` and from one raised elsewhere; assert the inline expression (extracted
+  into a tiny private helper in `startup.py` only if needed for testability — the spec does not require one).
 
 ## A2 — queue state durable on every change
 
@@ -114,31 +124,24 @@ suite plus new unit tests.
   the loader; `_persist_queues_at_exit()` writes when the lock is free and still writes (with a warning) when
   the lock is held by another thread.
 
-## A3 — shutdown lifecycle
+## Phase 2 — deferred: A3 shutdown lifecycle
 
-- `startup.main()` after `await SHUTDOWN`: cancel the heartbeat task and **return**. The whole current
-  post-shutdown block (`sleep(600)`/`.errored` heuristic, `scheduler.pause/shutdown`, Sheets flush,
-  `sys.exit(1)`) is removed from `main()`.
-- `__main__.run_app()` exits with `1` if `SHUTDOWN.kind >= ShutdownKind.FATAL` after `run(main())`
-  returns, else `0`.
-- Two THREADED callbacks, registered in `bootstrap_runtime` (bound methods on module-level singletons so
-  the `WeakMethod` stays alive):
-  1. `_freeze_scheduler(trails)` — `priority=-10` (runs before the flush): `scheduler.pause()`,
-     `scheduler.shutdown(wait=False)`. In-flight jobs are abandoned by design; A2 makes redoing them cheap and
-     the Sheets checkoff ordering means nothing finished is lost.
-  2. `_final_sheets_flush(trails)` — `priority=0`, `required=True`: if any trail matches
-     `"scheduled_invoice_processor.database"`, `"**.gspread.**"` or `"**.google.oauth2.**"` (inline, this is the
-     only place the database-origin question is asked), log and skip; otherwise call
-     `DatabaseCache.flush_queued_writes()`.
-- `DatabaseCache.flush_queued_writes() -> None` is a new public **sync** method: if any queue body is
-  non-empty, call the existing `_api_write()` (already takes its aiologic locks in sync mode and is safe off
-  the loop thread; `client` re-auth uses `loop.time()`, which is monotonic and works on a closed loop).
-- No queue-backup callback (A2). The FTP pools register their own teardown.
-- What changes operationally: a fatal error now stops the process within aeth_ext's 7 s graceful budget
-  instead of ~10 minutes. Docker's `restart: no` behaviour is unchanged.
-- Unit tests call the two callbacks directly: with `()`, with a trail built (via `build_exception_trail`)
-  from an exception raised inside `scheduled_invoice_processor.database`, and with one raised elsewhere —
-  asserting scheduler state and whether `flush_queued_writes` was invoked (patched).
+Not built in Phase 1. Everything below is the **direction recorded for the Phase 2 brainstorm**, not a
+locked design; it is re-litigated with the drag-race numbers in hand.
+
+- Decision gate: from the after-run, the per-file transfer time on v8 and the wall time of one full
+  concurrent wave (16-way `to_thread` batch) tell us whether an in-flight wave can finish inside aeth_ext's
+  7 s GRACEFUL budget. If it can, a bounded wait-for-wave in shutdown may be worth building; if it cannot, the
+  master plan's "abandon in-flight FTP, rely on A2" conclusion stands and the `sleep(600)` block is simply
+  retired.
+- Shape sketched today (subject to the gate): `main()` returns after `await SHUTDOWN`; `run_app()` exits `1`
+  when `SHUTDOWN.kind >= FATAL`; two THREADED `register_for_shutdown` callbacks registered in
+  `bootstrap_runtime` — `_freeze_scheduler` (`priority=-10`: `scheduler.pause(); scheduler.shutdown(wait=False)`)
+  and `_final_sheets_flush` (`priority=0`, `required=True`: inline trail check as in A4, then a new sync
+  `DatabaseCache.flush_queued_writes()` wrapping the already-thread-safe `_api_write()`); no queue-backup
+  callback (A2 covers it); orphaned in-flight jobs accepted unless the gate says otherwise.
+- Phase 2 gets its own spec under `docs/superpowers/specs/` and its own plan; the Phase 1 plan must not
+  pre-empt any of it.
 
 ## e2e README cleanup
 
@@ -156,7 +159,8 @@ their own reviewed task and must not weaken assertions.
 - Baseline (aeth-ext 6.3.1, 2026-08-25 00:37, 7 current-week files): per-file mean **5.35 s**, max 5.45 s;
   `pickup_files` 10.8 s; `dropoff_files` 24.0 s; whole cycle 40.5 s.
 - After-run: same command on v8; compare **per-file mean/max** (file count depends on what is in the
-  vendor folder that day). Record both in this section.
+  vendor folder that day) and record the wall time of `pickup_files` as the proxy for one concurrent wave.
+  Record both in this section — they are Phase 2's decision input.
 - Running it needs the real credentials and writes to the testing sheet/holding tree — it is a manual
   task, not CI.
 

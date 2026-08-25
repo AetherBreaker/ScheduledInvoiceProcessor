@@ -23,12 +23,13 @@ verified against aeth_ext 8.0.0 source. Resolutions, in the order the questions 
 - **A2**: full atomic save (`.tmp` + `os.replace`) after every mutation, inline under the existing lock;
   four files stay separate; cron job, `__del__` and `save_queue_backups_off_thread` removed; an `atexit`
   hook does one final save (try-lock 1 s, write regardless) as a safety net.
-- **A3**: `main()` returns after `await SHUTDOWN`; teardown = two THREADED callbacks (freeze scheduler at
-  priority -10; required final Sheets flush via a new sync `DatabaseCache.flush_queued_writes()`).
-  `sleep(600)`/`.errored` heuristic dropped with no replacement. Orphaned in-flight jobs accepted.
-- **A4**: `err_handling.py` is deleted; the database-origin check is inlined in A3's final-flush
-  callback via `ExceptionTrail.matches(...)` (its only use site). `_last_fatal_details`/
-  `get_last_fatal_details`/`FatalDetails` go with it. A4 is implemented as part of the A3 task.
+- **A3**: **deferred to Phase 2**, specced after the drag race: whether pooled transfers let an in-flight
+  wave finish inside the 7 s budget decides between a bounded wait and plain abandonment, and therefore
+  what (if anything) replaces `sleep(600)`. Phase 1 keeps `main()`'s post-shutdown block as-is apart from
+  the A4 substitution. Direction sketched in the spec's "Phase 2 — deferred" section.
+- **A4 (Phase 1, minimal)**: drop the decorator kwarg; delete `err_handling.py` and `FatalDetails`; inline
+  the database-origin check in `main()` via `get_current_fatal_trails()` + `ExceptionTrail.matches(...)`.
+  Moves into the Phase 2 flush callback when A3 lands.
 - **B2**: like-for-like at call sites, real pool underneath (`create_ftp_adapter`, defaults). `ftp_configs.py`
   is deleted; each vendor module owns its credentials loader; the SFT holding creds live in
   `suppliers/__init__.py`. `SFTPCredentials(host_key_policy="auto_add")` to match today's `AutoAddPolicy`.
