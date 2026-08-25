@@ -1,0 +1,18 @@
+{
+  "version": 10,
+  "users": [
+    {
+      "id": 1,
+      "status": 1,
+      "username": "sas",
+      "password": "sas-test-pw",
+      "home_dir": "/srv/sftpgo/data/sas",
+      "permissions": { "/": ["*"] },
+      "max_sessions": 5,
+      "quota_size": 0,
+      "quota_files": 0,
+      "upload_bandwidth": 0,
+      "download_bandwidth": 0
+    }
+  ]
+}

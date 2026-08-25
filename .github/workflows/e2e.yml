@@ -1,0 +1,54 @@
+name: e2e
+
+# Runs on PRs and manual dispatch, but the job below is gated to the repo owner (see `if:`):
+# the repo is public and the job needs secrets, so other actors must never reach the steps.
+on:
+  pull_request:
+  workflow_dispatch:
+
+# The testing Google Sheet is a shared resource: never run two e2e jobs at once.
+concurrency:
+  group: e2e-sheet
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    # Only the repo owner's own PRs/dispatches run; fork PRs and other actors are skipped.
+    if: >-
+      github.actor == 'AetherBreaker' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UV_INDEX_SFTPYPI_USERNAME: ${{ secrets.SFTPYPI_USERNAME }}
+      UV_INDEX_SFTPYPI_PASSWORD: ${{ secrets.SFTPYPI_PASSWORD }}
+      E2E_DB_KEY_JSON: ${{ secrets.E2E_DB_KEY_JSON }}
+      E2E_DATABASE_ID: ${{ secrets.E2E_DATABASE_ID }}
+      E2E_DATABASE_BASE_SCHEDULE_ID: ${{ secrets.E2E_DATABASE_BASE_SCHEDULE_ID }}
+      E2E_DATABASE_ORDER_LOG_ID: ${{ secrets.E2E_DATABASE_ORDER_LOG_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start server stand-ins
+        run: docker compose -f tests/docker/compose.yaml up -d --wait
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --frozen
+
+      - name: Run e2e suite
+        run: uv run --frozen pytest tests/e2e -v --no-cov
+
+      - name: Server logs on failure
+        if: failure()
+        run: docker compose -f tests/docker/compose.yaml logs
+
+      - name: Stop server stand-ins
+        if: always()
+        run: docker compose -f tests/docker/compose.yaml down -v
