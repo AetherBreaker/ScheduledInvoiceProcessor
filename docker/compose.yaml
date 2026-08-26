@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
       args:
-        GIT_TAG: v3.0.1
+        GIT_TAG: v3.0.2
         GIT_REPO: https://github.com/AetherBreaker/ScheduledInvoiceProcessor.git
     restart: no
     # Shutdown = aeth_ext callbacks (<=7 s) + join of in-flight FTP threads (~5 s per vendor transfer)
