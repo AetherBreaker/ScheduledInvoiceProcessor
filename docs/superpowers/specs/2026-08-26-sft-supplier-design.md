@@ -82,10 +82,11 @@ Copy-and-modify of the base method. Steps:
 2. For each filename match, download the file to a `BytesIO` (off-thread). Parse line 1
    with `invoice_num_pattern`; parse `invoice_date` with `header_date_format` and
    localise to `SETTINGS.tz` (header carries no offset).
-3. Keep the file only if the header date lies in the Sun–Sat window the base computes
-   from `pickup_date`, `dropoff_date`, and `current_week` (same arithmetic as the mtime
-   branch at `suppliers/__init__.py` `_pickup_files`). Unparseable header or
-   out-of-window → `warning`, file untouched, not added to `items_to_dl`.
+3. Keep the file only if the header date lies in the **strict one-week** Sun–Sat window
+   of `pickup_date`..`dropoff_date` (shifted back one week when `current_week` is False),
+   i.e. RYO's semantics — deliberately *not* the base mtime branch's two-week window,
+   whose extra week is under measurement via the `[OUTSIDE_WEEK_PICKUP]` diagnostic.
+   Unparseable header or out-of-window → `warning`, file untouched, not added to `items_to_dl`.
 4. For kept files, transfer is a **rename** `pickup_ftp_folder/name → remote_file_locs[idx]`
    on the shared adapter, using the same `_already_moved` idempotency as
    `_transfer_file_main_to_main`. `extract_invoice_num` is fed the bytes already

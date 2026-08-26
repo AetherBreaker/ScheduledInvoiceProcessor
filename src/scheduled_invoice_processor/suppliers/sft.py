@@ -154,14 +154,15 @@ class SFTProcessor(SupplierProcessorBase):
       return None
 
   def header_date_in_window(self, file_meta: FileRegisterData, header_date: datetime) -> bool:
-    """Same Sun-Sat window the base class applies to mtimes, applied to the header date instead."""
-    current_week = file_meta.current_week
+    """Strict one-week window (like RYO's, unlike the base mtime branch's two-week one): Sunday 00:00 of the
+    pickup week through Saturday 23:59:59 of the dropoff week, shifted back one week for a previous-week entry."""
+    weeks_back = 0 if file_meta.current_week else 1
     start_date = (
       file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
-    ) - relativedelta(weeks=1 if current_week else 0)
+    ) - relativedelta(weeks=weeks_back)
     end_date = (
       file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
-    ) - relativedelta(weeks=0 if current_week else 1)
+    ) - relativedelta(weeks=weeks_back)
     return start_date <= header_date < end_date
 
   def _rename_same_server(

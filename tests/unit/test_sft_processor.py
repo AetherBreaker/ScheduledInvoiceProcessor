@@ -141,23 +141,25 @@ def test_parse_header_date_rejects_impossible_date(processor: SFTProcessor) -> N
 
 
 def test_header_date_in_window_current_week(processor: SFTProcessor, frozen_now: None) -> None:
-  # A Wednesday. current_week=True gives 2-week window: Sun 2025-06-08 00:00 through Sat 2025-06-21 23:59:59.
+  # A Wednesday. Strict one-week window: Sun 2025-06-15 00:00 through Sat 2025-06-21 23:59:59.999999.
   pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
   meta = _meta(pickup, pickup + timedelta(days=1))
-  # In-window: Jun 19 Thu, Jun 08 Sun, Jun 14 Sat
   assert processor.header_date_in_window(meta, datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz))
-  assert processor.header_date_in_window(meta, datetime(2025, 6, 8, 0, 0, 0, tzinfo=SETTINGS.tz))
-  assert processor.header_date_in_window(meta, datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz))
-  # Out-of-window: Jun 07 Sat, Jun 22 Sun
-  assert not processor.header_date_in_window(meta, datetime(2025, 6, 7, 23, 59, 59, tzinfo=SETTINGS.tz))
+  assert processor.header_date_in_window(meta, datetime(2025, 6, 15, 0, 0, 0, tzinfo=SETTINGS.tz))
+  assert processor.header_date_in_window(meta, datetime(2025, 6, 21, 23, 59, 59, tzinfo=SETTINGS.tz))
+  # Previous week is NOT accepted (unlike the base mtime branch / SAS), nor is next week.
+  assert not processor.header_date_in_window(meta, datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz))
   assert not processor.header_date_in_window(meta, datetime(2025, 6, 22, 0, 0, 0, tzinfo=SETTINGS.tz))
 
 
 def test_header_date_in_window_previous_week(processor: SFTProcessor, frozen_now: None) -> None:
-  # A Wednesday with current_week=False (window has passed). Window is previous week: Sun 2025-06-15 through Sat 2025-06-14 (empty/past window).
+  # Same dates with current_week=False: the whole window shifts back one week, Sun 2025-06-08 .. Sat 2025-06-14.
   pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
   meta = _meta(pickup, pickup + timedelta(days=1), current_week=False)
-  # Window is Sun 2025-06-15 00:00 through Sat 2025-06-14 23:59:59 (backward, so nothing matches)
+  assert processor.header_date_in_window(meta, datetime(2025, 6, 8, 0, 0, 0, tzinfo=SETTINGS.tz))
+  assert processor.header_date_in_window(meta, datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz))
+  assert not processor.header_date_in_window(meta, datetime(2025, 6, 7, 23, 59, 59, tzinfo=SETTINGS.tz))
+  assert not processor.header_date_in_window(meta, datetime(2025, 6, 15, 0, 0, 0, tzinfo=SETTINGS.tz))
   assert not processor.header_date_in_window(meta, datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz))
 
 
