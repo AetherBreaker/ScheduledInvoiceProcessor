@@ -26,7 +26,7 @@
     "apscheduler-stubs>=0.1.0.dev2",
     "mypy>=2.1.0",
     "pandas-stubs>=3.0.0.260204",
-    "poe-tasks>=4.0.0",
+    "poe-tasks>=5.0.0",
     "poethepoet>=0.46.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.0.0",
@@ -66,17 +66,11 @@
   extends = "../pyproject.toml"
 
 [tool.pytest.ini_options]
-  addopts      = [
-    "--cov",
-    "--cov-report=term-missing",
-    "--strict-markers",
-    "--strict-config",
-    "-ra"
-  ]
-  cache_dir    = ".cache/pytest"
-  testpaths    = ["tests"]
-  xfail_strict = true
-  asyncio_mode = "auto"
+  addopts                            = ["--cov", "--cov-report=term-missing", "--strict-markers", "--strict-config", "-ra"]
+  cache_dir                          = ".cache/pytest"
+  testpaths                          = ["tests"]
+  xfail_strict                       = true
+  asyncio_mode                       = "auto"
   asyncio_default_fixture_loop_scope = "session"
   asyncio_default_test_loop_scope    = "session"
 

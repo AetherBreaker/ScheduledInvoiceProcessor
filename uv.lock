@@ -1135,15 +1135,15 @@ wheels = [
 
 [[package]]
 name = "poe-tasks"
-version = "4.3.6"
+version = "5.0.0"
 source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
 dependencies = [
     { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "poethepoet-tasks", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
-sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/b34/abe3215ac0d1b/poe_tasks-4.3.6.tar.gz", hash = "sha256:b34abe3215ac0d1b4ef3a9ca3a1898d8c5b98849354c47f378c6b45904b745c2" }
+sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/52b/5a59c2e9a1fd9/poe_tasks-5.0.0.tar.gz", hash = "sha256:52b5a59c2e9a1fd90e693efd891799a6012159aa09d4b4722016be2d891ddc2d" }
 wheels = [
-    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/9cd/cd3ec3a88f7c0/poe_tasks-4.3.6-py3-none-any.whl", hash = "sha256:9cdcd3ec3a88f7c0ba7e42c8b185f875986ee4f0001020cd5d1582274730489d" },
+    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/afb/3169ff7c5fe1a/poe_tasks-5.0.0-py3-none-any.whl", hash = "sha256:afb3169ff7c5fe1a16d938f3af3d2fa4305a8df361848f19d902d289d70da927" },
 ]
 
 [[package]]
@@ -1609,7 +1609,7 @@ dev = [
     { name = "apscheduler-stubs", specifier = ">=0.1.0.dev2" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "pandas-stubs", specifier = ">=3.0.0.260204" },
-    { name = "poe-tasks", specifier = ">=4.0.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
+    { name = "poe-tasks", specifier = ">=5.0.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
     { name = "poethepoet", specifier = ">=0.46.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
