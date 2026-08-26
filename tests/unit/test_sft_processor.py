@@ -9,10 +9,11 @@ from __future__ import annotations
 # Standard library imports
 import atexit
 import re
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 # Third party imports
@@ -20,14 +21,18 @@ import pytest
 
 # First party imports
 import scheduled_invoice_processor.suppliers as suppliers_mod
+from aeth_ext.rich.progress import TaskID
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
 from scheduled_invoice_processor.suppliers.sft import SFTProcessor
-from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
+from scheduled_invoice_processor.typing_custom.enums import StatusCode, SuppliersEnum
 
 if TYPE_CHECKING:
   # Standard library imports
-  from collections.abc import Generator
+  from collections.abc import Callable, Generator, Iterator
+
+  # First party imports
+  from aeth_ext.rich.progress import Progress
 
 SAMPLE_HEADER = "SFT017|13842|49273|6/19/2025 9:46:46 AM"
 PADDED_HEADER = "SFT017|13842|49273|06/19/2025 09:46:46 AM"
@@ -53,7 +58,7 @@ def processor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[SFTP
 
 
 @pytest.fixture
-def frozen_now(monkeypatch: pytest.MonkeyPatch) -> None:
+def frozen_now(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
   """Freeze datetime.now() to a time within the 2025-06-08 to 2025-06-22 window."""
   mock_now = datetime(2025, 6, 19, 12, 0, tzinfo=SETTINGS.tz)
   with patch("scheduled_invoice_processor.suppliers.file_register_data.datetime") as mock_dt:
@@ -122,6 +127,7 @@ def _meta(pickup: datetime, dropoff: datetime, current_week: bool = True, names:
 def test_parse_header_date_sample(processor: SFTProcessor) -> None:
   parsed = processor.parse_header_date(SAMPLE_HEADER)
   assert parsed == datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz)
+  assert parsed is not None
   assert parsed.tzinfo is SETTINGS.tz
 
 
@@ -152,3 +158,130 @@ def test_header_date_in_window_previous_week(processor: SFTProcessor, frozen_now
   meta = _meta(pickup, pickup + timedelta(days=1), current_week=False)
   # Window is Sun 2025-06-15 00:00 through Sat 2025-06-14 23:59:59 (backward, so nothing matches)
   assert not processor.header_date_in_window(meta, datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz))
+
+
+class _FakeClient:
+  """`files` is the remote filesystem: path -> bytes. `rename` moves an entry (or raises when `fail_rename`).
+  `listdir` yields entries whose parent is the queried folder. `download_file` streams the bytes to `callback`."""
+
+  def __init__(self, files: dict[str, bytes], fail_rename: bool = False) -> None:
+    self.files = dict(files)
+    self.fail_rename = fail_rename
+    self.renames: list[tuple[str, str]] = []
+    self.downloads: list[str] = []
+
+  def listdir(self, path: str) -> Iterator[SimpleNamespace]:
+    for remote in list(self.files):
+      remote_path = PurePosixPath(remote)
+      if remote_path.parent.as_posix() == path:
+        yield SimpleNamespace(filename=remote_path.name, modified_time=datetime(2000, 1, 1, tzinfo=SETTINGS.tz))
+
+  def rename(self, old: str, new: str) -> None:
+    self.renames.append((old, new))
+    if self.fail_rename:
+      raise OSError("rename failed")
+    self.files[new] = self.files.pop(old)
+
+  def get_size(self, path: str) -> int:
+    if path not in self.files:
+      raise FileNotFoundError(f"no such file {path}")
+    return len(self.files[path])
+
+  def download_file(self, remote_path: str, callback: Callable[[bytes], None], task_msg: str = "") -> None:
+    self.downloads.append(remote_path)
+    callback(self.files[remote_path])
+
+
+class _FakePool:
+  def __init__(self, client: _FakeClient) -> None:
+    self.client = client
+
+  @contextmanager
+  def start_session(self) -> Generator[_FakeClient]:
+    yield self.client
+
+  def test_connection(self, logit: bool = False) -> bool:
+    return True
+
+
+class _FakePbar:
+  def __init__(self) -> None:
+    self.advances = 0
+
+  def update(self, *args: object, **kwargs: object) -> None:
+    self.advances += 1
+
+  @contextmanager
+  def add_task(self, *args: object, **kwargs: object) -> Generator[TaskID]:
+    yield _MOVE_FILES_TASK
+
+
+# TaskID only ever calls `prog_instance.remove_task`; a namespace with that one method stands in for Progress.
+_MOVE_FILES_TASK = TaskID(0, cast("Progress", SimpleNamespace(remove_task=lambda *args: None)), remove=False)
+
+SAMPLE_FILE = (SAMPLE_HEADER + "\r\n850661003182|Boveda 62%|5|5|4.930000\r\n").encode()
+PICKUP = PurePosixPath("/TODO_SFT/Pickup/SFT017_13842.edi")
+WAITING = PurePosixPath("/TODO_SFT/Waiting/SFT017_13842.edi")
+
+
+def _wire(processor: SFTProcessor, client: _FakeClient, monkeypatch: pytest.MonkeyPatch) -> None:
+  pool = _FakePool(client)
+  monkeypatch.setattr(SFTProcessor, "vendor_ftp", pool)
+  monkeypatch.setattr(SFTProcessor, "waiting_ftp", pool)
+  processor.pbar = _FakePbar()  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def _transfer(processor: SFTProcessor, meta: FileRegisterData, log: list) -> bool:
+  return processor._transfer_file_same_server(
+    send_path=PICKUP,
+    recv_path=WAITING,
+    move_files_task=_MOVE_FILES_TASK,
+    file_meta=meta,
+    idx=0,
+    key="k",
+    file_bytes=SAMPLE_FILE,
+    log_action_handler=lambda key, status, fm: log.append(status),
+  )
+
+
+def test_same_server_transfer_renames_and_extracts_invoice(processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+  client = _FakeClient({PICKUP.as_posix(): SAMPLE_FILE})
+  _wire(processor, client, monkeypatch)
+  now = datetime.now(SETTINGS.tz)
+  meta = _meta(now, now, names={0: "SFT017_13842.edi"})
+  log: list = []
+
+  assert _transfer(processor, meta, log) is True
+  assert client.renames == [(PICKUP.as_posix(), WAITING.as_posix())]
+  assert WAITING.as_posix() in client.files
+  assert meta.pickup_success == {0: True}
+  assert meta.invoice_nums == {0: "13842"}
+  assert log == [StatusCode.SUCCESS]
+  assert processor.pbar.advances == 1  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_same_server_transfer_already_moved_is_success(processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+  # Source already gone, destination present: an earlier run did the rename before it could record it.
+  client = _FakeClient({WAITING.as_posix(): SAMPLE_FILE}, fail_rename=True)
+  _wire(processor, client, monkeypatch)
+  now = datetime.now(SETTINGS.tz)
+  meta = _meta(now, now, names={0: "SFT017_13842.edi"})
+  log: list = []
+
+  assert _transfer(processor, meta, log) is True
+  assert meta.pickup_success == {0: True}
+  assert meta.invoice_nums == {0: "13842"}
+  assert log == [StatusCode.SUCCESS]
+
+
+def test_same_server_transfer_failure_is_recorded_not_raised(processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+  client = _FakeClient({PICKUP.as_posix(): SAMPLE_FILE}, fail_rename=True)
+  _wire(processor, client, monkeypatch)
+  now = datetime.now(SETTINGS.tz)
+  meta = _meta(now, now, names={0: "SFT017_13842.edi"})
+  log: list = []
+
+  assert _transfer(processor, meta, log) is False
+  assert meta.pickup_success == {0: False}
+  assert log == [StatusCode.FAILURE]
+  assert processor.pbar.advances == 1  # pyright: ignore[reportAttributeAccessIssue]
