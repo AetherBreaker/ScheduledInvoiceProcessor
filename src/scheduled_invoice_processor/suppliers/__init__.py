@@ -1138,6 +1138,57 @@ class SupplierProcessorBase(metaclass=SingletonType):
       local_logger.exception("%s: Error archiving file %s", self.__class__.__name__, remote_file)
       raise
 
+  OUTSIDE_WEEK_LOG_TAG: ClassVar[str] = "[OUTSIDE_WEEK_PICKUP]"
+  """Grep-able signature of the diagnostic emitted when a pickup accepts a file dated outside the strict
+  Sunday-Saturday week of its schedule entry. Diagnostic only: the accept/reject decision is unchanged."""
+
+  @staticmethod
+  def _date_from_filename_match(match: Match[str]) -> datetime | None:
+    """Rebuild a file date from a filename pattern's `year`/`month`/`day` (and optional time) groups, or None."""
+    groups = match.groupdict()
+    if any(groups.get(part) is None for part in ("year", "month", "day")):
+      return None
+    try:
+      return datetime(
+        int(groups["year"]),
+        int(groups["month"]),
+        int(groups["day"]),
+        int(groups.get("hour") or 0),
+        int(groups.get("minute") or 0),
+        int(groups.get("second") or 0),
+        tzinfo=SETTINGS.tz,
+      )
+    except (TypeError, ValueError):
+      return None
+
+  def _warn_if_outside_week(
+    self,
+    file_meta: FileRegisterData,
+    file_date: datetime | None,
+    filename: str,
+    local_logger: LoggerAdapter[Any] | Logger,
+  ) -> bool:
+    """Log-only probe: warn when an *accepted* file is dated outside the strict one-week window (Sunday 00:00 of
+    the pickup week through Saturday 23:59:59 of the dropoff week). The accepting windows are currently two weeks
+    wide for the mtime branch and SAS; this measures how often that extra week is actually used."""
+    if file_date is None:
+      return False
+    week_start = file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
+    week_end = file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
+    if week_start <= file_date <= week_end:
+      return False
+    local_logger.warning(
+      "%s: %s store %s: accepted %s dated %s outside the current week window %s -> %s",
+      self.__class__.__name__,
+      self.OUTSIDE_WEEK_LOG_TAG,
+      file_meta.storenum,
+      filename,
+      file_date.isoformat(),
+      week_start.isoformat(),
+      week_end.isoformat(),
+    )
+    return True
+
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)
   async def _pickup_files(  # noqa: C901, PLR0912
@@ -1164,6 +1215,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
           if match := file_meta.file_pattern.match(remote_file.filename):
             if self.checks_date_in_filename:
               matched_files.append(match)
+              self._warn_if_outside_week(file_meta, self._date_from_filename_match(match), remote_file.filename, local_logger)
             else:
               file_date = remote_file.modified_time
               start_date = (
@@ -1174,6 +1226,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
               ) - relativedelta(weeks=0 if file_meta.current_week else 1)
               if start_date <= file_date < end_date:
                 matched_files.append(match)
+                self._warn_if_outside_week(file_meta, file_date, remote_file.filename, local_logger)
 
         if matched_files:
           file_meta.file_names = {idx: m.string for idx, m in enumerate(matched_files)}
