@@ -409,3 +409,12 @@ def test_create_new_merged_file(processor: SFTProcessor, monkeypatch: pytest.Mon
   assert lines[1] == b"850661003182|Boveda 62%|5|5|4.930000"
   assert lines[2] == b"G100137|Dome Pipe Small|4|4|1.000000"
   assert new_meta.file_pattern.match("SFT017_13842-13843.edi") is not None
+
+
+def test_sft_is_an_expected_supplier(monkeypatch: pytest.MonkeyPatch) -> None:
+  # startup.py builds `supplier_register` by probing connections at import time; stub that out.
+  monkeypatch.setattr(SFTProcessor, "check_connections", classmethod(lambda cls: False))
+  # First party imports
+  from scheduled_invoice_processor.startup import expected_suppliers
+
+  assert expected_suppliers[SuppliersEnum.SFT] is SFTProcessor

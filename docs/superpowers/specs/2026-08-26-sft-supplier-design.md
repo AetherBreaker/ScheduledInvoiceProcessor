@@ -138,10 +138,11 @@ E2E (`tests/e2e/test_sft_cycle.py`): mirrors `test_ryo_cycle.py`, fixture
 
 ## Pending inputs
 
-| Input                    | Owner | Where it lands             |
-| ------------------------ | ----- | -------------------------- |
-| Six FTP folder paths     | Jacob | `sft.py` placeholder block |
-| Confirm `SFT` sheet rows | Jacob | Google Sheet               |
+| Input                    | Owner | Where it lands                |
+| ------------------------ | ----- | ------------------------------ |
+| Six FTP folder paths     | Jacob | `sft.py` — search `TODO_SFT`  |
+| Confirm `SFT` sheet rows | Jacob | Google Sheet                  |
+| Unskip e2e cycle test    | Jacob | tests/e2e/test_sft_cycle.py   |
 
 ## Out of scope
 

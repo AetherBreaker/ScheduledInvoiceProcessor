@@ -661,3 +661,45 @@ if __debug__ and SETTINGS.use_testing_folders:
     orig_attr: PurePosixPath = getattr(SFTProcessor, attr_name)
     new_val = PurePosixPath("/Testing") / orig_attr.relative_to("/")
     setattr(SFTProcessor, attr_name, new_val)
+
+
+async def main():
+  # Third party imports
+  from rich import get_console
+
+  # First party imports
+  from aeth_ext.rich.progress import Progress
+  from scheduled_invoice_processor.database import DatabaseCache
+
+  cache = DatabaseCache()
+  await cache.refresh_cache()
+  now = datetime.now(SETTINGS.tz)
+
+  with Progress(console=get_console(), auto_refresh=False) as pbar:
+    sft = SFTProcessor(pbar)
+    orders = [order async for order in cache.schedule.walk_typed_rows() if order.supplier == SuppliersEnum.SFT]
+
+    for order in orders:
+      await sft.register_pickup(
+        storenum=order.store, customer_id=order.customer, pickup_date=now, dropoff_date=now, current_week=True
+      )
+    await cache.submit_queued_writes_to_pool()
+
+    await sft.pickup_files()
+    await cache.submit_queued_writes_to_pool()
+
+    for order in orders:
+      await sft.register_dropoff(
+        storenum=order.store, customer_id=order.customer, pickup_date=now, dropoff_date=now, current_week=True
+      )
+    await cache.submit_queued_writes_to_pool()
+
+    await sft.dropoff_files()
+    await cache.submit_queued_writes_to_pool()
+
+
+if __name__ == "__main__":
+  # Standard library imports
+  from asyncio import run
+
+  run(main())
