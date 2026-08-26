@@ -1,9 +1,13 @@
 # Standard library imports
 from contextvars import ContextVar
+from datetime import datetime
 from logging import getLogger
 from pathlib import PurePosixPath
 from re import compile
 from typing import TYPE_CHECKING, override
+
+# Third party imports
+from dateutil.relativedelta import SA, SU, relativedelta
 
 # First party imports
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
@@ -14,10 +18,10 @@ from . import SupplierProcessorBase
 
 if TYPE_CHECKING:
   # Standard library imports
-  from datetime import datetime
   from re import Pattern
 
   # First party imports
+  from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
   from scheduled_invoice_processor.typing_custom import CustomerID
 
 logger = getLogger(__name__)
@@ -83,6 +87,27 @@ class SFTProcessor(SupplierProcessorBase):
   ) -> Pattern[str]:
     # No date in the filename; `[\d\-]+` so a merged `SFT017_13842-13843.edi` still matches.
     return compile(rf"^{customer_id}_(?P<invoice_num>[\d\-]+)\.edi$")
+
+  def parse_header_date(self, first_line: str) -> datetime | None:
+    """Header date localised to `SETTINGS.tz` (the header carries no offset), or None if the line is not a header."""
+    match = self.invoice_num_pattern.match(first_line.strip())
+    if match is None:
+      return None
+    try:
+      return datetime.strptime(match.group("invoice_date"), self.header_date_format).replace(tzinfo=SETTINGS.tz)
+    except ValueError:
+      return None
+
+  def header_date_in_window(self, file_meta: FileRegisterData, header_date: datetime) -> bool:
+    """Same Sun-Sat window the base class applies to mtimes, applied to the header date instead."""
+    current_week = file_meta.current_week
+    start_date = (
+      file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
+    ) - relativedelta(weeks=0 if current_week else 1)
+    end_date = (
+      file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
+    ) - relativedelta(weeks=0 if current_week else 1)
+    return start_date <= header_date < end_date
 
 
 if __debug__ and SETTINGS.use_testing_folders:
