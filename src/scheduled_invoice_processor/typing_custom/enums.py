@@ -9,6 +9,7 @@ class SuppliersEnum(StrEnum):
   SAS = "SAS"
   RYO = "RYO"
   COREMARK = "COREMARK"
+  SFT = "SFT"
 
 
 class StateEnum(StrEnum):
