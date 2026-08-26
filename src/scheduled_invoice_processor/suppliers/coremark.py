@@ -269,12 +269,12 @@ class CoremarkProcessor(SupplierProcessorBase):
     for file in original_invoice_files:
       # open the files in binary for speed, but decote the first line separately to check for the invoice type (A or B)
       with file.open("rb") as fb:
-        digest = file_digest(fb, "sha256")
+        digest = file_digest(fb, "sha256").hexdigest()
         if digest in file_hashes:
           local_logger.error("%s: %s: Duplicate file hash found for file %s: %s", self.__class__.__name__, key, file.name, digest)
           continue  # skip this file since it has a duplicate hash
         else:
-          file_hashes.add(digest.hexdigest())
+          file_hashes.add(digest)
 
       with file.open("rb") as f:
         first_line = f.readline().decode().strip()
