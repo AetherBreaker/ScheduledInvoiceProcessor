@@ -45,19 +45,22 @@ def processor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[SFTP
   monkeypatch.setattr(SFTProcessor, "_file_queue_backup_folder", tmp_path / "queue_backups")
   monkeypatch.setattr(SFTProcessor, "_corrupted_queue_backup_folder", tmp_path / "queue_backups" / "corrupted")
   monkeypatch.setattr(SFTProcessor, "log_file_loc", tmp_path / "logs")
-  # Monkeypatch datetime.now() to return a time within the window so FileRegisterData.current_week returns True
+  _drop_singleton()
+  proc = SFTProcessor()
+  yield proc
+  atexit.unregister(proc._persist_queues_at_exit)
+  _drop_singleton()
+
+
+@pytest.fixture
+def frozen_now(monkeypatch: pytest.MonkeyPatch) -> None:
+  """Freeze datetime.now() to a time within the 2025-06-08 to 2025-06-22 window."""
   mock_now = datetime(2025, 6, 19, 12, 0, tzinfo=SETTINGS.tz)
   with patch("scheduled_invoice_processor.suppliers.file_register_data.datetime") as mock_dt:
     mock_dt.now.return_value = mock_now
     # Allow datetime constructor to work normally
     mock_dt.side_effect = datetime
-    _drop_singleton()
-    proc = SFTProcessor()
-    try:
-      yield proc
-    finally:
-      atexit.unregister(proc._persist_queues_at_exit)
-      _drop_singleton()
+    yield
 
 
 def test_enum_has_sft() -> None:
@@ -130,11 +133,22 @@ def test_parse_header_date_rejects_impossible_date(processor: SFTProcessor) -> N
   assert processor.parse_header_date("SFT017|1|1|13/45/2025 9:46:46 AM") is None
 
 
-def test_header_date_in_window_current_week(processor: SFTProcessor) -> None:
-  # A Wednesday. Current-week window: previous Sunday 00:00 through Saturday 23:59:59.
+def test_header_date_in_window_current_week(processor: SFTProcessor, frozen_now: None) -> None:
+  # A Wednesday. current_week=True gives 2-week window: Sun 2025-06-08 00:00 through Sat 2025-06-21 23:59:59.
   pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
   meta = _meta(pickup, pickup + timedelta(days=1))
+  # In-window: Jun 19 Thu, Jun 08 Sun, Jun 14 Sat
   assert processor.header_date_in_window(meta, datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz))
-  assert processor.header_date_in_window(meta, datetime(2025, 6, 15, 0, 0, 0, tzinfo=SETTINGS.tz))
-  assert not processor.header_date_in_window(meta, datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz))
+  assert processor.header_date_in_window(meta, datetime(2025, 6, 8, 0, 0, 0, tzinfo=SETTINGS.tz))
+  assert processor.header_date_in_window(meta, datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz))
+  # Out-of-window: Jun 07 Sat, Jun 22 Sun
+  assert not processor.header_date_in_window(meta, datetime(2025, 6, 7, 23, 59, 59, tzinfo=SETTINGS.tz))
   assert not processor.header_date_in_window(meta, datetime(2025, 6, 22, 0, 0, 0, tzinfo=SETTINGS.tz))
+
+
+def test_header_date_in_window_previous_week(processor: SFTProcessor, frozen_now: None) -> None:
+  # A Wednesday with current_week=False (window has passed). Window is previous week: Sun 2025-06-15 through Sat 2025-06-14 (empty/past window).
+  pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
+  meta = _meta(pickup, pickup + timedelta(days=1), current_week=False)
+  # Window is Sun 2025-06-15 00:00 through Sat 2025-06-14 23:59:59 (backward, so nothing matches)
+  assert not processor.header_date_in_window(meta, datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz))
