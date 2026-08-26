@@ -18,10 +18,10 @@ from unittest.mock import AsyncMock, patch
 
 # Third party imports
 import pytest
+from aeth_ext.rich.progress import TaskID
 
 # First party imports
 import scheduled_invoice_processor.suppliers as suppliers_mod
-from aeth_ext.rich.progress import TaskID
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.monkey_patches import Patches
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
   # Standard library imports
   from collections.abc import Callable, Generator, Iterator
 
-  # First party imports
+  # Third party imports
   from aeth_ext.rich.progress import Progress
 
 SAMPLE_HEADER = "SFT017|13842|49273|6/19/2025 9:46:46 AM"
@@ -123,44 +123,6 @@ def _meta(pickup: datetime, dropoff: datetime, current_week: bool = True, names:
     _local_copy_folder=Path("unit-test-local"),
     file_names=names or {},
   )
-
-
-def test_parse_header_date_sample(processor: SFTProcessor) -> None:
-  parsed = processor.parse_header_date(SAMPLE_HEADER)
-  assert parsed == datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz)
-  assert parsed is not None
-  assert parsed.tzinfo is SETTINGS.tz
-
-
-def test_parse_header_date_rejects_non_header(processor: SFTProcessor) -> None:
-  assert processor.parse_header_date("850661003182|Boveda 62%|5|5|4.930000") is None
-
-
-def test_parse_header_date_rejects_impossible_date(processor: SFTProcessor) -> None:
-  assert processor.parse_header_date("SFT017|1|1|13/45/2025 9:46:46 AM") is None
-
-
-def test_header_date_in_window_current_week(processor: SFTProcessor, frozen_now: None) -> None:
-  # A Wednesday. Strict one-week window: Sun 2025-06-15 00:00 through Sat 2025-06-21 23:59:59.999999.
-  pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
-  meta = _meta(pickup, pickup + timedelta(days=1))
-  assert processor.header_date_in_window(meta, datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz))
-  assert processor.header_date_in_window(meta, datetime(2025, 6, 15, 0, 0, 0, tzinfo=SETTINGS.tz))
-  assert processor.header_date_in_window(meta, datetime(2025, 6, 21, 23, 59, 59, tzinfo=SETTINGS.tz))
-  # Previous week is NOT accepted (unlike the base mtime branch / SAS), nor is next week.
-  assert not processor.header_date_in_window(meta, datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz))
-  assert not processor.header_date_in_window(meta, datetime(2025, 6, 22, 0, 0, 0, tzinfo=SETTINGS.tz))
-
-
-def test_header_date_in_window_previous_week(processor: SFTProcessor, frozen_now: None) -> None:
-  # Same dates with current_week=False: the whole window shifts back one week, Sun 2025-06-08 .. Sat 2025-06-14.
-  pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
-  meta = _meta(pickup, pickup + timedelta(days=1), current_week=False)
-  assert processor.header_date_in_window(meta, datetime(2025, 6, 8, 0, 0, 0, tzinfo=SETTINGS.tz))
-  assert processor.header_date_in_window(meta, datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz))
-  assert not processor.header_date_in_window(meta, datetime(2025, 6, 7, 23, 59, 59, tzinfo=SETTINGS.tz))
-  assert not processor.header_date_in_window(meta, datetime(2025, 6, 15, 0, 0, 0, tzinfo=SETTINGS.tz))
-  assert not processor.header_date_in_window(meta, datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz))
 
 
 class _FakeClient:
@@ -294,6 +256,7 @@ def test_same_server_transfer_failure_is_recorded_not_raised(processor: SFTProce
 
 OUT_OF_WINDOW_FILE = b"SFT017|13900|49300|1/2/2020 9:00:00 AM\r\nX|Y|1|1|1.000000\r\n"
 NO_HEADER_FILE = b"850661003182|Boveda 62%|5|5|4.930000\r\n"
+BAD_DATE_FILE = b"SFT017|13902|49302|13/45/2025 9:46:46 AM\r\nX|Y|1|1|1.000000\r\n"
 
 
 class _FakeSchedule:
@@ -325,6 +288,7 @@ async def test_pickup_keeps_only_in_window_files(
       (pickup_folder / "SFT017_13842.edi").as_posix(): SAMPLE_FILE,
       (pickup_folder / "SFT017_13900.edi").as_posix(): OUT_OF_WINDOW_FILE,
       (pickup_folder / "SFT017_13901.edi").as_posix(): NO_HEADER_FILE,
+      (pickup_folder / "SFT017_13902.edi").as_posix(): BAD_DATE_FILE,
       (pickup_folder / "SFT018_13842.edi").as_posix(): SAMPLE_FILE,
     }
   )
@@ -344,6 +308,7 @@ async def test_pickup_keeps_only_in_window_files(
   assert "/TODO_SFT/Waiting/SFT017_13842.edi" in client.files
   assert (pickup_folder / "SFT017_13900.edi").as_posix() in client.files
   assert (pickup_folder / "SFT017_13901.edi").as_posix() in client.files
+  assert (pickup_folder / "SFT017_13902.edi").as_posix() in client.files
   assert (pickup_folder / "SFT018_13842.edi").as_posix() in client.files
   # Non-matching filename was never downloaded; the two SFT017 rejects were (header needed to decide).
   assert (pickup_folder / "SFT018_13842.edi").as_posix() not in client.downloads
@@ -471,44 +436,6 @@ async def test_pickup_finds_a_file_that_is_already_in_the_waiting_folder(
   assert key in processor._file_waiting_queue
   assert key not in processor._file_pickup_queue
   assert schedule.checked == [(("SFT", 17), "invoice_grabbed")]
-
-
-def _recording_super(calls: list[bool]) -> classmethod:
-  """A `SupplierProcessorBase.check_connections` stand-in that records that the super path was taken."""
-
-  def _check(cls: type) -> bool:
-    calls.append(True)
-    return True
-
-  return classmethod(_check)
-
-
-def test_check_connections_refuses_placeholder_paths(monkeypatch: pytest.MonkeyPatch) -> None:
-  # `startup.py` registers any supplier whose `check_connections()` is true, and SFT's "vendor" side is the
-  # always-online holding FTP -- so the placeholder paths must be what stops registration, not the network.
-  super_calls: list[bool] = []
-  monkeypatch.setattr(suppliers_mod.SupplierProcessorBase, "check_connections", _recording_super(super_calls))
-  # Belt and braces: the stubbed super already cannot reach the network, and neither can the adapters.
-  offline = SimpleNamespace(test_connection=_never_called)
-  monkeypatch.setattr(SFTProcessor, "waiting_ftp", offline)
-  monkeypatch.setattr(SFTProcessor, "vendor_ftp", offline)
-  monkeypatch.setattr(SETTINGS, "use_testing_folders", False)
-
-  assert SFTProcessor.check_connections() is False
-  assert super_calls == []
-
-
-def _never_called(*args: object, **kwargs: object) -> bool:
-  pytest.fail("check_connections must not touch the network while the paths are placeholders")
-
-
-def test_check_connections_delegates_to_super_in_testing_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-  sentinel: list[bool] = []
-  monkeypatch.setattr(suppliers_mod.SupplierProcessorBase, "check_connections", _recording_super(sentinel))
-  monkeypatch.setattr(SETTINGS, "use_testing_folders", True)
-
-  assert SFTProcessor.check_connections() is True
-  assert sentinel == [True]
 
 
 def test_create_new_merged_file(processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch) -> None:

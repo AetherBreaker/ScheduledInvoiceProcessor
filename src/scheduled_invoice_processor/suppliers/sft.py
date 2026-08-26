@@ -33,9 +33,11 @@ if TYPE_CHECKING:
   from re import Pattern
   from typing import Any
 
-  # First party imports
+  # Third party imports
   from aeth_ext.ftp.session import AdapterBase
   from aeth_ext.rich.progress import TaskID
+
+  # First party imports
   from scheduled_invoice_processor.typing_custom import CustomerID, SupplierQueueKey
 
   # Local folder imports
@@ -74,25 +76,16 @@ class SFTProcessor(SupplierProcessorBase):
   # implementation, which SFT does not use for pickup.
   checks_date_in_filename: bool = False
 
-  # ===========================================================================================================
-  # !!! PLACEHOLDER FTP PATHS — MUST BE REPLACED BEFORE THIS SUPPLIER IS ENABLED IN PRODUCTION !!!
-  # The real pickup/dropoff locations on the SFT FTP server have not been decided yet. Every path below is a
-  # stand-in. Search for "TODO_SFT" to find them all. Do NOT ship with these values.
-  # ===========================================================================================================
-  pickup_ftp_folder = PurePosixPath("/TODO_SFT/Pickup")
-  pre_processing_waiting_folder = PurePosixPath("/TODO_SFT/Waiting")
-  pre_processing_archive_folder = PurePosixPath("/TODO_SFT/Waiting/Archive")
-  post_processing_waiting_folder = PurePosixPath("/TODO_SFT/Processed")
-  destination_ftp_folder = PurePosixPath("/TODO_SFT/Destination")
-  # ===========================================================================================================
+  pickup_ftp_folder = PurePosixPath("/SFT_Invoice_Pickup")
+  pre_processing_waiting_folder = PurePosixPath("/Waiting/SFT")
+  pre_processing_archive_folder = PurePosixPath("/Waiting/SFT/Archive")
+  post_processing_waiting_folder = PurePosixPath("/Processed/SFT")
+  destination_ftp_folder = PurePosixPath("/SFT")
 
   # The pickup rename *is* the removal from the pickup folder, so there is nothing left to archive vendor-side.
   # `None` is the base class's documented "this supplier has no vendor archive" value and makes the base pickup's
   # archive wave a no-op.
   pickup_archive_ftp_folder = None
-
-  _placeholder_marker = "TODO_SFT"
-  """Substring that marks an FTP path as a stand-in; `check_connections` refuses to register while any remains."""
 
   identifier_prefix = "SFT"
   log_file_loc = SupplierProcessorBase.log_file_loc / supplier_name
@@ -105,65 +98,12 @@ class SFTProcessor(SupplierProcessorBase):
     self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
     self.local_post_processing_folder.mkdir(exist_ok=True, parents=True)
 
-  @classmethod
-  @override
-  def check_connections(cls) -> bool:
-    """Refuse registration while the FTP paths are still placeholders.
-
-    `startup.py` registers every supplier whose `check_connections()` is true, and SFT's "vendor" side is the
-    always-online holding FTP -- so without this gate a production run would happily pick up from `/TODO_SFT/...`.
-    Only enforced outside testing-folder mode, where the placeholders are the intended sandbox paths.
-    """
-    if not SETTINGS.use_testing_folders:
-      placeholders = [
-        folder.as_posix()
-        for folder in (
-          cls.pickup_ftp_folder,
-          cls.pickup_archive_ftp_folder,
-          cls.pre_processing_waiting_folder,
-          cls.pre_processing_archive_folder,
-          cls.post_processing_waiting_folder,
-          cls.destination_ftp_folder,
-        )
-        if folder is not None and cls._placeholder_marker in folder.as_posix()
-      ]
-      if placeholders:
-        logger.critical(
-          "%s: SFT folder paths are still placeholders; refusing to register SFTProcessor. Offending paths: %s",
-          cls.__name__,
-          ", ".join(placeholders),
-        )
-        return False
-    return super().check_connections()
-
   @override
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern[str]:
     # No date in the filename; `[\d\-]+` so a merged `SFT017_13842-13843.edi` still matches.
     return compile(rf"^{customer_id}_(?P<invoice_num>[\d\-]+)\.edi$")
-
-  def parse_header_date(self, first_line: str) -> datetime | None:
-    """Header date localised to `SETTINGS.tz` (the header carries no offset), or None if the line is not a header."""
-    match = self.invoice_num_pattern.match(first_line.strip())
-    if match is None:
-      return None
-    try:
-      return datetime.strptime(match.group("invoice_date"), self.header_date_format).replace(tzinfo=SETTINGS.tz)
-    except ValueError:
-      return None
-
-  def header_date_in_window(self, file_meta: FileRegisterData, header_date: datetime) -> bool:
-    """Strict one-week window (like RYO's, unlike the base mtime branch's two-week one): Sunday 00:00 of the
-    pickup week through Saturday 23:59:59 of the dropoff week, shifted back one week for a previous-week entry."""
-    weeks_back = 0 if file_meta.current_week else 1
-    start_date = (
-      file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
-    ) - relativedelta(weeks=weeks_back)
-    end_date = (
-      file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
-    ) - relativedelta(weeks=weeks_back)
-    return start_date <= header_date < end_date
 
   def _rename_same_server(
     self,
@@ -274,7 +214,9 @@ class SFTProcessor(SupplierProcessorBase):
       try:
         buffer = BytesIO()
         with self.vendor_ftp.start_session() as client:
-          client.download_file(remote_path.as_posix(), callback=buffer.write, task_msg=f"Reading {remote_path.name} (Attempt {attempt})")
+          client.download_file(
+            remote_path.as_posix(), callback=buffer.write, task_msg=f"Reading {remote_path.name} (Attempt {attempt})"
+          )
         return buffer.getvalue()
       except Exception as e:
         if self._is_transient_transfer_error(e) and attempt <= self._transient_transfer_retries:
@@ -354,9 +296,7 @@ class SFTProcessor(SupplierProcessorBase):
       downloaded = dict(
         zip(
           unique_names,
-          await gather(
-            *(to_thread(self._download_candidate, source_folders[name] / name, adapted_logger) for name in unique_names)
-          ),
+          await gather(*(to_thread(self._download_candidate, source_folders[name] / name, adapted_logger) for name in unique_names)),
           strict=True,
         )
       )
@@ -371,18 +311,35 @@ class SFTProcessor(SupplierProcessorBase):
           data = downloaded.get(name)
           if data is None:
             continue
-          first_line = data.splitlines()[0].decode("utf-8", errors="ignore") if data else ""
-          header_date = self.parse_header_date(first_line)
-          if header_date is None:
+          first_line = data.splitlines()[0].decode("utf-8", errors="ignore").strip() if data else ""
+          header = self.invoice_num_pattern.match(first_line)
+          if header is None:
             local_logger.warning("%s: %s: %s has no parseable header line; leaving in place", self.__class__.__name__, key, name)
             continue
-          if not self.header_date_in_window(file_meta, header_date):
+          try:
+            # The header carries no offset; treat it as local time.
+            header_date = datetime.strptime(header.group("invoice_date"), self.header_date_format).replace(tzinfo=SETTINGS.tz)
+          except ValueError:
+            local_logger.warning("%s: %s: %s header date %r is not a valid date; leaving in place", self.__class__.__name__, key, name, header.group("invoice_date"))
+            continue
+          # Strict one-week window (RYO's semantics, not the base mtime branch's two-week one): Sunday 00:00 of the
+          # pickup week through Saturday 23:59:59 of the dropoff week, shifted back a week for a previous-week entry.
+          weeks_back = 0 if file_meta.current_week else 1
+          window_start = (
+            file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
+          ) - relativedelta(weeks=weeks_back)
+          window_end = (
+            file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
+          ) - relativedelta(weeks=weeks_back)
+          if not window_start <= header_date < window_end:
             local_logger.warning(
-              "%s: %s: %s header date %s is outside the pickup window; leaving in place",
+              "%s: %s: %s header date %s is outside the pickup window %s -> %s; leaving in place",
               self.__class__.__name__,
               key,
               name,
               header_date.isoformat(),
+              window_start.isoformat(),
+              window_end.isoformat(),
             )
             continue
           kept.append((name, data))
@@ -754,10 +711,10 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 async def main():
   # Third party imports
+  from aeth_ext.rich.progress import Progress
   from rich import get_console
 
   # First party imports
-  from aeth_ext.rich.progress import Progress
   from scheduled_invoice_processor.database import DatabaseCache
 
   cache = DatabaseCache()
@@ -769,9 +726,7 @@ async def main():
     orders = [order async for order in cache.schedule.walk_typed_rows() if order.supplier == SuppliersEnum.SFT]
 
     for order in orders:
-      await sft.register_pickup(
-        storenum=order.store, customer_id=order.customer, pickup_date=now, dropoff_date=now, current_week=True
-      )
+      await sft.register_pickup(storenum=order.store, customer_id=order.customer, pickup_date=now, dropoff_date=now, current_week=True)
     await cache.submit_queued_writes_to_pool()
 
     await sft.pickup_files()
