@@ -28,13 +28,12 @@ from .log_action import log_actions
 if TYPE_CHECKING:
   # Standard library imports
   from collections.abc import Coroutine
-  from logging import Logger, LoggerAdapter
+  from logging import LoggerAdapter
   from pathlib import Path
   from re import Pattern
   from typing import Any
 
   # Third party imports
-  from aeth_ext.ftp.session import AdapterBase
   from aeth_ext.rich.progress import TaskID
 
   # First party imports
@@ -105,54 +104,6 @@ class SFTProcessor(SupplierProcessorBase):
     # No date in the filename; `[\d\-]+` so a merged `SFT017_13842-13843.edi` still matches.
     return compile(rf"^{customer_id}_(?P<invoice_num>[\d\-]+)\.edi$")
 
-  def _rename_same_server(
-    self,
-    client: AdapterBase,
-    send_path: PurePosixPath,
-    recv_path: PurePosixPath,
-    local_logger: LoggerAdapter[Any] | Logger,
-  ) -> bool:
-    """Rename `send_path` to `recv_path` on `client`, verifying the destination afterwards. A rename that fails
-    because it already happened on an earlier, interrupted run is reported as success (see `_already_moved`)."""
-    if send_path == recv_path:
-      # The candidate was found in the waiting folder: an earlier run renamed it there but died before the queue
-      # entry advanced. It is already where it belongs, so there is nothing to move. Handled here rather than by
-      # `_already_moved`, which needs a *distinct* source and destination to prove a move happened.
-      local_logger.info(
-        "%s: [yellow]%s[/] is already in the waiting folder; no rename needed",
-        self.__class__.__name__,
-        recv_path,
-        extra={"markup": True},
-      )
-      return True
-    try:
-      client.rename(send_path.as_posix(), recv_path.as_posix())
-    except (*all_errors, OSError):
-      if self._already_moved(client, send_path, recv_path, local_logger):
-        local_logger.info(
-          "%s: [yellow]%s[/] was already moved to [yellow]%s[/] by an earlier run; treating as success",
-          self.__class__.__name__,
-          send_path,
-          recv_path,
-          extra={"markup": True},
-        )
-        return True
-      raise
-    else:
-      try:
-        client.get_size(recv_path.as_posix())
-        local_logger.info(
-          "%s: Moved [yellow]%s[/] to [yellow]%s[/]",
-          self.__class__.__name__,
-          send_path,
-          recv_path,
-          extra={"markup": True},
-        )
-      except (*all_errors, OSError) as e:
-        local_logger.warning("%s: Failed to verify move of %s", self.__class__.__name__, send_path.name, exc_info=e)
-        return False
-      return True
-
   def _transfer_file_same_server(  # noqa: PLR0917
     self,
     send_path: PurePosixPath,
@@ -168,38 +119,54 @@ class SFTProcessor(SupplierProcessorBase):
     """Pickup for a vendor that shares the holding FTP: rename in place, then take the invoice number from the
     bytes already downloaded for the header check. Idempotent like `_transfer_file_main_to_main`: a rename that
     already happened on an earlier, interrupted run is reported as success. Never raises; the outcome lands in
-    `file_meta.pickup_success[idx]` and the log-action handler."""
+    `file_meta.pickup_success[idx]` and the log-action handler, and the progress bar advances exactly once."""
     local_logger = adapted_logger or logger
+    markup = {"markup": True}
     success = False
-    if self.errored:
-      local_logger.warning("%s: Disabled due to error state. Skipping same-server transfer", self.__class__.__name__)
-      file_meta.pickup_success[idx] = False
-      self._advance_progress(move_files_task)
-      if log_action_handler is not None:
-        log_action_handler(key, StatusCode.FAILURE, file_meta)
-      return False
     try:
-      with self.vendor_ftp.start_session() as client:
-        success = self._rename_same_server(client, send_path, recv_path, local_logger)
-      file_meta.pickup_success[idx] = success
+      if self.errored:
+        local_logger.warning("%s: Disabled due to error state. Skipping same-server transfer", self.__class__.__name__)
+      elif send_path == recv_path:
+        # Found in the waiting folder: an earlier run renamed it there but died before the queue entry advanced.
+        local_logger.info(
+          "%s: [yellow]%s[/] is already in the waiting folder; no rename needed", self.__class__.__name__, recv_path, extra=markup
+        )
+        success = True
+      else:
+        with self.vendor_ftp.start_session() as client:
+          try:
+            client.rename(send_path.as_posix(), recv_path.as_posix())
+          except (*all_errors, OSError):
+            if not self._already_moved(client, send_path, recv_path, local_logger):
+              raise
+            local_logger.info(
+              "%s: [yellow]%s[/] was already moved to [yellow]%s[/] by an earlier run; treating as success",
+              self.__class__.__name__,
+              send_path,
+              recv_path,
+              extra=markup,
+            )
+            success = True
+          else:
+            try:
+              client.get_size(recv_path.as_posix())
+              success = True
+              local_logger.info(
+                "%s: Moved [yellow]%s[/] to [yellow]%s[/]", self.__class__.__name__, send_path, recv_path, extra=markup
+              )
+            except (*all_errors, OSError) as e:
+              local_logger.warning("%s: Failed to verify move of %s", self.__class__.__name__, send_path.name, exc_info=e)
       if success:
         self.extract_invoice_num(BytesIO(file_bytes), file_meta, idx, adapted_logger=adapted_logger)
-      self._advance_progress(move_files_task)
-      if log_action_handler is not None:
-        log_action_handler(key, StatusCode.SUCCESS if success else StatusCode.FAILURE, file_meta)
     except Exception:
       success = False
       local_logger.exception(
-        "%s: Error moving\n[yellow]%s[/] to\n[yellow]%s[/]",
-        self.__class__.__name__,
-        send_path,
-        recv_path,
-        extra={"markup": True},
+        "%s: Error moving\n[yellow]%s[/] to\n[yellow]%s[/]", self.__class__.__name__, send_path, recv_path, extra=markup
       )
-      file_meta.pickup_success[idx] = False
-      self._advance_progress(move_files_task)
-      if log_action_handler is not None:
-        log_action_handler(key, StatusCode.FAILURE, file_meta)
+    file_meta.pickup_success[idx] = success
+    self._advance_progress(move_files_task)
+    if log_action_handler is not None:
+      log_action_handler(key, StatusCode.SUCCESS if success else StatusCode.FAILURE, file_meta)
     return success
 
   def _download_candidate(self, remote_path: PurePosixPath, adapted_logger: LoggerAdapter[Any] | None = None) -> bytes | None:
@@ -320,7 +287,13 @@ class SFTProcessor(SupplierProcessorBase):
             # The header carries no offset; treat it as local time.
             header_date = datetime.strptime(header.group("invoice_date"), self.header_date_format).replace(tzinfo=SETTINGS.tz)
           except ValueError:
-            local_logger.warning("%s: %s: %s header date %r is not a valid date; leaving in place", self.__class__.__name__, key, name, header.group("invoice_date"))
+            local_logger.warning(
+              "%s: %s: %s header date %r is not a valid date; leaving in place",
+              self.__class__.__name__,
+              key,
+              name,
+              header.group("invoice_date"),
+            )
             continue
           # Strict one-week window (RYO's semantics, not the base mtime branch's two-week one): Sunday 00:00 of the
           # pickup week through Saturday 23:59:59 of the dropoff week, shifted back a week for a previous-week entry.
