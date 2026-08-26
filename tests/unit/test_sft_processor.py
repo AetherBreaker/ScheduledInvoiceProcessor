@@ -165,9 +165,11 @@ class _FakeClient:
   """`files` is the remote filesystem: path -> bytes. `rename` moves an entry (or raises when `fail_rename`).
   `listdir` yields entries whose parent is the queried folder. `download_file` streams the bytes to `callback`."""
 
-  def __init__(self, files: dict[str, bytes], fail_rename: bool = False) -> None:
+  def __init__(self, files: dict[str, bytes], fail_rename: bool = False, fail_rename_paths: set[str] | None = None) -> None:
     self.files = dict(files)
     self.fail_rename = fail_rename
+    self.fail_rename_paths: set[str] = set(fail_rename_paths or ())
+    """Source paths whose rename raises. Mutable so a test can let a second run succeed where the first failed."""
     self.renames: list[tuple[str, str]] = []
     self.downloads: list[str] = []
 
@@ -179,7 +181,7 @@ class _FakeClient:
 
   def rename(self, old: str, new: str) -> None:
     self.renames.append((old, new))
-    if self.fail_rename:
+    if self.fail_rename or old in self.fail_rename_paths:
       raise OSError("rename failed")
     self.files[new] = self.files.pop(old)
 
@@ -348,9 +350,10 @@ async def test_pickup_keeps_only_in_window_files(
   assert key in processor._file_waiting_queue
   assert key not in processor._file_pickup_queue
   assert schedule.checked == [(("SFT", 17), "invoice_grabbed")]
-  # The rename is the removal: nothing is left in the pickup folder and nothing is written to the archive.
+  # The rename is the removal: nothing is left in the pickup folder, and there is no vendor archive to write to.
   assert (pickup_folder / "SFT017_13842.edi").as_posix() not in client.files
-  assert (processor.pickup_archive_ftp_folder / "SFT017_13842.edi").as_posix() not in client.files  # pyright: ignore[reportOptionalOperand]
+  assert SFTProcessor.pickup_archive_ftp_folder is None
+  assert not any("Archive" in path for path in client.files)
 
 
 async def test_pickup_with_no_in_window_files_leaves_queue_untouched(
@@ -379,6 +382,133 @@ async def test_pickup_with_no_in_window_files_leaves_queue_untouched(
 SECOND_FILE = b"SFT017|13843|49274|6/20/2025 8:00:00 AM\r\nG100137|Dome Pipe Small|4|4|1.000000\r\n"
 
 
+def _stub_cache(processor: SFTProcessor) -> _FakeSchedule:
+  """`processor.cache` stand-in. `order_log`: `_pickup_files` is wrapped by `@log_actions`, which logs every
+  outcome through `self.cache.order_log.log_action` regardless of what the test cares about."""
+  schedule = _FakeSchedule()
+  processor.cache = SimpleNamespace(  # pyright: ignore[reportAttributeAccessIssue]
+    schedule=schedule, prev_week_schedule=schedule, order_log=SimpleNamespace(log_action=AsyncMock())
+  )
+  return schedule
+
+
+async def test_pickup_partial_failure_is_recovered_on_the_next_run(
+  processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None
+) -> None:
+  """A rename that succeeds for one of an entry's files and fails for the other must not strand the moved file.
+
+  The rename is the removal from the pickup folder, so after run one file A only exists in the waiting folder.
+  Because candidates are gathered from the waiting folder as well, run two sees A and B again and finishes.
+  """
+  pickup_folder = processor.pickup_ftp_folder
+  waiting_folder = processor.pre_processing_waiting_folder
+  pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
+  a_pickup = (pickup_folder / "SFT017_13842.edi").as_posix()
+  b_pickup = (pickup_folder / "SFT017_13843.edi").as_posix()
+  a_waiting = (waiting_folder / "SFT017_13842.edi").as_posix()
+  b_waiting = (waiting_folder / "SFT017_13843.edi").as_posix()
+
+  client = _FakeClient({a_pickup: SAMPLE_FILE, b_pickup: SECOND_FILE}, fail_rename_paths={b_pickup})
+  _wire(processor, client, monkeypatch)
+  schedule = _stub_cache(processor)
+  meta = _meta(pickup, pickup + timedelta(days=1))
+  meta._waiting_folder = waiting_folder
+  key = _register(processor, meta)
+
+  await processor._pickup_files()
+
+  # Run one: A moved, B did not, so the entry is not advanced.
+  assert a_waiting in client.files
+  assert b_pickup in client.files
+  assert a_pickup not in client.files
+  assert key in processor._file_pickup_queue
+  assert key not in processor._file_waiting_queue
+  assert schedule.checked == []
+
+  # Run two: the rename now works. A is found in the waiting folder, B in the pickup folder.
+  client.fail_rename_paths.clear()
+
+  await processor._pickup_files()
+
+  assert a_waiting in client.files
+  assert b_waiting in client.files
+  assert b_pickup not in client.files
+  assert set(meta.file_names.values()) == {"SFT017_13842.edi", "SFT017_13843.edi"}
+  assert sorted(meta.invoice_nums.values()) == ["13842", "13843"]
+  assert meta.pickup_success == {0: True, 1: True}
+  assert key in processor._file_waiting_queue
+  assert key not in processor._file_pickup_queue
+  assert schedule.checked == [(("SFT", 17), "invoice_grabbed")]
+  # A was already at its destination, so only B was renamed this run.
+  assert client.renames[-1] == (b_pickup, b_waiting)
+  assert (a_waiting, a_waiting) not in client.renames
+
+
+async def test_pickup_finds_a_file_that_is_already_in_the_waiting_folder(
+  processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None
+) -> None:
+  """Nothing in the pickup folder, everything already renamed: the entry still advances, invoice number and all."""
+  waiting_folder = processor.pre_processing_waiting_folder
+  pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
+  a_waiting = (waiting_folder / "SFT017_13842.edi").as_posix()
+
+  client = _FakeClient({a_waiting: SAMPLE_FILE})
+  _wire(processor, client, monkeypatch)
+  schedule = _stub_cache(processor)
+  meta = _meta(pickup, pickup + timedelta(days=1))
+  meta._waiting_folder = waiting_folder
+  key = _register(processor, meta)
+
+  await processor._pickup_files()
+
+  assert client.renames == []  # source == destination: no rename is even attempted
+  assert a_waiting in client.files
+  assert meta.file_names == {0: "SFT017_13842.edi"}
+  assert meta.invoice_nums == {0: "13842"}
+  assert meta.pickup_success == {0: True}
+  assert key in processor._file_waiting_queue
+  assert key not in processor._file_pickup_queue
+  assert schedule.checked == [(("SFT", 17), "invoice_grabbed")]
+
+
+def _recording_super(calls: list[bool]) -> classmethod:
+  """A `SupplierProcessorBase.check_connections` stand-in that records that the super path was taken."""
+
+  def _check(cls: type) -> bool:
+    calls.append(True)
+    return True
+
+  return classmethod(_check)
+
+
+def test_check_connections_refuses_placeholder_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+  # `startup.py` registers any supplier whose `check_connections()` is true, and SFT's "vendor" side is the
+  # always-online holding FTP -- so the placeholder paths must be what stops registration, not the network.
+  super_calls: list[bool] = []
+  monkeypatch.setattr(suppliers_mod.SupplierProcessorBase, "check_connections", _recording_super(super_calls))
+  # Belt and braces: the stubbed super already cannot reach the network, and neither can the adapters.
+  offline = SimpleNamespace(test_connection=_never_called)
+  monkeypatch.setattr(SFTProcessor, "waiting_ftp", offline)
+  monkeypatch.setattr(SFTProcessor, "vendor_ftp", offline)
+  monkeypatch.setattr(SETTINGS, "use_testing_folders", False)
+
+  assert SFTProcessor.check_connections() is False
+  assert super_calls == []
+
+
+def _never_called(*args: object, **kwargs: object) -> bool:
+  pytest.fail("check_connections must not touch the network while the paths are placeholders")
+
+
+def test_check_connections_delegates_to_super_in_testing_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+  sentinel: list[bool] = []
+  monkeypatch.setattr(suppliers_mod.SupplierProcessorBase, "check_connections", _recording_super(sentinel))
+  monkeypatch.setattr(SETTINGS, "use_testing_folders", True)
+
+  assert SFTProcessor.check_connections() is True
+  assert sentinel == [True]
+
+
 def test_create_new_merged_file(processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
   # `_create_new_merged_file` calls `Path.without_cwd`, patched onto `pathlib.PurePath` by `Patches.patch_the_monkey`
   # (applied at real-app startup, not by this test suite's conftest); mirror `test_job_ordering.py`'s `ryo` fixture.
@@ -404,8 +534,9 @@ def test_create_new_merged_file(processor: SFTProcessor, monkeypatch: pytest.Mon
   assert new_meta.invoice_nums == {0: "13842-13843"}
   merged = (processor.local_post_processing_folder / "SFT017_13842-13843.edi").read_bytes()
   lines = merged.split(b"\r\n")
-  # Header keeps the earliest invoice date; body is the concatenation of both bodies.
-  assert lines[0] == b"SFT017|13842-13843|49273|06/19/2025 09:46:46 AM"
+  # Header keeps the earliest invoice date, verbatim in the source's unpadded format (not re-serialised through
+  # strftime, which would emit "06/19/2025 09:46:46 AM"); body is the concatenation of both bodies.
+  assert lines[0] == b"SFT017|13842-13843|49273|6/19/2025 9:46:46 AM"
   assert lines[1] == b"850661003182|Boveda 62%|5|5|4.930000"
   assert lines[2] == b"G100137|Dome Pipe Small|4|4|1.000000"
   assert new_meta.file_pattern.match("SFT017_13842-13843.edi") is not None
