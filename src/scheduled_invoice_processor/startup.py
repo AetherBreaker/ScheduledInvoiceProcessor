@@ -22,6 +22,7 @@ from scheduled_invoice_processor.scheduler_config import OrderProcessingSchedule
 from scheduled_invoice_processor.shutdown_hooks import register_shutdown_hooks, trail_is_database_origin
 from scheduled_invoice_processor.suppliers.ryo import RYOProcessor
 from scheduled_invoice_processor.suppliers.sas import SASProcessor
+from scheduled_invoice_processor.suppliers.sft import SFTProcessor
 from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseScheduleColumns
 from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
 
@@ -40,6 +41,7 @@ FAVICON_PATH = CWD / "favicon.ico"
 expected_suppliers: dict[SuppliersEnum, type[SupplierProcessorBase]] = {
   SuppliersEnum.SAS: SASProcessor,
   SuppliersEnum.RYO: RYOProcessor,
+  SuppliersEnum.SFT: SFTProcessor,
 }
 
 
