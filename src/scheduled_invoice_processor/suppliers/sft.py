@@ -103,7 +103,7 @@ class SFTProcessor(SupplierProcessorBase):
     current_week = file_meta.current_week
     start_date = (
       file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
-    ) - relativedelta(weeks=0 if current_week else 1)
+    ) - relativedelta(weeks=1 if current_week else 0)
     end_date = (
       file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
     ) - relativedelta(weeks=0 if current_week else 1)
