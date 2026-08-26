@@ -8,9 +8,12 @@ from __future__ import annotations
 
 # Standard library imports
 import atexit
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
+from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 # Third party imports
 import pytest
@@ -18,15 +21,13 @@ import pytest
 # First party imports
 import scheduled_invoice_processor.suppliers as suppliers_mod
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
+from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
 from scheduled_invoice_processor.suppliers.sft import SFTProcessor
 from scheduled_invoice_processor.typing_custom.enums import SuppliersEnum
 
 if TYPE_CHECKING:
   # Standard library imports
   from collections.abc import Generator
-  from pathlib import Path
-
-  # First party imports
 
 SAMPLE_HEADER = "SFT017|13842|49273|6/19/2025 9:46:46 AM"
 PADDED_HEADER = "SFT017|13842|49273|06/19/2025 09:46:46 AM"
@@ -44,11 +45,19 @@ def processor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[SFTP
   monkeypatch.setattr(SFTProcessor, "_file_queue_backup_folder", tmp_path / "queue_backups")
   monkeypatch.setattr(SFTProcessor, "_corrupted_queue_backup_folder", tmp_path / "queue_backups" / "corrupted")
   monkeypatch.setattr(SFTProcessor, "log_file_loc", tmp_path / "logs")
-  _drop_singleton()
-  proc = SFTProcessor()
-  yield proc
-  atexit.unregister(proc._persist_queues_at_exit)
-  _drop_singleton()
+  # Monkeypatch datetime.now() to return a time within the window so FileRegisterData.current_week returns True
+  mock_now = datetime(2025, 6, 19, 12, 0, tzinfo=SETTINGS.tz)
+  with patch("scheduled_invoice_processor.suppliers.file_register_data.datetime") as mock_dt:
+    mock_dt.now.return_value = mock_now
+    # Allow datetime constructor to work normally
+    mock_dt.side_effect = datetime
+    _drop_singleton()
+    proc = SFTProcessor()
+    try:
+      yield proc
+    finally:
+      atexit.unregister(proc._persist_queues_at_exit)
+      _drop_singleton()
 
 
 def test_enum_has_sft() -> None:
@@ -91,3 +100,41 @@ def test_filename_pattern(processor: SFTProcessor, name: str, expected: bool) ->
 
 def test_merged_filename_format() -> None:
   assert SFTProcessor.file_name_format.format(customer_id="SFT017", invoice_num="13842-13843") == "SFT017_13842-13843.edi"
+
+
+def _meta(pickup: datetime, dropoff: datetime, current_week: bool = True, names: dict[int, str] | None = None) -> FileRegisterData:
+  return FileRegisterData(
+    storenum=17,
+    customer_id="SFT017",
+    pickup_date=pickup,
+    dropoff_date=dropoff,
+    file_pattern=re.compile(r"^SFT017_(?P<invoice_num>[\d\-]+)\.edi$"),
+    _current_week=current_week,
+    _waiting_folder=PurePosixPath("/TODO_SFT/Waiting"),
+    _local_copy_folder=Path("unit-test-local"),
+    file_names=names or {},
+  )
+
+
+def test_parse_header_date_sample(processor: SFTProcessor) -> None:
+  parsed = processor.parse_header_date(SAMPLE_HEADER)
+  assert parsed == datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz)
+  assert parsed.tzinfo is SETTINGS.tz
+
+
+def test_parse_header_date_rejects_non_header(processor: SFTProcessor) -> None:
+  assert processor.parse_header_date("850661003182|Boveda 62%|5|5|4.930000") is None
+
+
+def test_parse_header_date_rejects_impossible_date(processor: SFTProcessor) -> None:
+  assert processor.parse_header_date("SFT017|1|1|13/45/2025 9:46:46 AM") is None
+
+
+def test_header_date_in_window_current_week(processor: SFTProcessor) -> None:
+  # A Wednesday. Current-week window: previous Sunday 00:00 through Saturday 23:59:59.
+  pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
+  meta = _meta(pickup, pickup + timedelta(days=1))
+  assert processor.header_date_in_window(meta, datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz))
+  assert processor.header_date_in_window(meta, datetime(2025, 6, 15, 0, 0, 0, tzinfo=SETTINGS.tz))
+  assert not processor.header_date_in_window(meta, datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz))
+  assert not processor.header_date_in_window(meta, datetime(2025, 6, 22, 0, 0, 0, tzinfo=SETTINGS.tz))
