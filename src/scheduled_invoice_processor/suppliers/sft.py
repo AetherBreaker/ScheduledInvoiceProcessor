@@ -1,4 +1,5 @@
 # Standard library imports
+from asyncio import gather, to_thread
 from contextvars import ContextVar
 from datetime import datetime
 from ftplib import all_errors
@@ -6,6 +7,7 @@ from io import BytesIO
 from logging import getLogger
 from pathlib import PurePosixPath
 from re import compile
+from time import sleep
 from typing import TYPE_CHECKING, override
 
 # Third party imports
@@ -13,10 +15,13 @@ from dateutil.relativedelta import SA, SU, relativedelta
 
 # First party imports
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
-from scheduled_invoice_processor.typing_custom.enums import StatusCode, SuppliersEnum
+from scheduled_invoice_processor.logging_config import add_log_context
+from scheduled_invoice_processor.typing_custom.dataframe_column_names import DatabaseScheduleColumns
+from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, StatusCode, SuppliersEnum
 
 # Local folder imports
 from . import SupplierProcessorBase
+from .log_action import log_actions
 
 if TYPE_CHECKING:
   # Standard library imports
@@ -203,6 +208,161 @@ class SFTProcessor(SupplierProcessorBase):
       if log_action_handler is not None:
         log_action_handler(key, StatusCode.FAILURE, file_meta)
     return success
+
+  def _download_candidate(self, remote_path: PurePosixPath, adapted_logger: LoggerAdapter[Any] | None = None) -> bytes | None:
+    """Fetch a filename-matched file so its header can be inspected. Transient errors retry with the base
+    backoff; anything else is logged and the file is skipped for this run (it stays in the pickup folder)."""
+    local_logger = adapted_logger or logger
+    for attempt in range(1, self._transient_transfer_retries + 2):
+      try:
+        buffer = BytesIO()
+        with self.vendor_ftp.start_session() as client:
+          client.download_file(remote_path.as_posix(), callback=buffer.write, task_msg=f"Reading {remote_path.name} (Attempt {attempt})")
+        return buffer.getvalue()
+      except Exception as e:
+        if self._is_transient_transfer_error(e) and attempt <= self._transient_transfer_retries:
+          backoff_seconds = 2 ** (attempt - 1)
+          local_logger.warning(
+            "%s: Transient read failure for %s on attempt %s of %s. Retrying in %s seconds",
+            self.__class__.__name__,
+            remote_path.name,
+            attempt,
+            self._transient_transfer_retries + 1,
+            backoff_seconds,
+            exc_info=e,
+          )
+          sleep(backoff_seconds)
+          continue
+        local_logger.exception("%s: Could not read %s for header inspection; skipping this run", self.__class__.__name__, remote_path)
+        return None
+    return None
+
+  @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
+  @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)
+  @override
+  async def _pickup_files(  # noqa: C901, PLR0912, PLR0915
+    self,
+    adapted_logger: LoggerAdapter[Any] | None = None,
+    log_action_handler: LogActionHandlerType | None = None,
+  ):
+    """Copy of the base pickup with two substitutions: the date window is decided from each candidate's header
+    line (downloaded up front), and the transfer is a same-server rename."""
+    local_logger = adapted_logger or logger
+    if not self._file_pickup_queue:
+      return
+    if not self.vendor_ftp.test_connection():
+      local_logger.warning("%s: Aborting pickup_files due to offline FTP server", self.__class__.__name__)
+      return
+
+    async with self._lock:
+      with self.vendor_ftp.start_session() as client:
+        remote_names = [entry.filename for entry in client.listdir(self.pickup_ftp_folder.as_posix())]
+
+      # 1. Filename match, then download every candidate once; the bytes serve both the header check and the
+      #    invoice-number extraction after the rename.
+      candidates: dict[str, list[str]] = {}
+      for key, file_meta in self._file_pickup_queue.items():
+        names = [name for name in remote_names if file_meta.file_pattern.match(name)]
+        if names:
+          candidates[key] = names
+        else:
+          local_logger.warning(
+            "%s: %s: No files matched with pattern %s", self.__class__.__name__, key, file_meta.file_pattern.pattern
+          )
+
+      unique_names = sorted({name for names in candidates.values() for name in names})
+      downloaded = dict(
+        zip(
+          unique_names,
+          await gather(*(to_thread(self._download_candidate, self.pickup_ftp_folder / name, adapted_logger) for name in unique_names)),
+          strict=True,
+        )
+      )
+
+      # 2. Keep only files whose header date is inside the entry's window.
+      items_to_dl: dict[str, FileRegisterData] = {}
+      kept_bytes: dict[str, dict[int, bytes]] = {}
+      for key, names in candidates.items():
+        file_meta = self._file_pickup_queue[key]
+        kept: list[tuple[str, bytes]] = []
+        for name in names:
+          data = downloaded.get(name)
+          if data is None:
+            continue
+          first_line = data.splitlines()[0].decode("utf-8", errors="ignore") if data else ""
+          header_date = self.parse_header_date(first_line)
+          if header_date is None:
+            local_logger.warning("%s: %s: %s has no parseable header line; leaving in place", self.__class__.__name__, key, name)
+            continue
+          if not self.header_date_in_window(file_meta, header_date):
+            local_logger.warning(
+              "%s: %s: %s header date %s is outside the pickup window; leaving in place",
+              self.__class__.__name__,
+              key,
+              name,
+              header_date.isoformat(),
+            )
+            continue
+          kept.append((name, data))
+
+        if kept:
+          file_meta.file_names = {idx: name for idx, (name, _) in enumerate(kept)}
+          file_meta.pickup_success = {}
+          file_meta.invoice_nums = {}
+          items_to_dl[key] = file_meta
+          kept_bytes[key] = {idx: data for idx, (_, data) in enumerate(kept)}
+          if log_action_handler is not None:
+            log_action_handler(key, StatusCode.UNKNOWN, file_meta)
+          local_logger.info("%s: %s: Matched %s files for: %s", self.__class__.__name__, key, len(kept), file_meta.storenum)
+
+      # 3. Rename kept files into the waiting folder.
+      with self.pbar.add_task("Transferring Files", total=sum(len(v.file_names) for v in items_to_dl.values())) as move_files_task:
+        futures = []
+        for key, file_meta in items_to_dl.items():
+          remote_file_locs = file_meta.remote_file_locs
+          futures.extend(
+            to_thread(
+              self._transfer_file_same_server,
+              send_path=(self.pickup_ftp_folder / filename),
+              recv_path=remote_file_locs[idx],
+              move_files_task=move_files_task,
+              file_meta=file_meta,
+              idx=idx,
+              key=key,
+              file_bytes=kept_bytes[key][idx],
+              adapted_logger=adapted_logger,
+              log_action_handler=log_action_handler,
+            )
+            for idx, filename in file_meta.file_names.items()
+          )
+        await gather(*futures)
+
+      # 4. Commit first, clean up last (same ordering rationale as the base class).
+      items_to_advance: dict[str, FileRegisterData] = {}
+      for key, file_meta in items_to_dl.items():
+        if file_meta.pickup_success and all(file_meta.pickup_success.values()):
+          items_to_advance[key] = file_meta
+          schedule = self.cache.schedule if file_meta.current_week else self.cache.prev_week_schedule
+          local_logger.info(
+            "%s: %s: Checking off %s_%s invoice_grabbed", self.__class__.__name__, key, self.supplier_name, file_meta.storenum
+          )
+          await schedule.check_box((self.supplier_name, file_meta.storenum), DatabaseScheduleColumns.invoice_grabbed)
+
+      for key, item in items_to_advance.items():
+        self._file_waiting_queue[key] = item
+        self._file_pickup_queue.pop(key)
+        local_logger.info("%s: %s: Moved %s to waiting queue", self.__class__.__name__, key, item.storenum)
+
+      persisted = self._persist_queues()
+
+      if not persisted:
+        local_logger.warning(
+          "%s: Queue backup could not be written; a restart from the stale backup will re-match the moved files "
+          "from the waiting folder via the idempotent rename",
+          self.__class__.__name__,
+        )
+      # No vendor-side archive step: the rename *is* the removal from the pickup folder. `pickup_archive_ftp_folder`
+      # stays declared to satisfy the base class's attribute contract but SFT never writes to it.
 
 
 if __debug__ and SETTINGS.use_testing_folders:

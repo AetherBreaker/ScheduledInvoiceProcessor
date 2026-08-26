@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 # Third party imports
 import pytest
@@ -285,3 +285,91 @@ def test_same_server_transfer_failure_is_recorded_not_raised(processor: SFTProce
   assert meta.pickup_success == {0: False}
   assert log == [StatusCode.FAILURE]
   assert processor.pbar.advances == 1  # pyright: ignore[reportAttributeAccessIssue]
+
+
+OUT_OF_WINDOW_FILE = b"SFT017|13900|49300|1/2/2020 9:00:00 AM\r\nX|Y|1|1|1.000000\r\n"
+NO_HEADER_FILE = b"850661003182|Boveda 62%|5|5|4.930000\r\n"
+
+
+class _FakeSchedule:
+  def __init__(self) -> None:
+    self.checked: list[tuple[tuple[str, int], str]] = []
+
+  async def check_box(self, key: tuple[str, int], column: str) -> None:
+    self.checked.append((key, column))
+
+
+def _register(processor: SFTProcessor, meta: FileRegisterData) -> str:
+  key = processor.assemble_queue_key(meta.storenum, meta.customer_id, meta.pickup_date)
+  processor._file_pickup_queue[key] = meta
+  return key
+
+
+async def test_pickup_keeps_only_in_window_files(
+  processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None
+) -> None:
+  # Header date in the sample is 2025-06-19 (Thursday). Pickup on Wednesday 2025-06-18, current week.
+  # `frozen_now` pins `datetime.now()` inside that window: `FileRegisterData.current_week` is a live property
+  # comparing the pickup/dropoff window to the real clock, not the stored `_current_week` flag alone.
+  # `processor.pickup_ftp_folder`, not a hardcoded "/TODO_SFT/..." literal: `tests/unit/conftest.py` forces
+  # USE_TESTING_FOLDERS=True, so the class attribute actually resolves to "/Testing/TODO_SFT/Pickup".
+  pickup_folder = processor.pickup_ftp_folder
+  pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
+  client = _FakeClient(
+    {
+      (pickup_folder / "SFT017_13842.edi").as_posix(): SAMPLE_FILE,
+      (pickup_folder / "SFT017_13900.edi").as_posix(): OUT_OF_WINDOW_FILE,
+      (pickup_folder / "SFT017_13901.edi").as_posix(): NO_HEADER_FILE,
+      (pickup_folder / "SFT018_13842.edi").as_posix(): SAMPLE_FILE,
+    }
+  )
+  _wire(processor, client, monkeypatch)
+  schedule = _FakeSchedule()
+  # `order_log`: `_pickup_files` is wrapped by `@log_actions`, which logs every outcome through
+  # `self.cache.order_log.log_action` regardless of what the test cares about.
+  processor.cache = SimpleNamespace(  # pyright: ignore[reportAttributeAccessIssue]
+    schedule=schedule, prev_week_schedule=schedule, order_log=SimpleNamespace(log_action=AsyncMock())
+  )
+  meta = _meta(pickup, pickup + timedelta(days=1))
+  key = _register(processor, meta)
+
+  await processor._pickup_files()
+
+  # Only the in-window SFT017 file moved; the others stay exactly where they were.
+  assert "/TODO_SFT/Waiting/SFT017_13842.edi" in client.files
+  assert (pickup_folder / "SFT017_13900.edi").as_posix() in client.files
+  assert (pickup_folder / "SFT017_13901.edi").as_posix() in client.files
+  assert (pickup_folder / "SFT018_13842.edi").as_posix() in client.files
+  # Non-matching filename was never downloaded; the two SFT017 rejects were (header needed to decide).
+  assert (pickup_folder / "SFT018_13842.edi").as_posix() not in client.downloads
+  assert meta.file_names == {0: "SFT017_13842.edi"}
+  assert meta.invoice_nums == {0: "13842"}
+  assert key in processor._file_waiting_queue
+  assert key not in processor._file_pickup_queue
+  assert schedule.checked == [(("SFT", 17), "invoice_grabbed")]
+  # The rename is the removal: nothing is left in the pickup folder and nothing is written to the archive.
+  assert (pickup_folder / "SFT017_13842.edi").as_posix() not in client.files
+  assert (processor.pickup_archive_ftp_folder / "SFT017_13842.edi").as_posix() not in client.files  # pyright: ignore[reportOptionalOperand]
+
+
+async def test_pickup_with_no_in_window_files_leaves_queue_untouched(
+  processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None
+) -> None:
+  pickup_folder = processor.pickup_ftp_folder
+  pickup = datetime(2025, 6, 18, 12, 0, tzinfo=SETTINGS.tz)
+  client = _FakeClient({(pickup_folder / "SFT017_13900.edi").as_posix(): OUT_OF_WINDOW_FILE})
+  _wire(processor, client, monkeypatch)
+  schedule = _FakeSchedule()
+  # `order_log`: `_pickup_files` is wrapped by `@log_actions`, which logs every outcome through
+  # `self.cache.order_log.log_action` regardless of what the test cares about.
+  processor.cache = SimpleNamespace(  # pyright: ignore[reportAttributeAccessIssue]
+    schedule=schedule, prev_week_schedule=schedule, order_log=SimpleNamespace(log_action=AsyncMock())
+  )
+  meta = _meta(pickup, pickup + timedelta(days=1))
+  key = _register(processor, meta)
+
+  await processor._pickup_files()
+
+  assert key in processor._file_pickup_queue
+  assert client.renames == []
+  assert schedule.checked == []
