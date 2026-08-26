@@ -23,6 +23,7 @@ import pytest
 import scheduled_invoice_processor.suppliers as suppliers_mod
 from aeth_ext.rich.progress import TaskID
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
+from scheduled_invoice_processor.monkey_patches import Patches
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
 from scheduled_invoice_processor.suppliers.sft import SFTProcessor
 from scheduled_invoice_processor.typing_custom.enums import StatusCode, SuppliersEnum
@@ -373,3 +374,38 @@ async def test_pickup_with_no_in_window_files_leaves_queue_untouched(
   assert key in processor._file_pickup_queue
   assert client.renames == []
   assert schedule.checked == []
+
+
+SECOND_FILE = b"SFT017|13843|49274|6/20/2025 8:00:00 AM\r\nG100137|Dome Pipe Small|4|4|1.000000\r\n"
+
+
+def test_create_new_merged_file(processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch) -> None:
+  # `_create_new_merged_file` calls `Path.without_cwd`, patched onto `pathlib.PurePath` by `Patches.patch_the_monkey`
+  # (applied at real-app startup, not by this test suite's conftest); mirror `test_job_ordering.py`'s `ryo` fixture.
+  if not hasattr(Path, "without_cwd"):
+    Patches.patch_the_monkey()
+
+  waiting_folder = processor.pre_processing_waiting_folder
+  client = _FakeClient(
+    {
+      (waiting_folder / "SFT017_13842.edi").as_posix(): SAMPLE_FILE,
+      (waiting_folder / "SFT017_13843.edi").as_posix(): SECOND_FILE,
+    }
+  )
+  _wire(processor, client, monkeypatch)
+  now = datetime.now(SETTINGS.tz)
+  meta = _meta(now, now, names={0: "SFT017_13842.edi", 1: "SFT017_13843.edi"})
+  meta._waiting_folder = waiting_folder
+  meta._local_copy_folder = processor.local_pre_processing_folder
+
+  new_meta = processor._create_new_merged_file("k", meta)
+
+  assert new_meta.file_names == {0: "SFT017_13842-13843.edi"}
+  assert new_meta.invoice_nums == {0: "13842-13843"}
+  merged = (processor.local_post_processing_folder / "SFT017_13842-13843.edi").read_bytes()
+  lines = merged.split(b"\r\n")
+  # Header keeps the earliest invoice date; body is the concatenation of both bodies.
+  assert lines[0] == b"SFT017|13842-13843|49273|06/19/2025 09:46:46 AM"
+  assert lines[1] == b"850661003182|Boveda 62%|5|5|4.930000"
+  assert lines[2] == b"G100137|Dome Pipe Small|4|4|1.000000"
+  assert new_meta.file_pattern.match("SFT017_13842-13843.edi") is not None
