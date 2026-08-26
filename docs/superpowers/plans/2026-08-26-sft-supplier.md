@@ -1051,16 +1051,7 @@ with
 
 and delete the line `found_timestamps.add(file_timestamp)` and the `found_timestamps = set()` declaration — nothing consumes them once edit (c) removes the timestamp from the output filename.
 
-**(b)** The duplicate-hash check in RYO compares a digest *object* against a set of hex *strings*, so it never fires. In the SFT copy, write it correctly:
-
-```python
-      with file.open("rb") as fb:
-        digest = file_digest(fb, "sha256").hexdigest()
-        if digest in file_hashes:
-          local_logger.error("%s: %s: Duplicate file hash found for file %s: %s", self.__class__.__name__, key, file.name, digest)
-          continue
-        file_hashes.add(digest)
-```
+**(b)** The duplicate-hash check (`file_digest(fb, "sha256").hexdigest()` compared against a set of hex strings) is already correct on `main` as of commit `9b7cbbb`; copy it as-is.
 
 **(c)** The output filename has no timestamp. Replace
 
@@ -1243,5 +1234,4 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 - Extracting merge logic into a shared mixin (revisit after SFT is stable).
 - Any change to `CoremarkProcessor` or its absence from `expected_suppliers`.
-- The RYO duplicate-hash bug noted in Task 5(b) is fixed only in the SFT copy; RYO is untouched.
 - Real FTP folder paths and schedule-sheet `SFT` rows — supplied by Jacob later.
