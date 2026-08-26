@@ -13,15 +13,15 @@ plus a download (for header inspection), not a cross-server copy.
 
 ## Decisions made
 
-| Topic | Decision |
-|---|---|
-| Template | Skeleton copied from `SASProcessor`; merge logic copied verbatim from `RYOProcessor` into `sft.py` (no mixin yet — extract later if the two prove identical). |
-| Vendor FTP | `vendor_ftp = SupplierProcessorBase.waiting_ftp` — same adapter object. No new credentials file, no `Settings` change. |
-| File content | Same pipe-delimited format as RYO. Header line: `customer\|invoice_num\|po_num\|date`. |
-| Filename | `{customer_id}_{invoice_num}.edi`, e.g. `SFT017_13842.edi`. No timestamp. |
-| Date window | Taken from the **header line date**, not filename and not mtime (mtime can be poisoned by human intervention). |
-| Merged output | `{customer_id}_{inv1}-{inv2}-{inv3}.edi`; header format unchanged from RYO. Downstream consumer is **not** assumed to be RYO's. |
-| Folder paths | Placeholders now; real values supplied later. |
+| Topic         | Decision                                                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Template      | Skeleton copied from `SASProcessor`; merge logic copied verbatim from `RYOProcessor` into `sft.py` (no mixin yet — extract later if the two prove identical). |
+| Vendor FTP    | `vendor_ftp = SupplierProcessorBase.waiting_ftp` — same adapter object. No new credentials file, no `Settings` change.                                        |
+| File content  | Same pipe-delimited format as RYO. Header line: `customer\|invoice_num\|po_num\|date`.                                                                        |
+| Filename      | `{customer_id}_{invoice_num}.edi`, e.g. `SFT017_13842.edi`. No timestamp.                                                                                     |
+| Date window   | Taken from the **header line date**, not filename and not mtime (mtime can be poisoned by human intervention).                                                |
+| Merged output | `{customer_id}_{inv1}-{inv2}-{inv3}.edi`; header format unchanged from RYO. Downstream consumer is **not** assumed to be RYO's.                               |
+| Folder paths  | Placeholders now; real values supplied later.                                                                                                                 |
 
 ## Components
 
@@ -138,10 +138,10 @@ E2E (`tests/e2e/test_sft_cycle.py`): mirrors `test_ryo_cycle.py`, fixture
 
 ## Pending inputs
 
-| Input | Owner | Where it lands |
-|---|---|---|
-| Six FTP folder paths | Jacob | `sft.py` placeholder block |
-| Confirm `SFT` sheet rows | Jacob | Google Sheet |
+| Input                    | Owner | Where it lands             |
+| ------------------------ | ----- | -------------------------- |
+| Six FTP folder paths     | Jacob | `sft.py` placeholder block |
+| Confirm `SFT` sheet rows | Jacob | Google Sheet               |
 
 ## Out of scope
 
