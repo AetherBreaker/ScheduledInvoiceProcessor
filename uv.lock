@@ -47,7 +47,7 @@ sftp = [
 
 [[package]]
 name = "aeth-ext"
-version = "8.0.1"
+version = "8.0.2"
 source = { editable = "../aeth_ext" }
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -1553,11 +1553,11 @@ wheels = [
 
 [[package]]
 name = "scheduled-invoice-processor"
-version = "2.3.2"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aeth-ext", version = "8.0.1", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "sftp"], marker = "sys_platform == 'linux'" },
-    { name = "aeth-ext", version = "8.0.1", source = { editable = "../aeth_ext" }, extra = ["async", "sftp"], marker = "sys_platform == 'win32'" },
+    { name = "aeth-ext", version = "8.0.2", source = { editable = "../aeth_ext" }, extra = ["async", "sftp"], marker = "sys_platform == 'win32'" },
     { name = "aiohttp", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiologic", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiorwlock", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
