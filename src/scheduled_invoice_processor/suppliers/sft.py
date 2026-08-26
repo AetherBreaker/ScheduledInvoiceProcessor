@@ -80,12 +80,19 @@ class SFTProcessor(SupplierProcessorBase):
   # stand-in. Search for "TODO_SFT" to find them all. Do NOT ship with these values.
   # ===========================================================================================================
   pickup_ftp_folder = PurePosixPath("/TODO_SFT/Pickup")
-  pickup_archive_ftp_folder = PurePosixPath("/TODO_SFT/Pickup/Archive")
   pre_processing_waiting_folder = PurePosixPath("/TODO_SFT/Waiting")
   pre_processing_archive_folder = PurePosixPath("/TODO_SFT/Waiting/Archive")
   post_processing_waiting_folder = PurePosixPath("/TODO_SFT/Processed")
   destination_ftp_folder = PurePosixPath("/TODO_SFT/Destination")
   # ===========================================================================================================
+
+  # The pickup rename *is* the removal from the pickup folder, so there is nothing left to archive vendor-side.
+  # `None` is the base class's documented "this supplier has no vendor archive" value and makes the base pickup's
+  # archive wave a no-op.
+  pickup_archive_ftp_folder = None
+
+  _placeholder_marker = "TODO_SFT"
+  """Substring that marks an FTP path as a stand-in; `check_connections` refuses to register while any remains."""
 
   identifier_prefix = "SFT"
   log_file_loc = SupplierProcessorBase.log_file_loc / supplier_name
@@ -97,6 +104,37 @@ class SFTProcessor(SupplierProcessorBase):
     self.local_post_processing_folder = self.job_holding_folder / "SFT_files" / "post_processing"
     self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
     self.local_post_processing_folder.mkdir(exist_ok=True, parents=True)
+
+  @classmethod
+  @override
+  def check_connections(cls) -> bool:
+    """Refuse registration while the FTP paths are still placeholders.
+
+    `startup.py` registers every supplier whose `check_connections()` is true, and SFT's "vendor" side is the
+    always-online holding FTP -- so without this gate a production run would happily pick up from `/TODO_SFT/...`.
+    Only enforced outside testing-folder mode, where the placeholders are the intended sandbox paths.
+    """
+    if not SETTINGS.use_testing_folders:
+      placeholders = [
+        folder.as_posix()
+        for folder in (
+          cls.pickup_ftp_folder,
+          cls.pickup_archive_ftp_folder,
+          cls.pre_processing_waiting_folder,
+          cls.pre_processing_archive_folder,
+          cls.post_processing_waiting_folder,
+          cls.destination_ftp_folder,
+        )
+        if folder is not None and cls._placeholder_marker in folder.as_posix()
+      ]
+      if placeholders:
+        logger.critical(
+          "%s: SFT folder paths are still placeholders; refusing to register SFTProcessor. Offending paths: %s",
+          cls.__name__,
+          ", ".join(placeholders),
+        )
+        return False
+    return super().check_connections()
 
   @override
   def assemble_filename_pattern(
@@ -135,6 +173,17 @@ class SFTProcessor(SupplierProcessorBase):
   ) -> bool:
     """Rename `send_path` to `recv_path` on `client`, verifying the destination afterwards. A rename that fails
     because it already happened on an earlier, interrupted run is reported as success (see `_already_moved`)."""
+    if send_path == recv_path:
+      # The candidate was found in the waiting folder: an earlier run renamed it there but died before the queue
+      # entry advanced. It is already where it belongs, so there is nothing to move. Handled here rather than by
+      # `_already_moved`, which needs a *distinct* source and destination to prove a move happened.
+      local_logger.info(
+        "%s: [yellow]%s[/] is already in the waiting folder; no rename needed",
+        self.__class__.__name__,
+        recv_path,
+        extra={"markup": True},
+      )
+      return True
     try:
       client.rename(send_path.as_posix(), recv_path.as_posix())
     except (*all_errors, OSError):
@@ -217,6 +266,10 @@ class SFTProcessor(SupplierProcessorBase):
     backoff; anything else is logged and the file is skipped for this run (it stays in the pickup folder)."""
     local_logger = adapted_logger or logger
     for attempt in range(1, self._transient_transfer_retries + 2):
+      # Checked per attempt, like `_transfer_file_vend_to_main`: the error state can be set while this loop backs off.
+      if self.errored:
+        local_logger.warning("%s: Disabled due to error state. Skipping header read of %s", self.__class__.__name__, remote_path.name)
+        return None
       try:
         buffer = BytesIO()
         with self.vendor_ftp.start_session() as client:
@@ -248,8 +301,16 @@ class SFTProcessor(SupplierProcessorBase):
     adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
-    """Copy of the base pickup with two substitutions: the date window is decided from each candidate's header
-    line (downloaded up front), and the transfer is a same-server rename."""
+    """Copy of the base pickup with three substitutions: the date window is decided from each candidate's header
+    line (downloaded up front), the transfer is a same-server rename, and candidates are gathered from the waiting
+    folder as well as the pickup folder.
+
+    That last one is what makes a partial pickup recoverable. The rename *is* the removal from the pickup folder,
+    so a wave that renames A and then fails on B (or dies before `_persist_queues`) leaves A in the waiting folder
+    with its entry still queued for pickup. Listing only the pickup folder would then re-match B alone, reset
+    `file_names` to `{0: B}` and advance the entry without A. Listing both folders means the re-run sees A and B
+    again and finishes the job; A's "rename" is a no-op because it is already at its destination.
+    """
     local_logger = adapted_logger or logger
     if not self._file_pickup_queue:
       return
@@ -258,14 +319,29 @@ class SFTProcessor(SupplierProcessorBase):
       return
 
     async with self._lock:
+      # 0. Gather candidate names from both folders, remembering where each one currently sits. A name present in
+      #    both is a genuine conflict (nothing here overwrites): the waiting-folder copy wins, because it is the
+      #    one a previous, interrupted run already committed to, and the pickup-folder copy is left untouched.
+      source_folders: dict[str, PurePosixPath] = {}
       with self.vendor_ftp.start_session() as client:
-        remote_names = [entry.filename for entry in client.listdir(self.pickup_ftp_folder.as_posix())]
+        for entry in client.listdir(self.pickup_ftp_folder.as_posix()):
+          source_folders[entry.filename] = self.pickup_ftp_folder
+        for entry in client.listdir(self.pre_processing_waiting_folder.as_posix()):
+          if entry.filename in source_folders:
+            local_logger.warning(
+              "%s: %s exists in both %s and %s; preferring the waiting-folder copy and leaving the pickup copy in place",
+              self.__class__.__name__,
+              entry.filename,
+              self.pickup_ftp_folder,
+              self.pre_processing_waiting_folder,
+            )
+          source_folders[entry.filename] = self.pre_processing_waiting_folder
 
       # 1. Filename match, then download every candidate once; the bytes serve both the header check and the
       #    invoice-number extraction after the rename.
       candidates: dict[str, list[str]] = {}
       for key, file_meta in self._file_pickup_queue.items():
-        names = [name for name in remote_names if file_meta.file_pattern.match(name)]
+        names = [name for name in source_folders if file_meta.file_pattern.match(name)]
         if names:
           candidates[key] = names
         else:
@@ -277,7 +353,9 @@ class SFTProcessor(SupplierProcessorBase):
       downloaded = dict(
         zip(
           unique_names,
-          await gather(*(to_thread(self._download_candidate, self.pickup_ftp_folder / name, adapted_logger) for name in unique_names)),
+          await gather(
+            *(to_thread(self._download_candidate, source_folders[name] / name, adapted_logger) for name in unique_names)
+          ),
           strict=True,
         )
       )
@@ -326,7 +404,7 @@ class SFTProcessor(SupplierProcessorBase):
           futures.extend(
             to_thread(
               self._transfer_file_same_server,
-              send_path=(self.pickup_ftp_folder / filename),
+              send_path=(source_folders[filename] / filename),
               recv_path=remote_file_locs[idx],
               move_files_task=move_files_task,
               file_meta=file_meta,
@@ -360,12 +438,14 @@ class SFTProcessor(SupplierProcessorBase):
 
       if not persisted:
         local_logger.warning(
-          "%s: Queue backup could not be written; a restart from the stale backup will re-match the moved files "
-          "from the waiting folder via the idempotent rename",
+          "%s: Queue backup could not be written; the entries advanced this run are only in memory. A restart from "
+          "the stale backup re-runs pickup for them, finds the already-renamed files in %s (candidates are gathered "
+          "from the waiting folder as well as the pickup folder), skips the rename as a no-op and re-advances them",
           self.__class__.__name__,
+          self.pre_processing_waiting_folder,
         )
-      # No vendor-side archive step: the rename *is* the removal from the pickup folder. `pickup_archive_ftp_folder`
-      # stays declared to satisfy the base class's attribute contract but SFT never writes to it.
+      # No vendor-side archive step: the rename *is* the removal from the pickup folder, so
+      # `pickup_archive_ftp_folder` is `None` and nothing is ever written to a vendor archive.
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
@@ -587,7 +667,10 @@ class SFTProcessor(SupplierProcessorBase):
         body_lines.extend(f.readlines())
 
     invoice_nums = []
-    header_invoiced_dates = []
+    # (parsed date, original header string). The original is what gets re-emitted: the source format leaves
+    # month/day/hour unpadded (`6/19/2025 9:46:46 AM`) and the downstream consumer of the merged file is unknown,
+    # so re-serialising through `strftime` (which pads) is a change nobody asked for.
+    header_invoiced_dates: list[tuple[datetime, str]] = []
     found_values: dict[str, Any] = {
       "customer_num": None,
       "po_num": None,
@@ -600,11 +683,13 @@ class SFTProcessor(SupplierProcessorBase):
         found_values["customer_num"] = first_line_attrs["customer_num"]
       if found_values["po_num"] is None and first_line_attrs["po_num"] not in [None, ""]:
         found_values["po_num"] = first_line_attrs["po_num"]
-      if first_line_attrs["invoice_date"] is not None and first_line_attrs["invoice_date"] != "":
-        # 05/20/2026 11:44:55 AM
-        header_invoiced_dates.append(datetime.strptime(first_line_attrs["invoice_date"], "%m/%d/%Y %I:%M:%S %p"))  # noqa: DTZ007
+      raw_date = first_line_attrs["invoice_date"]
+      if raw_date is not None and raw_date != "":
+        # 05/20/2026 11:44:55 AM  (or 5/20/2026 1:44:55 PM -- the source does not zero-pad)
+        header_invoiced_dates.append((datetime.strptime(raw_date, self.header_date_format), raw_date))  # noqa: DTZ007
 
-    found_values["invoice_date"] = min(header_invoiced_dates).strftime("%m/%d/%Y %I:%M:%S %p") if header_invoiced_dates else "unknown"
+    # Earliest by parsed datetime, emitted verbatim as it appeared in that file's header.
+    found_values["invoice_date"] = min(header_invoiced_dates)[1] if header_invoiced_dates else "unknown"
 
     invoice_num_result = "-".join(invoice_nums)
     header_result = self.header_format.format(**found_values, invoice_num=invoice_num_result).encode()
@@ -658,7 +743,10 @@ if __debug__ and SETTINGS.use_testing_folders:
     "post_processing_waiting_folder",
     "destination_ftp_folder",
   ]:
-    orig_attr: PurePosixPath = getattr(SFTProcessor, attr_name)
+    orig_attr: PurePosixPath | None = getattr(SFTProcessor, attr_name)
+    if orig_attr is None:
+      # `pickup_archive_ftp_folder`: SFT has no vendor archive, so there is nothing to prefix.
+      continue
     new_val = PurePosixPath("/Testing") / orig_attr.relative_to("/")
     setattr(SFTProcessor, attr_name, new_val)
 
