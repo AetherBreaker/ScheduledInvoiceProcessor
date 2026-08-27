@@ -101,6 +101,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
       FTPCredentials(host=_raw["HOST"], username=_raw["USER"], password=SecretStr(_raw["PWD"]), port=int(_raw.get("PORT", 21))),
       container_cls="SupplierProcessorBase",
       container_cvar=ctx_var_container,
+      # Explicit ceiling well below the server's global 50-user cap: the SFT Pure-FTPd host enforces no
+      # meaningful per-IP limit, so a single client can starve the shared pool -- 16 leaves headroom.
+      max_connections=16,
     )
   finally:
     del _raw
