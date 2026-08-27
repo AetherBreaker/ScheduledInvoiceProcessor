@@ -1,9 +1,8 @@
 # Standard library imports
-from asyncio import as_completed, gather, to_thread
+from asyncio import as_completed, to_thread
 from contextvars import ContextVar
 from datetime import datetime
 from hashlib import file_digest
-from io import BytesIO
 from logging import getLogger
 from pathlib import PurePosixPath
 from re import compile
@@ -22,13 +21,12 @@ from .log_action import log_actions
 if TYPE_CHECKING:
   # Standard library imports
   from collections.abc import Coroutine
-  from logging import Logger, LoggerAdapter
+  from logging import LoggerAdapter
   from pathlib import Path
-  from re import Match, Pattern
+  from re import Pattern
   from typing import Any
 
   # First party imports
-  from aeth_ext.ftp.types import ListDirResult
   from scheduled_invoice_processor.typing_custom import CustomerID, SupplierQueueKey
 
   # Local folder imports
@@ -38,13 +36,18 @@ logger = getLogger(__name__)
 
 
 class SFTProcessor(SupplierProcessorBase):
-  """SFT's own warehouse. The vendor side *is* the holding FTP, so the base class's pickup does the whole job:
-  `transfer_file` streams the invoice from the pickup folder to the waiting folder through the one pool, and the
-  source is archived after the commit like any other supplier's.
+  """SFT's own warehouse. The vendor side *is* the holding FTP -- `vendor_ftp` is the `waiting_ftp` pool -- so
+  the base class's pickup does the whole job unmodified: `transfer_file` streams the invoice from the pickup
+  folder to the waiting folder through that one pool, and the source is archived after the commit exactly as it
+  is for a supplier on a remote server.
 
-  The only thing SFT decides for itself is which files belong to a schedule entry: the date comes from the
-  header line inside the file, never the filename (it has none) and never the mtime (a human touching the file
-  on the way past would rewrite it).
+  Dates therefore come from the file's mtime, like every other `checks_date_in_filename = False` supplier. These
+  files live on a server people work in, so an mtime can be rewritten by anyone who touches the file on the way
+  past; the fix is for the warehouse export to put a timestamp in the filename, at which point this supplier
+  turns on `checks_date_in_filename` and the ambiguity goes away. Until then the `[OUTSIDE_WEEK_PICKUP]`
+  diagnostic reports anything the window accepts from outside the strict Sunday-Saturday week.
+
+  The invoice format is RYO's, so preprocessing merges an entry's files the same way RYO does.
   """
 
   # Same server as the holding FTP: one adapter, no separate credentials.
@@ -66,8 +69,8 @@ class SFTProcessor(SupplierProcessorBase):
   header_format = "{customer_num}|{invoice_num}|{po_num}|{invoice_date}"
   file_name_format = "{customer_id}_{invoice_num}.edi"
 
-  # The override of `_pickup_files` decides the window from the header; this flag only matters to the base
-  # implementation, which SFT does not use for pickup.
+  # No date in the filename yet, so the base pickup judges candidates on their mtime. Flip this to True once the
+  # warehouse export names files with a timestamp, and teach `assemble_filename_pattern` the date groups.
   checks_date_in_filename: bool = False
 
   pickup_ftp_folder = PurePosixPath("/SFT_Invoice_Pickup")
@@ -94,85 +97,6 @@ class SFTProcessor(SupplierProcessorBase):
   ) -> Pattern[str]:
     # No date in the filename; `[\d\-]+` so a merged `SFT017_13842-13843.edi` still matches.
     return compile(rf"^{customer_id}_(?P<invoice_num>[\d\-]+)\.edi$")
-
-  @override
-  async def _select_pickup_matches(
-    self,
-    file_meta: FileRegisterData,
-    remote_files: list[ListDirResult],
-    local_logger: LoggerAdapter[Any] | Logger,
-  ) -> list[Match[str]]:
-    """Same as the base, except the date comes from the file's own header line instead of its mtime -- an mtime
-    is whatever the last person to touch the file made it, and these files sit on a server people work in.
-
-    Reading the header means fetching the file, so every filename match is downloaded here (in parallel, off the
-    event loop) and judged on its first line. The pickup transfer downloads it again; these are small text files
-    on the same server, and the alternative is threading a byte cache through the base class.
-    """
-    candidates = [
-      (remote_file, match) for remote_file in remote_files if (match := file_meta.file_pattern.match(remote_file.filename))
-    ]
-    if not candidates:
-      return []
-
-    headers = await gather(
-      *(
-        to_thread(self._read_header_line, self.pickup_ftp_folder / remote_file.filename, local_logger) for remote_file, _ in candidates
-      )
-    )
-
-    window = self.pickup_window(file_meta)
-    matched_files: list[Match[str]] = []
-    for (remote_file, match), first_line in zip(candidates, headers, strict=True):
-      if first_line is None:
-        continue
-      header = self.invoice_num_pattern.match(first_line)
-      if header is None:
-        local_logger.warning(
-          "%s: %s has no parseable header line; leaving it in %s",
-          self.__class__.__name__,
-          remote_file.filename,
-          self.pickup_ftp_folder,
-        )
-        continue
-      try:
-        # The header carries no offset; treat it as local time.
-        header_date = datetime.strptime(header.group("invoice_date"), self.header_date_format).replace(tzinfo=SETTINGS.tz)
-      except ValueError:
-        local_logger.warning(
-          "%s: %s header date %r is not a valid date; leaving it in %s",
-          self.__class__.__name__,
-          remote_file.filename,
-          header.group("invoice_date"),
-          self.pickup_ftp_folder,
-        )
-        continue
-      if not window.covers(header_date):
-        local_logger.info(
-          "%s: %s header date %s is outside the pickup window %s -> %s; leaving it in %s",
-          self.__class__.__name__,
-          remote_file.filename,
-          header_date.isoformat(),
-          window.start.isoformat(),
-          window.end.isoformat(),
-          self.pickup_ftp_folder,
-        )
-        continue
-      matched_files.append(match)
-      self._warn_if_outside_week(file_meta, header_date, remote_file.filename, local_logger)
-    return matched_files
-
-  def _read_header_line(self, remote_path: PurePosixPath, local_logger: LoggerAdapter[Any] | Logger) -> str | None:
-    """First line of a remote file, or None if it could not be read (logged, and the file is left where it is)."""
-    try:
-      buffer = BytesIO()
-      with self.vendor_ftp.start_session() as client:
-        client.download_file(remote_path.as_posix(), callback=buffer.write, task_msg=f"Reading {remote_path.name}")
-    except Exception:
-      local_logger.exception("%s: Could not read %s to check its header; skipping it this run", self.__class__.__name__, remote_path)
-      return None
-    data = buffer.getvalue()
-    return data.splitlines()[0].decode("utf-8", errors="ignore").strip() if data else ""
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
