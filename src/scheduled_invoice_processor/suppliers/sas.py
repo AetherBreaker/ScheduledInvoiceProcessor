@@ -44,6 +44,10 @@ class SASProcessor(SupplierProcessorBase):
         host_key_policy="auto_add",
       ),
       container_cls="SASProcessor",
+      # Probed 2026-08-27: Files.com accepted 24 concurrent Transports with no refusal and no
+      # per-op slowdown, so this is not a measured ceiling -- only a probe cap. See
+      # PROBED-SERVER-LIMITS.md.
+      max_connections=20,
     )
   finally:
     del _raw

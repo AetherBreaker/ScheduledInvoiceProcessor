@@ -56,6 +56,9 @@ class RYOProcessor(SupplierProcessorBase):
         host_key_policy="auto_add",
       ),
       container_cls="RYOProcessor",
+      # Probed 2026-08-27: Bitvise 9.66 refuses the 20th concurrent Transport. See
+      # PROBED-SERVER-LIMITS.md; 18 leaves one slot of the measured 19.
+      max_connections=18,
     )
   finally:
     del _raw
