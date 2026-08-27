@@ -18,10 +18,10 @@ from unittest.mock import AsyncMock, patch
 
 # Third party imports
 import pytest
-from aeth_ext.rich.progress import TaskID
 
 # First party imports
 import scheduled_invoice_processor.suppliers as suppliers_mod
+from aeth_ext.rich.progress import TaskID
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.monkey_patches import Patches
 from scheduled_invoice_processor.suppliers import SupplierProcessorBase
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
   from collections.abc import Callable, Generator, Iterator
   from io import BytesIO
 
-  # Third party imports
+  # First party imports
   from aeth_ext.rich.progress import Progress
 
 SAMPLE_HEADER = "SFT017|13842|49273|6/19/2025 9:46:46 AM"
@@ -266,6 +266,27 @@ def _record_archives(monkeypatch: pytest.MonkeyPatch) -> list[tuple[PurePosixPat
     lambda self, source_folder, remote_file, archive_folder, **kwargs: archived.append((source_folder, remote_file, archive_folder)),
   )
   return archived
+
+
+def test_testing_folders_leave_the_vendor_side_alone() -> None:
+  """`tests/unit/conftest.py` forces USE_TESTING_FOLDERS=True, so this asserts the live prefixing.
+
+  The pickup folder is the vendor side of the transfer, and `/Testing` is only ever about not writing into
+  production holding folders -- SAS and RYO prefix exactly the four holding-side paths and read the vendor's real
+  pickup folder. SFT's vendor happens to share the server, which does not make its pickup folder a holding
+  folder: prefixing it just points the listing at a directory nobody created, and the run dies on
+  `550 Can't check for file existence`.
+  """
+  assert SFTProcessor.pickup_ftp_folder == PurePosixPath("/SFT_Invoice_Pickup")
+  assert SFTProcessor.pickup_archive_ftp_folder == PurePosixPath("/SFT_Invoice_Pickup/Archive")
+  # The holding-side folders are still redirected, which is the whole point of the flag.
+  for attr in (
+    "pre_processing_waiting_folder",
+    "pre_processing_archive_folder",
+    "post_processing_waiting_folder",
+    "destination_ftp_folder",
+  ):
+    assert getattr(SFTProcessor, attr).is_relative_to("/Testing"), attr
 
 
 def test_pickup_is_the_base_implementation() -> None:
