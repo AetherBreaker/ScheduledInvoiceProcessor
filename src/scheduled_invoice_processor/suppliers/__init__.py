@@ -1161,7 +1161,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
         int(groups.get("second") or 0),
         tzinfo=SETTINGS.tz,
       )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
       return None
 
   def _warn_if_outside_week(
