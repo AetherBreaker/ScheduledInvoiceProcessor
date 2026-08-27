@@ -13,7 +13,7 @@ from logging import Logger, getLogger
 from os import replace
 from threading import RLock
 from time import sleep
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple
 
 # Third party imports
 from aiologic import Lock
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
   from aeth_ext.ftp.pool.ftp_adapter import FTPAdapter
   from aeth_ext.ftp.pool.sftp_adapter import SFTPAdapter
   from aeth_ext.ftp.session import AdapterBase
+  from aeth_ext.ftp.types import ListDirResult
   from aeth_ext.rich.progress import Progress, TaskID
   from scheduled_invoice_processor.suppliers.log_action import LogActionHandlerType
   from scheduled_invoice_processor.typing_custom import CustomerID, StoreNum, SupplierQueueKey
@@ -65,6 +66,16 @@ TRANSIENT_TRANSFER_ERROR_STRINGS = (
 
 
 HOLDING_FOLDER = CWD / "file_holding"
+
+
+class DateWindow(NamedTuple):
+  """Half-open date range a pickup will accept, `start` inclusive and `end` exclusive."""
+
+  start: datetime
+  end: datetime
+
+  def covers(self, moment: datetime) -> bool:
+    return self.start <= moment < self.end
 
 
 class SupplierProcessorBase(metaclass=SingletonType):
@@ -1138,6 +1149,41 @@ class SupplierProcessorBase(metaclass=SingletonType):
       local_logger.exception("%s: Error archiving file %s", self.__class__.__name__, remote_file)
       raise
 
+  async def _select_pickup_matches(
+    self,
+    file_meta: FileRegisterData,
+    remote_files: list[ListDirResult],
+    local_logger: LoggerAdapter[Any] | Logger,
+  ) -> list[Match[str]]:
+    """Which of the pickup folder's files belong to this schedule entry.
+
+    Filename pattern first, then the date gate: suppliers whose filenames carry a timestamp
+    (`checks_date_in_filename`) are trusted outright, everything else is judged on the file's mtime. Override to
+    decide from something else -- SFT reads the date out of the file's own header line, because an mtime is
+    whatever the last person to touch the file made it.
+    """
+    matched_files: list[Match[str]] = []
+    for remote_file in remote_files:
+      if match := file_meta.file_pattern.match(remote_file.filename):
+        if self.checks_date_in_filename:
+          matched_files.append(match)
+          self._warn_if_outside_week(file_meta, self._date_from_filename_match(match), remote_file.filename, local_logger)
+        elif self.pickup_window(file_meta).covers(remote_file.modified_time):
+          matched_files.append(match)
+          self._warn_if_outside_week(file_meta, remote_file.modified_time, remote_file.filename, local_logger)
+    return matched_files
+
+  def pickup_window(self, file_meta: FileRegisterData) -> DateWindow:
+    """The dates a file may carry to count for this schedule entry: Sunday 00:00 of the pickup week through
+    Saturday 23:59:59 of the dropoff week, widened back a further week while the entry is the current one."""
+    start = (file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - relativedelta(
+      weeks=1 if file_meta.current_week else 0
+    )
+    end = (file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)) - relativedelta(
+      weeks=0 if file_meta.current_week else 1
+    )
+    return DateWindow(start, end)
+
   OUTSIDE_WEEK_LOG_TAG: ClassVar[str] = "[OUTSIDE_WEEK_PICKUP]"
   """Grep-able signature of the diagnostic emitted when a pickup accepts a file dated outside the strict
   Sunday-Saturday week of its schedule entry. Diagnostic only: the accept/reject decision is unchanged."""
@@ -1158,7 +1204,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
         int(groups.get("second") or 0),
         tzinfo=SETTINGS.tz,
       )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
       return None
 
   def _warn_if_outside_week(
@@ -1191,7 +1237,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP, log_subfolder=LogActionEnum.FILE_PICKED_UP)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PICKED_UP)
-  async def _pickup_files(  # noqa: C901, PLR0912
+  async def _pickup_files(  # noqa: C901
     self,
     adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
@@ -1209,24 +1255,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
       items_to_dl: dict[str, FileRegisterData] = {}
       for key, file_meta in self._file_pickup_queue.items():
-        matched_files: list[Match[str]] = []
-
-        for remote_file in remote_files:
-          if match := file_meta.file_pattern.match(remote_file.filename):
-            if self.checks_date_in_filename:
-              matched_files.append(match)
-              self._warn_if_outside_week(file_meta, self._date_from_filename_match(match), remote_file.filename, local_logger)
-            else:
-              file_date = remote_file.modified_time
-              start_date = (
-                file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
-              ) - relativedelta(weeks=1 if file_meta.current_week else 0)
-              end_date = (
-                file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
-              ) - relativedelta(weeks=0 if file_meta.current_week else 1)
-              if start_date <= file_date < end_date:
-                matched_files.append(match)
-                self._warn_if_outside_week(file_meta, file_date, remote_file.filename, local_logger)
+        matched_files = await self._select_pickup_matches(file_meta, remote_files, local_logger)
 
         if matched_files:
           file_meta.file_names = {idx: m.string for idx, m in enumerate(matched_files)}
