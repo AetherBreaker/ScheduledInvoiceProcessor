@@ -28,11 +28,12 @@
     "mypy>=2.1.0",
     "pandas-stubs>=3.0.0.260204",
     "poethepoet>=0.46.0",
+    "pyright>=1.1.411",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.0.0",
     "types-python-dateutil>=2.9.0.20260323",
-  ]
+  ]                                           # setup-project added: "pyright>=1.1.411"
 
 [build-system]
   requires      = [
@@ -47,6 +48,15 @@
 [tool.coverage.report]
   show_missing = true
 
+[tool.coverage.html]
+  directory = ".cache/htmlcov"
+
+[tool.coverage.xml]
+  output = ".cache/coverage.xml"
+
+[tool.coverage.lcov]
+  output = ".cache/coverage.lcov"
+
 [tool.docker]
   # Paths relative to /app that the entrypoint will chown to nonroot:nonroot.
   # Typically these are directories that will be bind-mounted as Docker volumes.
@@ -55,11 +65,50 @@
   ]
   mkdirs      = ["file_holding"]
 
+# setup-project: if-dep mypy
+[tool.mypy]
+  cache_dir = ".cache/mypy"
+
 [tool.poe]
-  include_script = "aeth_devkit:tasks"
+  include_script = [
+    { script = "aeth_devkit:tasks", executor = { type = "uv", frozen = true } }
+  ]
 
 [tool.pyright]
-  extends = "../pyproject.toml"
+  typeCheckingMode = "standard"
+
+  verboseOutput          = true
+  useLibraryCodeForTypes = true
+
+  enableReachabilityAnalysis  = true
+  analyzeUnannotatedFunctions = true
+  deprecateTypingAliases      = true
+
+  reportPropertyTypeMismatch          = true
+  reportMissingTypeStubs              = false
+  reportImportCycles                  = true
+  reportUntypedFunctionDecorator      = true
+  reportUntypedClassDecorator         = true
+  reportUntypedNamedTuple             = true
+  reportPrivateUsage                  = true
+  # reportConstantRedefinition          = true
+  reportDeprecated                    = true
+  # reportMissingSuperCall              = true
+  reportUninitializedInstanceVariable = true
+  reportMissingParameterType          = true
+  # reportMissingTypeArgument           = true
+  reportUnnecessaryIsInstance         = true
+  reportUnnecessaryCast               = true
+  reportUnnecessaryComparison         = true
+  reportUnnecessaryContains           = true
+  reportInvalidStubStatement          = true
+  reportUnnecessaryTypeIgnoreComment  = true
+  reportMatchNotExhaustive            = true
+  reportUnreachable                   = true
+  reportImplicitOverride              = true
+  reportMissingTypeArgument           = false
+
+  executionEnvironments = [{ root = "src", extraPaths = ["src"] }]
 
 [tool.pytest.ini_options]
   addopts                            = [
@@ -77,21 +126,127 @@
   asyncio_default_test_loop_scope    = "session"
 
 [tool.ruff]
-  extend    = "../pyproject.toml"
   cache-dir = ".cache/ruff"
 
   src = ["./src"]
 
-  [tool.ruff.lint.flake8-type-checking]
-    runtime-evaluated-base-classes = [
-      "scheduled_invoice_processor.suppliers.file_register_data.FileRegisterData",
-      "pydantic.dataclasses.dataclass",
-      "pydantic._internal._dataclasses.PydanticDataclass",
-      "scheduled_invoice_processor.suppliers.file_register_data.FixRuffTC001",
+  exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "dist",
+    "node_modules",
+    "venv",
+  ]
+
+  fix = true
+
+  indent-width = 2
+  line-length  = 135
+
+  [tool.ruff.lint]
+    extend-select = [
+      "A",
+      "ANN001",
+      "ASYNC",
+      "B",
+      "C4",
+      "C90",
+      "DTZ",
+      "FBT003",
+      "LOG",
+      "N",
+      "NPY",
+      "PD",
+      "PERF",
+      "PL",
+      "PYI",
+      "RUF",
+      "T10",
+      "TC",
+      "UP",
+    ]
+    ignore        = [
+      "A004",
+      "PD008",
+      "PD009",
+      "PLC0415",
+      "PLR0913",
+      "PLW0603",
+      "PIE790",
     ]
 
-  [tool.ruff.lint.per-file-ignores]
-    "tests/**" = ["N812", "PLR2004", "FBT003"]
+    [tool.ruff.lint.flake8-type-checking]
+      runtime-evaluated-base-classes = [
+        "scheduled_invoice_processor.suppliers.file_register_data.FileRegisterData",
+        "pydantic.dataclasses.dataclass",
+        "pydantic._internal._dataclasses.PydanticDataclass",
+        "scheduled_invoice_processor.suppliers.file_register_data.FixRuffTC001",
+      ]
+
+    [tool.ruff.lint.per-file-ignores]
+      "tests/**" = ["N812", "PLR2004", "FBT003"]
+
+    [tool.ruff.lint.isort]
+      combine-as-imports = true
+      known-first-party  = ["scheduled_invoice_processor"]
+
+      [tool.ruff.lint.isort.import-heading]
+        first-party      = "First party imports"
+        future           = "Future imports"
+        local-folder     = "Local folder imports"
+        standard-library = "Standard library imports"
+        third-party      = "Third party imports"
+
+  [tool.ruff.format]
+    docstring-code-format = true
+
+[tool.tombi]
+  toml-version = "v1.1.0"
+
+  [tool.tombi.files]
+    exclude = [
+      ".bzr",
+      ".direnv",
+      ".eggs",
+      ".git",
+      ".git-rewrite",
+      ".hg",
+      ".mypy_cache",
+      ".nox",
+      ".pants.d",
+      ".pytype",
+      ".ruff_cache",
+      ".svn",
+      ".tox",
+      ".venv",
+      "__pypackages__",
+      "_build",
+      "buck-out",
+      "dist",
+      "node_modules",
+      "venv",
+    ]
+
+  [tool.tombi.format.rules]
+    indent-sub-tables               = true
+    indent-table-key-value-pairs    = true
+    key-value-equals-sign-alignment = true
+    trailing-comment-alignment      = true
 
 [tool.uv]
   environments = [
