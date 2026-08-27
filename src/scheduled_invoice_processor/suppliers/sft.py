@@ -384,11 +384,12 @@ class SFTProcessor(SupplierProcessorBase):
 
 
 if __debug__ and SETTINGS.use_testing_folders:
-  # Every folder lives on the SFT server here (SAS/RYO only prefix the four holding-side folders because their
-  # pickup folders are on the vendor's server).
+  # The same four holding-side folders SAS and RYO redirect, and no more. `/Testing` exists so a test run does
+  # not write into the production holding folders; the pickup folder and its archive are the *vendor* side of the
+  # transfer, which a test run reads from for real and (thanks to `_vendor_archive_file`'s `debug`) never
+  # mutates. SFT's vendor sharing the server does not make its pickup folder a holding folder -- redirecting it
+  # points the listing at a directory nobody created, and the run dies on `550 Can't check for file existence`.
   for attr_name in [
-    "pickup_ftp_folder",
-    "pickup_archive_ftp_folder",
     "pre_processing_waiting_folder",
     "pre_processing_archive_folder",
     "post_processing_waiting_folder",
@@ -401,10 +402,10 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 async def main():
   # Third party imports
-  from aeth_ext.rich.progress import Progress
   from rich import get_console
 
   # First party imports
+  from aeth_ext.rich.progress import Progress
   from scheduled_invoice_processor.database import DatabaseCache
 
   cache = DatabaseCache()
