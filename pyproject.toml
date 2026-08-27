@@ -70,9 +70,7 @@
   cache_dir = ".cache/mypy"
 
 [tool.poe]
-  include_script = [
-    { script = "aeth_devkit:tasks", executor = { type = "uv", frozen = true } }
-  ]
+  include_script = [{ script = "aeth_devkit:tasks", executor = { type = "uv", frozen = true } }]
 
 [tool.pyright]
   typeCheckingMode = "standard"
@@ -111,13 +109,7 @@
   executionEnvironments = [{ root = "src", extraPaths = ["src"] }]
 
 [tool.pytest.ini_options]
-  addopts                            = [
-    "--cov",
-    "--cov-report=term-missing",
-    "--strict-markers",
-    "--strict-config",
-    "-ra"
-  ]
+  addopts                            = ["--cov", "--cov-report=term-missing", "--strict-markers", "--strict-config", "-ra"]
   cache_dir                          = ".cache/pytest"
   testpaths                          = ["tests"]
   xfail_strict                       = true
@@ -203,7 +195,7 @@
 
     [tool.ruff.lint.isort]
       combine-as-imports = true
-      known-first-party  = ["scheduled_invoice_processor"]
+      known-first-party  = ["scheduled_invoice_processor", "aeth_ext"]
 
       [tool.ruff.lint.isort.import-heading]
         first-party      = "First party imports"
