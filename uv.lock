@@ -13,6 +13,19 @@ supported-markers = [
 ]
 
 [[package]]
+name = "aeth-devkit"
+version = "7.0.2"
+source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
+dependencies = [
+    { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "poethepoet-tasks", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/5a9/fec69c88fbd17/aeth_devkit-7.0.2.tar.gz", hash = "sha256:5a9fec69c88fbd1710914458dbf626bd3ea2dfbbec73692335ddd38953282287" }
+wheels = [
+    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/b13/bf39026f2df83/aeth_devkit-7.0.2-py3-none-win_amd64.whl", hash = "sha256:b13bf39026f2df83968cbd80df6964ca55b146f83bbb896e2dd724b09aabbed5" },
+]
+
+[[package]]
 name = "aeth-ext"
 version = "8.0.4"
 source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
@@ -107,10 +120,11 @@ dev = [
     { name = "debugpy", specifier = ">=1.8.21" },
     { name = "hypothesis", specifier = ">=6.164.0" },
     { name = "paramiko", specifier = ">=5.0.0" },
-    { name = "poe-tasks", specifier = ">=4.4.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
+    { name = "poe-tasks", specifier = ">=6.0.2", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
+    { name = "poethepoet", specifier = ">=0.46.0" },
     { name = "py-yaml12", specifier = ">=0.1.0" },
     { name = "pyftpdlib", specifier = ">=2.2.0" },
-    { name = "pyright", specifier = ">=1.1.409" },
+    { name = "pyright", specifier = ">=1.1.411" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
@@ -1217,19 +1231,6 @@ wheels = [
 ]
 
 [[package]]
-name = "poe-tasks"
-version = "5.0.0"
-source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
-dependencies = [
-    { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "poethepoet-tasks", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-]
-sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/52b/5a59c2e9a1fd9/poe_tasks-5.0.0.tar.gz", hash = "sha256:52b5a59c2e9a1fd90e693efd891799a6012159aa09d4b4722016be2d891ddc2d" }
-wheels = [
-    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/afb/3169ff7c5fe1a/poe_tasks-5.0.0-py3-none-any.whl", hash = "sha256:afb3169ff7c5fe1a16d938f3af3d2fa4305a8df361848f19d902d289d70da927" },
-]
-
-[[package]]
 name = "poethepoet"
 version = "0.48.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1669,10 +1670,10 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "aeth-devkit", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "apscheduler-stubs", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "mypy", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pandas-stubs", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "poe-tasks", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pytest", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pytest-asyncio", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -1701,10 +1702,10 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "aeth-devkit", specifier = ">=7.0.2", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
     { name = "apscheduler-stubs", specifier = ">=0.1.0.dev2" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "pandas-stubs", specifier = ">=3.0.0.260204" },
-    { name = "poe-tasks", specifier = ">=5.0.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
     { name = "poethepoet", specifier = ">=0.46.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },

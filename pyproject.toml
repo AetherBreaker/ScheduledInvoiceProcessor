@@ -23,10 +23,10 @@
 
 [dependency-groups]
   dev = [
+    "aeth-devkit>=7.0.2",
     "apscheduler-stubs>=0.1.0.dev2",
     "mypy>=2.1.0",
     "pandas-stubs>=3.0.0.260204",
-    "poe-tasks>=5.0.0",
     "poethepoet>=0.46.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.0.0",
@@ -56,17 +56,19 @@
   mkdirs      = ["file_holding"]
 
 [tool.poe]
-  include_script = "poe_tasks:tasks"
-
-  [tool.poe.tasks.sync]
-    help  = "Sync venv and ensure this project's scripts win over same-named dependency scripts"
-    shell = "uv sync && uv sync --reinstall-package scheduled-invoice-processor"
+  include_script = "aeth_devkit:tasks"
 
 [tool.pyright]
   extends = "../pyproject.toml"
 
 [tool.pytest.ini_options]
-  addopts                            = ["--cov", "--cov-report=term-missing", "--strict-markers", "--strict-config", "-ra"]
+  addopts                            = [
+    "--cov",
+    "--cov-report=term-missing",
+    "--strict-markers",
+    "--strict-config",
+    "-ra"
+  ]
   cache_dir                          = ".cache/pytest"
   testpaths                          = ["tests"]
   xfail_strict                       = true
@@ -98,12 +100,12 @@
   ]
 
   [tool.uv.sources]
-    aeth-ext  = [
+    aeth-ext    = [
       # { index = "SFTPyPI" },
       { index = "SFTPyPI", marker = "sys_platform == 'linux'" },
       { path = "../aeth_ext", editable = true, marker = "sys_platform == 'win32'" },
     ]
-    poe-tasks = [
+    aeth-devkit = [
       { index = "SFTPyPI" },
       # , marker = "sys_platform == 'linux'"
       # { path = "../poe_tasks", editable = true, marker = "sys_platform == 'win32'" },
