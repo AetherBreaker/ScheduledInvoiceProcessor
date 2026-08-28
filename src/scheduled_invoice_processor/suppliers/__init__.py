@@ -6,8 +6,6 @@ from atexit import register as register_at_exit
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime
-from errno import EACCES
-from ftplib import all_errors, error_temp
 from io import BytesIO
 from logging import Logger, getLogger
 from os import replace
@@ -19,7 +17,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from aiologic import Lock
 from dateutil.relativedelta import SA, SU, relativedelta
 from orjson import loads
-from paramiko import SSHException
 from pydantic import SecretStr, TypeAdapter
 
 # First party imports
@@ -620,16 +617,16 @@ class SupplierProcessorBase(metaclass=SingletonType):
       logger.debug("%s: progress bar update failed", self.__class__.__name__, exc_info=True)
 
   def _is_transient_transfer_error(self, exc: BaseException) -> bool:
+    # Every adapter method raises stdlib `OSError` types only (see `aeth_ext.ftp.session.AdapterBase`), so this
+    # never has to know which protocol library is underneath. `BlockingIOError` is how the FTP adapter reports a
+    # `425` (no data connection -- passive-port exhaustion on the holding server under a parallel wave) or `450`
+    # (file busy): the control connection is healthy and the next attempt lands on a freed port. `SSHException`
+    # is deliberately absent: mid-session the adapter already translates it to `ConnectionError`, so the only one
+    # that can still reach here is a rejected credential or host key at dial time, which no retry fixes.
     if isinstance(
       exc,
-      (TimeoutError, ConnectionError, BrokenPipeError, EOFError, SSHException),
+      (TimeoutError, ConnectionError, BrokenPipeError, EOFError, BlockingIOError),
     ):
-      return True
-
-    # FTP 425 "can't open data connection": passive-port exhaustion on the holding server under a parallel wave;
-    # the next attempt lands on a freed port. Anchored to the reply code, not a substring, so a "425" inside a
-    # size or path in some other error cannot trigger a retry.
-    if isinstance(exc, error_temp) and str(exc).startswith("425"):
       return True
 
     message = str(exc).lower()
@@ -691,7 +688,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       with self.waiting_ftp.start_session() as client:
         try:
           client.rename(send_path.as_posix(), recv_path.as_posix())
-        except (*all_errors, OSError):
+        except OSError:
           if self._already_moved(client, send_path, recv_path, local_logger):
             local_logger.info(
               "%s: [yellow]%s[/] was already moved to [yellow]%s[/] by an earlier run; treating as success",
@@ -715,7 +712,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
               recv_path,
               extra={"markup": True},
             )
-          except (*all_errors, OSError) as e:
+          except OSError as e:
             local_logger.warning("%s: Failed to verify move of %s", self.__class__.__name__, send_path.name, exc_info=e)
       result = StatusCode.SUCCESS if success else StatusCode.FAILURE
       getattr(file_meta, success_attr)[idx] = success
@@ -751,7 +748,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     local_logger = adapted_logger or logger
     try:
       recv_size = client.get_size(recv_path.as_posix())
-    except (*all_errors, OSError):
+    except OSError:
       return False
     if not recv_size:
       return False
@@ -759,7 +756,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     # covers "no such file" *and* "permission denied", so a reply code cannot prove the source is gone.
     try:
       source_present = any(entry.filename == send_path.name for entry in client.listdir(send_path.parent.as_posix()))
-    except (*all_errors, OSError) as exc:
+    except OSError as exc:
       local_logger.warning("could not confirm %s is gone (%s); not treating the move as done", send_path, exc)
       return False
     return not source_present
@@ -1059,7 +1056,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
             extra={"markup": True},
           )
 
-        except (*all_errors, OSError):
+        except OSError:
           if not debug:
             local_logger.info(
               "%s: Archiving [yellow]%s[/] to %s",
@@ -1074,7 +1071,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
           self._handle_existing_archive(
             ftp_client, source_loc, archive_loc, archive_size, archive_folder, remote_file, debug, local_logger
           )
-    except (*all_errors, OSError):
+    except OSError:
       local_logger.exception("%s: File %s not found at %s for archiving", self.__class__.__name__, remote_file, source_folder)
     # Ensure that exceptions actually get logged while executing off main thread
     except Exception:
@@ -1129,13 +1126,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
           )
     except FileNotFoundError:
       local_logger.exception("%s: File %s not found at %s for archiving", self.__class__.__name__, remote_file, source_folder)
+    # By type, not `e.args[0] is EACCES`: the FTP adapter's translated `PermissionError` carries only a message,
+    # so the errno check matched paramiko's SFTP errors and silently re-raised every FTP permission denial.
+    except PermissionError:
+      local_logger.exception("%s: Permission denied archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
     # Ensure that exceptions actually get logged while executing off main thread
-    except OSError as e:
-      if e.args and e.args[0] is EACCES:
-        local_logger.exception("%s: Permission denied archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
-      else:
-        local_logger.exception("%s: IOError archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
-        raise
+    except OSError:
+      local_logger.exception("%s: IOError archiving file %s at %s", self.__class__.__name__, remote_file, source_folder)
+      raise
 
     except Exception:
       local_logger.exception("%s: Error archiving file %s", self.__class__.__name__, remote_file)
