@@ -1162,6 +1162,21 @@ class SupplierProcessorBase(metaclass=SingletonType):
     except TypeError, ValueError:
       return None
 
+  def _mtime_pickup_window(self, file_meta: FileRegisterData) -> tuple[datetime, datetime]:
+    """The half-open `[start, end)` window an mtime-dated candidate must fall in to be picked up.
+
+    Two weeks wide: the strict Sunday-Saturday week either side of the entry, which is what the
+    `[OUTSIDE_WEEK_PICKUP]` diagnostic measures the use of. Override to narrow it for a supplier whose exports
+    must not be re-collected a week late -- see `SFTProcessor`.
+    """
+    start_date = (file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - relativedelta(
+      weeks=1 if file_meta.current_week else 0
+    )
+    end_date = (
+      file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
+    ) - relativedelta(weeks=0 if file_meta.current_week else 1)
+    return start_date, end_date
+
   def _warn_if_outside_week(
     self,
     file_meta: FileRegisterData,
@@ -1219,12 +1234,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
               self._warn_if_outside_week(file_meta, self._date_from_filename_match(match), remote_file.filename, local_logger)
             else:
               file_date = remote_file.modified_time
-              start_date = (
-                file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
-              ) - relativedelta(weeks=1 if file_meta.current_week else 0)
-              end_date = (
-                file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
-              ) - relativedelta(weeks=0 if file_meta.current_week else 1)
+              start_date, end_date = self._mtime_pickup_window(file_meta)
               if start_date <= file_date < end_date:
                 matched_files.append(match)
                 self._warn_if_outside_week(file_meta, file_date, remote_file.filename, local_logger)

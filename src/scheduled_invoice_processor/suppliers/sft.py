@@ -8,6 +8,9 @@ from pathlib import PurePosixPath
 from re import compile
 from typing import TYPE_CHECKING, override
 
+# Third party imports
+from dateutil.relativedelta import SA, SU, relativedelta
+
 # First party imports
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.logging_config import add_log_context
@@ -44,8 +47,9 @@ class SFTProcessor(SupplierProcessorBase):
   Dates therefore come from the file's mtime, like every other `checks_date_in_filename = False` supplier. These
   files live on a server people work in, so an mtime can be rewritten by anyone who touches the file on the way
   past; the fix is for the warehouse export to put a timestamp in the filename, at which point this supplier
-  turns on `checks_date_in_filename` and the ambiguity goes away. Until then the `[OUTSIDE_WEEK_PICKUP]`
-  diagnostic reports anything the window accepts from outside the strict Sunday-Saturday week.
+  turns on `checks_date_in_filename` and the ambiguity goes away.
+
+  The window itself is narrowed to the entry's own week -- see `_mtime_pickup_window`.
 
   The invoice format is RYO's, so preprocessing merges an entry's files the same way RYO does.
   """
@@ -97,6 +101,22 @@ class SFTProcessor(SupplierProcessorBase):
   ) -> Pattern[str]:
     # No date in the filename; `[\d\-]+` so a merged `SFT017_13842-13843.edi` still matches.
     return compile(rf"^{customer_id}_(?P<invoice_num>[\d\-]+)\.edi$")
+
+  @override
+  def _mtime_pickup_window(self, file_meta: FileRegisterData) -> tuple[datetime, datetime]:
+    """Exactly the entry's own week: Sunday 00:00 through Saturday 23:59:59.999999.
+
+    The base window is two weeks wide -- for a current-week entry it also reaches back over the week before --
+    which is how last week's exports were picked up on a current-week run. Nothing else distinguishes them: with
+    no date in the filename the mtime is the only date the pickup has, so an extra week of tolerance is an extra
+    week of already-handled invoices. Both bounds shift together for a previous-week entry, so that run gets that
+    week and nothing else. Anything genuinely late needs its mtime touched or a manual drop, which is the visible
+    failure the silent re-pickup was not.
+    """
+    weeks_back = relativedelta(weeks=0 if file_meta.current_week else 1)
+    start_date = (file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - weeks_back
+    end_date = (file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)) - weeks_back
+    return start_date, end_date
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)

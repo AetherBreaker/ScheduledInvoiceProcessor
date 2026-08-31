@@ -458,3 +458,102 @@ def test_sft_is_an_expected_supplier(monkeypatch: pytest.MonkeyPatch) -> None:
   from scheduled_invoice_processor.startup import expected_suppliers
 
   assert expected_suppliers[SuppliersEnum.SFT] is SFTProcessor
+
+
+# --- Strict one-week pickup window -------------------------------------------------------------------------
+# The entry's week for PICKUP_DATE (Wed 2025-06-18) / dropoff 2025-06-19 is Sun 06-15 .. Sat 06-21.
+LAST_WEEK_MTIME = datetime(2025, 6, 12, 9, 0, tzinfo=SETTINGS.tz)
+
+
+def test_mtime_window_is_the_entrys_own_week(processor: SFTProcessor, frozen_now: None) -> None:
+  """SFT overrides the base's two-week mtime window: only the strict Sunday-Saturday week is accepted."""
+  start, end = processor._mtime_pickup_window(_meta(PICKUP_DATE, PICKUP_DATE + timedelta(days=1)))
+
+  assert start == datetime(2025, 6, 15, 0, 0, 0, 0, tzinfo=SETTINGS.tz)
+  assert end == datetime(2025, 6, 21, 23, 59, 59, 999999, tzinfo=SETTINGS.tz)
+
+
+def test_mtime_window_shifts_back_a_week_for_a_previous_week_entry(processor: SFTProcessor) -> None:
+  """A previous-week entry gets the week before -- still exactly one week wide, never two."""
+  start, end = processor._mtime_pickup_window(_meta(PICKUP_DATE, PICKUP_DATE + timedelta(days=1), current_week=False))
+
+  assert start == datetime(2025, 6, 8, 0, 0, 0, 0, tzinfo=SETTINGS.tz)
+  assert end == datetime(2025, 6, 14, 23, 59, 59, 999999, tzinfo=SETTINGS.tz)
+
+
+@pytest.mark.parametrize(
+  ("mtime", "accepted"),
+  [
+    (datetime(2025, 6, 14, 23, 59, 59, tzinfo=SETTINGS.tz), False),  # Saturday of the week before
+    (datetime(2025, 6, 15, 0, 0, 0, tzinfo=SETTINGS.tz), True),  # Sunday 00:00, the first accepted instant
+    (datetime(2025, 6, 21, 23, 59, 59, tzinfo=SETTINGS.tz), True),  # Saturday night, the last accepted instant
+    (datetime(2025, 6, 22, 0, 0, 0, tzinfo=SETTINGS.tz), False),  # Sunday of the week after
+  ],
+)
+async def test_pickup_accepts_only_the_current_weeks_mtimes(
+  processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None, mtime: datetime, accepted: bool
+) -> None:
+  """End to end through the inherited `_pickup_files`, one candidate at a time, at each window edge."""
+  pickup_folder = processor.pickup_ftp_folder
+  waiting_folder = processor.pre_processing_waiting_folder
+  candidate = (pickup_folder / "SFT017_13842.edi").as_posix()
+
+  client = _FakeClient({candidate: SAMPLE_FILE}, mtimes={candidate: mtime})
+  _wire(processor, client, monkeypatch)
+  _stub_cache(processor)
+  _record_archives(monkeypatch)
+  meta = _meta(PICKUP_DATE, PICKUP_DATE + timedelta(days=1))
+  meta._waiting_folder = waiting_folder
+  key = _register(processor, meta)
+
+  await processor._pickup_files()
+
+  assert bool(client.transfers) is accepted
+  assert (key in processor._file_waiting_queue) is accepted
+
+
+async def test_pickup_leaves_last_weeks_file_in_the_vendor_folder(
+  processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None
+) -> None:
+  """The regression: a file the warehouse exported last week must not be collected, copied, or archived."""
+  pickup_folder = processor.pickup_ftp_folder
+  waiting_folder = processor.pre_processing_waiting_folder
+  this_week = (pickup_folder / "SFT017_13842.edi").as_posix()
+  last_week = (pickup_folder / "SFT017_13800.edi").as_posix()
+
+  client = _FakeClient(
+    {this_week: SAMPLE_FILE, last_week: OUT_OF_WINDOW_FILE},
+    mtimes={this_week: PICKUP_DATE, last_week: LAST_WEEK_MTIME},
+  )
+  _wire(processor, client, monkeypatch)
+  _stub_cache(processor)
+  archived = _record_archives(monkeypatch)
+  meta = _meta(PICKUP_DATE, PICKUP_DATE + timedelta(days=1))
+  meta._waiting_folder = waiting_folder
+  _register(processor, meta)
+
+  await processor._pickup_files()
+
+  assert client.transfers == [(this_week, (waiting_folder / "SFT017_13842.edi").as_posix())]
+  assert meta.file_names == {0: "SFT017_13842.edi"}
+  assert (waiting_folder / "SFT017_13800.edi").as_posix() not in client.files
+  assert archived == [(pickup_folder, "SFT017_13842.edi", processor.pickup_archive_ftp_folder)]
+
+
+async def test_pickup_never_warns_about_an_outside_week_file(
+  processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None, caplog: pytest.LogCaptureFixture
+) -> None:
+  """The strict window and the diagnostic's window now agree, so the probe can no longer fire for SFT."""
+  pickup_folder = processor.pickup_ftp_folder
+  last_week = (pickup_folder / "SFT017_13800.edi").as_posix()
+
+  client = _FakeClient({last_week: OUT_OF_WINDOW_FILE}, mtimes={last_week: LAST_WEEK_MTIME})
+  _wire(processor, client, monkeypatch)
+  _stub_cache(processor)
+  _record_archives(monkeypatch)
+  _register(processor, _meta(PICKUP_DATE, PICKUP_DATE + timedelta(days=1)))
+
+  with caplog.at_level("WARNING"):
+    await processor._pickup_files()
+
+  assert SupplierProcessorBase.OUTSIDE_WEEK_LOG_TAG not in caplog.text
