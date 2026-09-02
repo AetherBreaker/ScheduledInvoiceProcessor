@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, override
 
 # Third party imports
 from dateutil.relativedelta import SA, SU, relativedelta
+from dateutil.rrule import DAILY, rrule
 
 # First party imports
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
@@ -44,12 +45,13 @@ class SFTProcessor(SupplierProcessorBase):
   folder to the waiting folder through that one pool, and the source is archived after the commit exactly as it
   is for a supplier on a remote server.
 
-  Dates therefore come from the file's mtime, like every other `checks_date_in_filename = False` supplier. These
-  files live on a server people work in, so an mtime can be rewritten by anyone who touches the file on the way
-  past; the fix is for the warehouse export to put a timestamp in the filename, at which point this supplier
-  turns on `checks_date_in_filename` and the ambiguity goes away.
-
-  The window itself is narrowed to the entry's own week -- see `_mtime_pickup_window`.
+  The warehouse export names each file with a timestamp -- `SFT010_26709_20260902101623.edi` -- so the pickup
+  dates a candidate from its filename (`checks_date_in_filename`), never from an mtime that anyone touching the
+  file on the way past could rewrite. `assemble_filename_pattern` only admits timestamps inside the entry's own
+  Sunday-Saturday week, which is what used to need an `_mtime_pickup_window` override; the base's mtime branch is
+  no longer reached for SFT. The year/month/day alternations are matched independently, so a week that straddles
+  a month boundary also admits a few cross-product dates outside it -- those are the cases the
+  `[OUTSIDE_WEEK_PICKUP]` diagnostic still reports.
 
   The invoice format is RYO's, so preprocessing merges an entry's files the same way RYO does.
   """
@@ -73,9 +75,7 @@ class SFTProcessor(SupplierProcessorBase):
   header_format = "{customer_num}|{invoice_num}|{po_num}|{invoice_date}"
   file_name_format = "{customer_id}_{invoice_num}.edi"
 
-  # No date in the filename yet, so the base pickup judges candidates on their mtime. Flip this to True once the
-  # warehouse export names files with a timestamp, and teach `assemble_filename_pattern` the date groups.
-  checks_date_in_filename: bool = False
+  checks_date_in_filename: bool = True
 
   pickup_ftp_folder = PurePosixPath("/SFT_Invoice_Pickup")
   pickup_archive_ftp_folder = PurePosixPath("/SFT_Invoice_Pickup/Archive")
@@ -99,24 +99,34 @@ class SFTProcessor(SupplierProcessorBase):
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern[str]:
-    # No date in the filename; `[\d\-]+` so a merged `SFT017_13842-13843.edi` still matches.
-    return compile(rf"^{customer_id}_(?P<invoice_num>[\d\-]+)\.edi$")
+    # SFT010_26709_20260902101623.edi -- timestamp is YYYYMMDDHHMMSS, no microseconds (unlike RYO/SAS).
+    # `[\d\-]+` on invoice_num so a merged `SFT017_13842-13843_...` still matches.
+    rng_start = (start_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - relativedelta(
+      weeks=1 if not current_week else 0
+    )
+    rng_end = (end_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)) - relativedelta(
+      weeks=1 if not current_week else 0
+    )
 
-  @override
-  def _mtime_pickup_window(self, file_meta: FileRegisterData) -> tuple[datetime, datetime]:
-    """Exactly the entry's own week: Sunday 00:00 through Saturday 23:59:59.999999.
+    dates = list(rrule(DAILY, dtstart=rng_start, until=rng_end))
 
-    The base window is two weeks wide -- for a current-week entry it also reaches back over the week before --
-    which is how last week's exports were picked up on a current-week run. Nothing else distinguishes them: with
-    no date in the filename the mtime is the only date the pickup has, so an extra week of tolerance is an extra
-    week of already-handled invoices. Both bounds shift together for a previous-week entry, so that run gets that
-    week and nothing else. Anything genuinely late needs its mtime touched or a manual drop, which is the visible
-    failure the silent re-pickup was not.
-    """
-    weeks_back = relativedelta(weeks=0 if file_meta.current_week else 1)
-    start_date = (file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - weeks_back
-    end_date = (file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)) - weeks_back
-    return start_date, end_date
+    years_part = "|".join({str(date.year) for date in dates})
+    months_part = "|".join({f"{date.month:02d}" for date in dates})
+    days_part = "|".join({f"{date.day:02d}" for date in dates})
+
+    pattern = (
+      rf"^{customer_id}_"
+      r"(?P<invoice_num>[\d\-]+)_"
+      r"(?P<timestamp>"
+      rf"(?P<year>{years_part})"
+      rf"(?P<month>{months_part})"
+      rf"(?P<day>{days_part})"
+      r"(?P<hour>\d{2})"
+      r"(?P<minute>\d{2})"
+      r"(?P<second>\d{2})"
+      r")\.edi$"
+    )
+    return compile(pattern)
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)

@@ -1167,7 +1167,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     Two weeks wide: the strict Sunday-Saturday week either side of the entry, which is what the
     `[OUTSIDE_WEEK_PICKUP]` diagnostic measures the use of. Override to narrow it for a supplier whose exports
-    must not be re-collected a week late -- see `SFTProcessor`.
+    must not be re-collected a week late. Only the mtime branch of `_pickup_files` consults it: a
+    `checks_date_in_filename` supplier's window is whatever its `assemble_filename_pattern` admits. (SFT
+    overrode this while its export had no timestamp in the filename; it is filename-dated now.)
     """
     start_date = (file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - relativedelta(
       weeks=1 if file_meta.current_week else 0
