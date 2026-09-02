@@ -14,47 +14,14 @@ supported-markers = [
 
 [[package]]
 name = "aeth-devkit"
-version = "8.0.1"
+version = "8.2.0"
 source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
 dependencies = [
     { name = "poethepoet", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
-sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/f50/00b0c36e6acd0/aeth_devkit-8.0.1.tar.gz", hash = "sha256:f5000b0c36e6acd010579e2eb2499e687b7bfc20e4c14f3a7dbe3a4ad25e3c9e" }
+sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/210/2e6f09b2990a3/aeth_devkit-8.2.0.tar.gz", hash = "sha256:2102e6f09b2990a3a02fd4fd12183e65a4b401b64ee0067b1b1481f43a3678d3" }
 wheels = [
-    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/569/38323c89f9400/aeth_devkit-8.0.1-py3-none-win_amd64.whl", hash = "sha256:56938323c89f94000ace93f7f7cb8d16c493ee60ee5986849407c67429fcdf84" },
-]
-
-[[package]]
-name = "aeth-ext"
-version = "8.0.6"
-source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
-resolution-markers = [
-    "python_full_version >= '3.15' and sys_platform == 'linux'",
-    "python_full_version < '3.15' and sys_platform == 'linux'",
-]
-dependencies = [
-    { name = "aiologic", marker = "sys_platform == 'linux'" },
-    { name = "cloudpickle", marker = "sys_platform == 'linux'" },
-    { name = "orjson", marker = "sys_platform == 'linux'" },
-    { name = "pydantic-settings", marker = "sys_platform == 'linux'" },
-    { name = "python-dateutil", marker = "sys_platform == 'linux'" },
-    { name = "resvg-py", marker = "sys_platform == 'linux'" },
-    { name = "rich", marker = "sys_platform == 'linux'" },
-    { name = "typer", marker = "sys_platform == 'linux'" },
-    { name = "tzdata", marker = "sys_platform == 'linux'" },
-    { name = "watchfiles", marker = "sys_platform == 'linux'" },
-]
-sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/4c0/f57fafeeda0dc/aeth_ext-8.0.6.tar.gz", hash = "sha256:4c0f57fafeeda0dc112aad692e04f14ad080974feab38ea9fdd82d77af63f0ea" }
-wheels = [
-    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/941/c5cf184c94567/aeth_ext-8.0.6-py3-none-any.whl", hash = "sha256:941c5cf184c94567c6599e209fc6ad28a3eff93288424d95dc9e9115ff0399ad" },
-]
-
-[package.optional-dependencies]
-async = [
-    { name = "uvloop", marker = "sys_platform == 'linux'" },
-]
-sftp = [
-    { name = "paramiko", marker = "sys_platform == 'linux'" },
+    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/ef5/65c88400d9270/aeth_devkit-8.2.0-py3-none-win_amd64.whl", hash = "sha256:ef565c88400d92701b0e02cb6150fbf89e8a422be4c553fbfbabefe92da2c10e" },
 ]
 
 [[package]]
@@ -139,6 +106,39 @@ dev = [
     { name = "types-python-dateutil", specifier = ">=2.9.0.20260518" },
     { name = "uvloop", marker = "sys_platform == 'linux'", specifier = ">=0.22.1" },
     { name = "winloop", marker = "sys_platform == 'win32'", specifier = ">=0.6.0" },
+]
+
+[[package]]
+name = "aeth-ext"
+version = "8.0.8"
+source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }
+resolution-markers = [
+    "python_full_version >= '3.15' and sys_platform == 'linux'",
+    "python_full_version < '3.15' and sys_platform == 'linux'",
+]
+dependencies = [
+    { name = "aiologic", marker = "sys_platform == 'linux'" },
+    { name = "cloudpickle", marker = "sys_platform == 'linux'" },
+    { name = "orjson", marker = "sys_platform == 'linux'" },
+    { name = "pydantic-settings", marker = "sys_platform == 'linux'" },
+    { name = "python-dateutil", marker = "sys_platform == 'linux'" },
+    { name = "resvg-py", marker = "sys_platform == 'linux'" },
+    { name = "rich", marker = "sys_platform == 'linux'" },
+    { name = "typer", marker = "sys_platform == 'linux'" },
+    { name = "tzdata", marker = "sys_platform == 'linux'" },
+    { name = "watchfiles", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/46b/575ca0237216c/aeth_ext-8.0.8.tar.gz", hash = "sha256:46b575ca0237216cd8bdbbc4142622c01c3c0751d398676e234e6d757bd414fb" }
+wheels = [
+    { url = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+f/130/3d75e96b6dd61/aeth_ext-8.0.8-py3-none-any.whl", hash = "sha256:1303d75e96b6dd61396f1046776ecf776fb4f1d3caf38fe8b3b2da61b1e9f77e" },
+]
+
+[package.optional-dependencies]
+async = [
+    { name = "uvloop", marker = "sys_platform == 'linux'" },
+]
+sftp = [
+    { name = "paramiko", marker = "sys_platform == 'linux'" },
 ]
 
 [[package]]
@@ -1575,12 +1575,35 @@ wheels = [
 ]
 
 [[package]]
+name = "ruff"
+version = "0.16.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f3/85/c8e12473c93018f92d19dd988a294202e1c27426c47ec4de53ffb847b8d8/ruff-0.16.5.tar.gz", hash = "sha256:1b88500f9ffbcab3dedb0082c9f9492e91ec3d618aac1236a3e0189938f7040b", size = 4912003, upload-time = "2026-08-27T16:34:18.258Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c6/b6/77c90a970fe2dae17a723acbd011043ea97c98d7deacccefdc4ba74ec512/ruff-0.16.5-py3-none-linux_armv6l.whl", hash = "sha256:12e5f673e774c35fbb62f288809c7653b73445f8ecec6b6063fd6ea3521aa14b", size = 10011941, upload-time = "2026-08-27T16:33:41.287Z" },
+    { url = "https://files.pythonhosted.org/packages/43/45/a684caacdedaca180f52bacccc40bf0789d2c5a7c75f25324853e9eaedb5/ruff-0.16.5-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7b719b0a1f4d59710d283ab2965f621684a108a9e41da622e3b23f0326cd0025", size = 9964129, upload-time = "2026-08-27T16:33:48.352Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/f2/5d2bcdaca6b5b93d1b4dfc166cd2aebf7680143a1b38a28759df13a94d31/ruff-0.16.5-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:2298f2780ed1be0c5cb1361e32ab7b1467f3cce7dabe101d2210a314f2fe42e9", size = 9821518, upload-time = "2026-08-27T16:33:50.57Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/ff/011cce29accf9257d5974145b733fc653a37985ed6825413a3987cefbfe0/ruff-0.16.5-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:258f29035a2dd021e7861e631b227a5b3f14e50c1184c9a6a122c5f4576154d7", size = 10534835, upload-time = "2026-08-27T16:33:52.522Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/5a/f0cf109bada9bba0e96c90c21c9f9251803f57225c32d293327a03c710d6/ruff-0.16.5-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:b9a4f0432966834019c74d1b7e5c51224305d7713f3d7faf3e7451f1a3be3cde", size = 11252550, upload-time = "2026-08-27T16:33:54.521Z" },
+    { url = "https://files.pythonhosted.org/packages/63/4d/1d481aaea2046c6a7ed7c291f9004c669cce3c087b6b376ed5b08271e3fe/ruff-0.16.5-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:b5eb3a8c3d0ade9cea42b591fd530368e8798380e30e0a308b85a5cf718f09ea", size = 10777949, upload-time = "2026-08-27T16:33:56.88Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/34/ee245ca55f64443233034b3d02b03236b19242004281247c079390b7facd/ruff-0.16.5-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ef0f69e191a13a3c9816f63163c88790cb12cd157bbbb384e9c44745702ab105", size = 10311656, upload-time = "2026-08-27T16:33:59.12Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/4d/c33a333e341c0a2b96c715b52d89a606f5a34cd4ac493cd9b8d0187186b8/ruff-0.16.5-py3-none-manylinux_2_31_riscv64.whl", hash = "sha256:0eeab41fbea2c42f98dfb9822cdccda9d24ba38d49f6dc945b5c236d48f0ef29", size = 10532125, upload-time = "2026-08-27T16:34:01.166Z" },
+    { url = "https://files.pythonhosted.org/packages/30/e1/a64cef78b40192497bb98a27a8aa8f2c98ee9ee15bc97f7712d94ef32937/ruff-0.16.5-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:f0768e9df4300713fff30733c87575f68b6f1d8de41184e505b7fdd9c0c95eaf", size = 10097648, upload-time = "2026-08-27T16:34:03.16Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/4e/4cdc9ed3c3e109d2f71e62572a37457298d7bc7501ec3138babb7ed32bbd/ruff-0.16.5-py3-none-musllinux_1_2_armv7l.whl", hash = "sha256:95cc70cdc7aa80c338de356279d2adbeb2de0f520b9ecd8aba75b94e95e02f91", size = 9829344, upload-time = "2026-08-27T16:34:05.134Z" },
+    { url = "https://files.pythonhosted.org/packages/39/4a/31ed35ce31729955fc583ee0d176d6e784c1290cb0b0a75cb2134c1ab72a/ruff-0.16.5-py3-none-musllinux_1_2_i686.whl", hash = "sha256:d185c8398ded1bfd91c0c2cb258346307571eccc473a8490af8c3977399c384a", size = 10277117, upload-time = "2026-08-27T16:34:07.425Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/a0/60356d86687b4b666d593df213f4dc3041750d024cb7bf2cfa81cfd65c2e/ruff-0.16.5-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:fb8e3a3c4c6a784150a7ced53b015f4b253fc2bf97a610886419ead64b4756ef", size = 10711653, upload-time = "2026-08-27T16:34:09.712Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/20/656d67f5b25ca9bda4e02b1de25867b2954e1d19e03648060f167ad0f4cc/ruff-0.16.5-py3-none-win32.whl", hash = "sha256:288b0a5f080492fe5635db849f9e2e84aa3cce7b7f0e955997d416c507c76a26", size = 10034250, upload-time = "2026-08-27T16:34:11.8Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/42/ee8e68a207b9127fcde6c3d7e197def432f346cb1af159e1fa14ca0d1cdc/ruff-0.16.5-py3-none-win_amd64.whl", hash = "sha256:ddc6385fb2137f616357ca03d6c74f4be987f80fed4008566b754f6032b8546f", size = 10516714, upload-time = "2026-08-27T16:34:13.963Z" },
+    { url = "https://files.pythonhosted.org/packages/73/e3/7df5a396e445b9ba49ce9a9437439a4d80042c61c0ade199abf8d16de1ac/ruff-0.16.5-py3-none-win_arm64.whl", hash = "sha256:a64abe90968719b851bb7cedffaa8753fbdbdadab483089682db623f3edc587e", size = 10391564, upload-time = "2026-08-27T16:34:16.064Z" },
+]
+
+[[package]]
 name = "scheduled-invoice-processor"
 version = "4.0.1"
 source = { editable = "." }
 dependencies = [
-    { name = "aeth-ext", version = "8.0.6", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "sftp"], marker = "sys_platform == 'linux'" },
     { name = "aeth-ext", version = "8.0.6", source = { editable = "../aeth_ext" }, extra = ["async", "sftp"], marker = "sys_platform == 'win32'" },
+    { name = "aeth-ext", version = "8.0.8", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "sftp"], marker = "sys_platform == 'linux'" },
     { name = "aiohttp", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiologic", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "aiorwlock", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -1606,13 +1629,15 @@ dev = [
     { name = "pytest", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pytest-asyncio", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "pytest-cov", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "ruff", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "tombi", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "types-python-dateutil", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=8.0.6" },
-    { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform == 'linux'", specifier = ">=8.0.6", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
+    { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=8.0.8" },
+    { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform == 'linux'", specifier = ">=8.0.8", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
     { name = "aeth-ext", extras = ["sftp", "async"], marker = "sys_platform == 'win32'", editable = "../aeth_ext" },
     { name = "aiohttp", specifier = ">=3.13.5" },
     { name = "aiologic", specifier = ">=0.16.0" },
@@ -1630,15 +1655,17 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "aeth-devkit", specifier = ">=8.0.1", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
+    { name = "aeth-devkit", specifier = ">=8.2.0", index = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" },
     { name = "apscheduler-stubs", specifier = ">=0.1.0.dev2" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "pandas-stubs", specifier = ">=3.0.0.260204" },
     { name = "poethepoet", specifier = ">=0.46.0" },
     { name = "pyright", specifier = ">=1.1.411" },
-    { name = "pytest", specifier = ">=9.0.3" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0" },
-    { name = "pytest-cov", specifier = ">=6.0.0" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "ruff", specifier = ">=0.15" },
+    { name = "tombi", specifier = ">=1.5" },
     { name = "types-python-dateutil", specifier = ">=2.9.0.20260323" },
 ]
 
@@ -1667,6 +1694,26 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+]
+
+[[package]]
+name = "tombi"
+version = "1.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/e1/edd7205506a09543dcb1b389d65baf3d6e9960d16546f3608cf17d2475a6/tombi-1.5.0.tar.gz", hash = "sha256:2d5089f2485e61b2888c9ffa5768d1ef4323cf9608928166759fc5d4182e0f25", size = 738952, upload-time = "2026-08-29T01:19:48.976Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c5/05/27dfc72044ff9fcf31855d0d7eb7fe79474448d28c9926163f1061852525/tombi-1.5.0-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:e30d1b2b5e81fc5945c7e9286c8a96dc601932d3fdad0b64beb5c865b4ef3bf1", size = 8868509, upload-time = "2026-08-29T01:19:13.901Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/21/0417e495329585509bccdd52f8dfb11196c0f77258649e1924f00af61ee6/tombi-1.5.0-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:84279a3d5c5da42691805d97dc65dac1662aa75c8ba33854444595102521a18b", size = 9222679, upload-time = "2026-08-29T01:19:16.823Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/8c/a36ed791bdc240ea41bf089343ab2e34a1d7e5613165cff9a00405c12e05/tombi-1.5.0-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:13c1f7771fc2b0e63a9038dbc565685bfd864714147514fc7ee3787614cdd880", size = 9512771, upload-time = "2026-08-29T01:19:19.726Z" },
+    { url = "https://files.pythonhosted.org/packages/17/0d/2b2a22b2d9cc859af0c8ad46022543ef642d01a8311c0f4e906e5be9dc6c/tombi-1.5.0-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:937fc4bd344bc98b31ccb29d039bb2375df8c831fec11ee71581c8b6de0d449d", size = 9203845, upload-time = "2026-08-29T01:19:22.439Z" },
+    { url = "https://files.pythonhosted.org/packages/99/f1/a6c7a82251411d36cf9471cf5e2003a12cfafabf834d26f97c90bf248d31/tombi-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a4c3160e1cc5fc1d206452ee3c42b6398492419412c9367f513ba2024382f3fe", size = 9178967, upload-time = "2026-08-29T01:19:25.078Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/61/60cd484365a8d5a4b771db55fc1b7fee942dbc5f1f9ef352f91481efd02a/tombi-1.5.0-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:1c7c2af68780ed01038e9fc77373e0d3cd00235a93362c02ecf61e2d2c13406b", size = 8662088, upload-time = "2026-08-29T01:19:28.201Z" },
+    { url = "https://files.pythonhosted.org/packages/75/35/76118b3569872324fb6bc0bb421d7234724d184f8ee3208b2c2aca56bf63/tombi-1.5.0-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:08fc0da316ebbacb294a742abaa590d98f1cc99c35436e129f4f9bad28d8270c", size = 8681203, upload-time = "2026-08-29T01:19:31.021Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/b6/f212080df804ac1d6260947cc515d5157ccc03c2f912714df50688e9041b/tombi-1.5.0-py3-none-musllinux_1_2_armv7l.whl", hash = "sha256:8a85e5be199459bcb23767884345414d9f8611e37926beabd80403942579bf77", size = 8898217, upload-time = "2026-08-29T01:19:34.14Z" },
+    { url = "https://files.pythonhosted.org/packages/54/f4/ce3d31886851b3dabfb036b74e9512009b32252dd61774be37d88a0850b7/tombi-1.5.0-py3-none-musllinux_1_2_i686.whl", hash = "sha256:5b3c984fefb90b472261e76a0f5752b40f0d8b0133b0e88e2d823086905c9417", size = 9056802, upload-time = "2026-08-29T01:19:37.062Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/56/ccc1abab934b98bc1ca4ad1e5968bf4cedc9f1c9bc64567e5f22dc7bbf3a/tombi-1.5.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:bfb64169a1911b0d6ea724fd6b0843d92ecff2c3810e84e124c8159ff65d96c1", size = 9274201, upload-time = "2026-08-29T01:19:39.918Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/71/4b7c49648cd012c630a6cc2a58ec3db560a0e32bab09b85c9efcdc45fca9/tombi-1.5.0-py3-none-win32.whl", hash = "sha256:81dfb8f576be69d4f65b91ec3ed589b6254c2b96091513f6de4324dbee7d310e", size = 8780386, upload-time = "2026-08-29T01:19:43.645Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/1b/59324f124974ef2f7877308575f5421ab4edc0a4557f305ba734733219df/tombi-1.5.0-py3-none-win_amd64.whl", hash = "sha256:c387ed2e76ba5b76a0b5c441888f31c7842b8bac12cb7d185f047bc5e3744e69", size = 10095051, upload-time = "2026-08-29T01:19:46.441Z" },
 ]
 
 [[package]]
