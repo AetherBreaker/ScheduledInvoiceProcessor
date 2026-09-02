@@ -1600,7 +1600,7 @@ wheels = [
 
 [[package]]
 name = "scheduled-invoice-processor"
-version = "4.0.2"
+version = "4.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aeth-ext", version = "8.0.8", source = { registry = "https://pypi.sweetfiretobacco.com/jacob.ogden/internal/+simple" }, extra = ["async", "sftp"], marker = "sys_platform == 'linux'" },
