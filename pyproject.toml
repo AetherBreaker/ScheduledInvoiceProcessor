@@ -29,11 +29,13 @@
     "pandas-stubs>=3.0.0.260204",
     "poethepoet>=0.46.0",
     "pyright>=1.1.411",
-    "pytest>=9.0.3",
-    "pytest-asyncio>=1.0.0",
-    "pytest-cov>=6.0.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "ruff>=0.15",
+    "tombi>=1.5",
     "types-python-dateutil>=2.9.0.20260323",
-  ]                                           # setup-project added: "pyright>=1.1.411"
+  ]                                           # setup-project added: "pytest>=8.0" (was pytest>=9.0.3), "pytest-asyncio>=0.24" (was pytest-asyncio>=1.0.0), "pytest-cov>=5.0" (was pytest-cov>=6.0.0), "ruff>=0.15", "tombi>=1.5"
 
 [build-system]
   requires      = [
@@ -128,7 +130,11 @@
 [tool.ruff]
   cache-dir = ".cache/ruff"
 
-  src = ["./src"]
+  src = [
+    "./src",
+    "../*/src",
+    "../*/python"
+  ]                                           # setup-project added: "../*/src", "../*/python"
 
   exclude = [
     ".bzr",
@@ -179,7 +185,9 @@
       "T10",
       "TC",
       "UP",
-    ]
+      "D",
+      "TID",
+    ]                  # setup-project added: "D", "TID"
     ignore        = [
       "A004",
       "PD008",
@@ -211,6 +219,13 @@
         local-folder     = "Local folder imports"
         standard-library = "Standard library imports"
         third-party      = "Third party imports"
+
+    [tool.ruff.lint.flake8-tidy-imports.banned-api."__future__.annotations"]
+      # Delivered by ruff exactly when violated, so the reasoning costs no context otherwise.
+      msg = "Python 3.14 evaluates all annotations lazily (PEP 649) with or without this import. What it adds is PEP 563 stringification, which breaks pydantic, dataclasses.fields() introspection, and typing.get_type_hints."
+
+    [tool.ruff.lint.pydocstyle]
+      convention = "google"
 
   [tool.ruff.format]
     docstring-code-format = true
