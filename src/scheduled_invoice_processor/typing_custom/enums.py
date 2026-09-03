@@ -1,3 +1,5 @@
+"""String enums shared by the schedule, order log, and processors."""
+
 # Standard library imports
 from enum import auto
 
@@ -6,6 +8,8 @@ from aeth_ext.types import StrEnum
 
 
 class SuppliersEnum(StrEnum):
+  """Supported suppliers."""
+
   SAS = "SAS"
   RYO = "RYO"
   COREMARK = "COREMARK"
@@ -13,6 +17,8 @@ class SuppliersEnum(StrEnum):
 
 
 class StateEnum(StrEnum):
+  """US state and territory postal codes."""
+
   AL = auto()
   AK = auto()
   AZ = auto()
@@ -73,6 +79,8 @@ class StateEnum(StrEnum):
 
 
 class WeekdayEnum(StrEnum):
+  """Day-of-week names as written in the schedule sheet."""
+
   Monday = auto()
   Tuesday = auto()
   Wednesday = auto()
@@ -83,6 +91,8 @@ class WeekdayEnum(StrEnum):
 
 
 class LogActionEnum(StrEnum):
+  """Order-log action stages, from pickup registration through dropoff."""
+
   REGISTERED_PICKUP = auto()
   FILE_PICKED_UP = auto()
   FILE_PREPROCESSED = auto()
@@ -91,6 +101,8 @@ class LogActionEnum(StrEnum):
 
 
 class StatusCode(StrEnum):
+  """Outcome recorded for an order-log action."""
+
   UNKNOWN = auto()
   FAILURE = auto()
   SUCCESS = auto()

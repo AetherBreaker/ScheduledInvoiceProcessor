@@ -1,4 +1,6 @@
 # pyright: reportImportCycles=false
+"""Logging configuration and the per-action log-context decorator."""
+
 # Standard library imports
 import logging
 from datetime import datetime
@@ -25,7 +27,10 @@ if TYPE_CHECKING:
 
 
 class ContextFilter(logging.Filter):
+  """Admit only records tagged with a matching action identifier."""
+
   def __init__(self, identifier: str):
+    """Bind the identifier this filter admits."""
     super().__init__()
     self.identifier = identifier
 
@@ -62,6 +67,13 @@ def add_log_context[**TP, TR](
   [Callable[TP, Awaitable[TR]]],
   Callable[TP, Awaitable[TR]],
 ]:
+  """Decorate a `SupplierProcessorBase` coroutine method with a per-invocation log file.
+
+  Each call gets a unique identifier (prefix, action, timestamp, random token) bound to the processor's context
+  vars, a `FileHandler` filtered to that identifier under the processor's log folder (plus *log_subfolder*), and
+  an `adapted_logger` kwarg tagged with the identifier. The file is removed afterwards unless it mentions an
+  error or warning, so only problem runs leave a trace.
+  """
 
   def add_log_context_under(
     func: Callable[TP, Awaitable[TR]],

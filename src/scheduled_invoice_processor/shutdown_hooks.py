@@ -45,8 +45,9 @@ def trail_is_database_origin(trail: ExceptionTrail) -> bool:
 
 
 def has_queued_sheet_writes(cache: DatabaseCache) -> bool:
-  """Reads the queued flags without `_db_write_queue_lock`; benign -- `api_write` re-checks them under the lock, so a
-  racing enqueue at worst costs one extra no-op call.
+  """Whether any Sheets write is queued; reads the flags without `_db_write_queue_lock`.
+
+  Benign: `api_write` re-checks them under the lock, so a racing enqueue at worst costs one extra no-op call.
   """
   return bool(
     cache.queued_values_raw_updates
@@ -57,8 +58,10 @@ def has_queued_sheet_writes(cache: DatabaseCache) -> bool:
 
 
 def freeze_scheduler(scheduler: OrderProcessingScheduler) -> ShutdownCallback:
-  """Stop new jobs from starting. `AsyncIOScheduler.pause()` is thread-safe (its wakeup goes through
-  `call_soon_threadsafe`); `shutdown()` is not called here on purpose.
+  """Stop new jobs from starting.
+
+  `AsyncIOScheduler.pause()` is thread-safe (its wakeup goes through `call_soon_threadsafe`); `shutdown()` is not
+  called here on purpose.
   """
 
   def _freeze(_trails: tuple[ExceptionTrail, ...]) -> None:
@@ -72,9 +75,11 @@ def freeze_scheduler(scheduler: OrderProcessingScheduler) -> ShutdownCallback:
 
 
 def final_sheets_flush(cache: DatabaseCache) -> ShutdownCallback:
-  """Write the in-memory Sheets update queue. Skipped when a fatal error originated inside the database interface
-  (A4): the write would only fail again. `api_write` is synchronous and safe from this thread: it takes `aiologic`
-  locks, which work from plain threads as well as coroutines.
+  """Write the in-memory Sheets update queue.
+
+  Skipped when a fatal error originated inside the database interface (A4): the write would only fail again.
+  `api_write` is synchronous and safe from this thread: it takes `aiologic` locks, which work from plain threads
+  as well as coroutines.
   """
 
   def _flush(trails: tuple[ExceptionTrail, ...]) -> None:
@@ -102,5 +107,6 @@ def final_sheets_flush(cache: DatabaseCache) -> ShutdownCallback:
 # a `WeakMethod` (`aeth_ext/errors/shutdown.py` ~462-468), so a method registration whose instance is not otherwise
 # referenced would be silently dropped before the shutdown pass ran.
 def register_shutdown_hooks(scheduler: OrderProcessingScheduler, cache: DatabaseCache) -> None:
+  """Register the freeze and flush callbacks for aeth_ext's threaded shutdown phase."""
   register_for_shutdown(freeze_scheduler(scheduler), phase=ShutdownPhase.THREADED, priority=FREEZE_SCHEDULER_PRIORITY)
   register_for_shutdown(final_sheets_flush(cache), phase=ShutdownPhase.THREADED, priority=FINAL_SHEETS_FLUSH_PRIORITY, required=True)

@@ -1,3 +1,5 @@
+"""Shared pydantic config and base models."""
+
 # Standard library imports
 from logging import getLogger
 from typing import Any, Self
@@ -32,6 +34,8 @@ PYDANTIC_CONFIG = ConfigDict(
 
 
 class CustomRootModel[T](RootModel[T]):
+  """RootModel that also accepts a JSON string and serializes to one in JSON mode."""
+
   model_config = PYDANTIC_CONFIG
   _dumping_json: bool = False
 
@@ -47,12 +51,14 @@ class CustomRootModel[T](RootModel[T]):
   @model_validator(mode="wrap")
   @classmethod
   def validate_as_jsonstr(cls, data: Any, handler: ValidatorFunctionWrapHandler) -> Self:
+    """Parse *data* from JSON when it arrives as a string, then validate normally."""
     if isinstance(data, str):
       data = from_json(data)
     return handler(data)
 
   @model_serializer(mode="wrap", when_used="unless-none")
   def return_self(self, nxt: SerializerFunctionWrapHandler, info: SerializationInfo):
+    """In JSON mode dump the root as a JSON string; `_dumping_json` breaks the recursion `model_dump_json` causes."""
     if not info.mode_is_json():
       return self
     if not self._dumping_json:
@@ -64,11 +70,14 @@ class CustomRootModel[T](RootModel[T]):
 
 
 class CustomBaseModel(BaseModel):
+  """BaseModel with the shared config and validation hooks."""
+
   model_config = PYDANTIC_CONFIG
 
   @field_validator("*", mode="wrap", check_fields=False)
   @classmethod
   def log_failed_field_validations(cls, data: str, handler: ValidatorFunctionWrapHandler, info: ValidationInfo) -> Any:
+    """Run the field validator, falling back to the raw *data* when it yields None."""
     results = None
 
     results = handler(data)
@@ -78,6 +87,7 @@ class CustomBaseModel(BaseModel):
   @model_validator(mode="wrap")
   @classmethod
   def log_failed_validation(cls, data: Any, handler: ModelWrapValidatorHandler[Self], info: ValidationInfo) -> Self:
+    """Run model validation; for `ScheduledOrderDBEntryModel` only, tolerate missing-field errors and return None."""
     results = None
     try:
       results = handler(data)

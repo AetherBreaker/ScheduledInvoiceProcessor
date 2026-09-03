@@ -1,3 +1,5 @@
+"""R1C1-notation cell and range helpers that allow unbounded indexes."""
+
 # Standard library imports
 from re import compile
 from typing import TYPE_CHECKING
@@ -31,8 +33,7 @@ def _r1c1_to_rowcol_unbounded(label: str) -> tuple[IntOrInf, IntOrInf]:
 
 
 def r1c1_range_to_grid_range(name: str, sheet_id: int | None = None) -> dict[str, int]:
-  """Converts a range defined in R1C1 notation to a dict representing
-  a `GridRange`_.
+  """Converts a range defined in R1C1 notation to a dict representing a `GridRange`_.
 
   All indexes are zero-based. Indexes are half open, e.g the start
   index is inclusive and the end index is exclusive: [startIndex, endIndex).

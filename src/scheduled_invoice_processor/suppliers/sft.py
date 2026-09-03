@@ -1,3 +1,5 @@
+"""SFT: the warehouse's own export, already on the holding FTP; `SFTProcessor` covers how that changes pickup."""
+
 # Standard library imports
 from asyncio import as_completed, to_thread
 from contextvars import ContextVar
@@ -40,10 +42,11 @@ logger = getLogger(__name__)
 
 
 class SFTProcessor(SupplierProcessorBase):
-  """SFT's own warehouse. The vendor side *is* the holding FTP -- `vendor_ftp` is the `waiting_ftp` pool -- so
-  the base class's pickup does the whole job unmodified: `transfer_file` streams the invoice from the pickup
-  folder to the waiting folder through that one pool, and the source is archived after the commit exactly as it
-  is for a supplier on a remote server.
+  """SFT's own warehouse.
+
+  The vendor side *is* the holding FTP -- `vendor_ftp` is the `waiting_ftp` pool -- so the base class's pickup does
+  the whole job unmodified: `transfer_file` streams the invoice from the pickup folder to the waiting folder through
+  that one pool, and the source is archived after the commit exactly as it is for a supplier on a remote server.
 
   The warehouse export names each file with a timestamp -- `SFT010_26709_20260902101623.edi` -- so the pickup
   dates a candidate from its filename (`checks_date_in_filename`), never from an mtime that anyone touching the
@@ -90,6 +93,7 @@ class SFTProcessor(SupplierProcessorBase):
   ctx_var_log_loc = ContextVar("sft_log_loc", default=log_file_loc)
 
   def __post_init__(self) -> None:
+    """Create the local pre/post-processing folders under the job holding folder."""
     self.local_pre_processing_folder = self.job_holding_folder / "SFT_files" / "pre_processing"
     self.local_post_processing_folder = self.job_holding_folder / "SFT_files" / "post_processing"
     self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
@@ -431,6 +435,7 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 
 async def main():
+  """Manual end-to-end run for SFT: register, pick up, register dropoff and drop off every scheduled order."""
   # Third party imports
   from rich import get_console
 

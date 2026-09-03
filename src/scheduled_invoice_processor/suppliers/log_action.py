@@ -1,3 +1,5 @@
+"""Decorator that records each supplier action's per-entry outcome to the order log."""
+
 # Standard library imports
 from datetime import datetime
 from functools import partial, wraps
@@ -40,6 +42,12 @@ def log_actions[**TP, TR](
   [Callable[TP, Awaitable[TR]]],
   Callable[TP, Awaitable[TR]],
 ]:
+  """Decorate a processor coroutine to write one order-log row per entry (per invoice number) it reports.
+
+  Injects `log_action_handler` into the call; the wrapped method reports each entry's status through it, and
+  SKIPPED entries are not logged. An exception marks the processor `errored`, logs a FAILURE row, and re-raises.
+  """
+
   def decorator(
     func: Callable[TP, Awaitable[TR]],
   ) -> Callable[TP, Awaitable[TR]]:

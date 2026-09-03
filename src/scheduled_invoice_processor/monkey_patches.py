@@ -1,3 +1,5 @@
+"""Runtime patches applied to stdlib classes."""
+
 # Standard library imports
 from os import getcwd
 from typing import TYPE_CHECKING
@@ -11,13 +13,17 @@ if TYPE_CHECKING:
 
 
 def without_cwd(self: PurePath) -> str:
+  """The path as a string with the current working directory prefix stripped."""
   cwd = getcwd()
   return str(self).removeprefix(cwd)
 
 
 class Patches(MonkeyPatcher):
+  """Patch set applied through `MonkeyPatcher`."""
+
   @staticmethod
   def patch_the_monkey() -> None:
+    """Attach `without_cwd` to `PurePath`."""
     # Standard library imports
     from pathlib import PurePath
 

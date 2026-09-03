@@ -1,3 +1,5 @@
+"""Application lifecycle: boot the cache and suppliers, schedule the jobs, run until shutdown."""
+
 # Standard library imports
 from asyncio import CancelledError, create_task, gather, run
 from contextlib import suppress
@@ -54,6 +56,7 @@ scheduler = OrderProcessingScheduler.init_scheduler()
 
 
 async def bootstrap_runtime(pbar: Progress) -> DatabaseCache:
+  """Build and fill the database cache, clean stale supplier queues, and schedule all tasks."""
   try:
     cache = DatabaseCache()
   except Exception:
@@ -80,6 +83,12 @@ async def bootstrap_runtime(pbar: Progress) -> DatabaseCache:
 
 
 async def reschedule_all_tasks():
+  """Rebuild the scheduled jobs from the current-week schedule.
+
+  Clears the `order_processing` store, re-adds each supplier's periodic pickup/dropoff/cleanup jobs, then adds a
+  `register_pickup`/`register_dropoff` job per order -- or removes it once the order is picked up, applied, or
+  manually moved.
+  """
   cache = DatabaseCache()
   current_week = cache.schedule
   # previous_week = cache.prev_week_schedule
@@ -257,6 +266,7 @@ async def reschedule_all_tasks():
 
 
 async def flip_week():
+  """Pause the scheduler, roll the cache to the new week, reschedule, and resume."""
   scheduler.pause()
   scheduler.remove_all_jobs("order_processing")
   cache = DatabaseCache()
@@ -270,8 +280,10 @@ async def flip_week():
 
 
 def exit_code_for_shutdown(kind: ShutdownKind) -> int:
-  """0 for RUNNING (never requested) or GRACEFUL, 1 for FATAL or FORCED. `ShutdownKind` is an IntEnum ordered by
-  severity. Kept out of `main()` so it is testable and so `main()` never calls `sys.exit` itself.
+  """0 for RUNNING (never requested) or GRACEFUL, 1 for FATAL or FORCED.
+
+  `ShutdownKind` is an IntEnum ordered by severity. Kept out of `main()` so it is testable and so `main()` never
+  calls `sys.exit` itself.
   """
   return 1 if kind >= ShutdownKind.FATAL else 0
 
@@ -295,6 +307,7 @@ def run_until_shutdown() -> None:
 
 
 async def main() -> None:
+  """Boot, run the scheduler until a shutdown is requested, then drain in-flight jobs and flush Sheets."""
   RICH_CONSOLE.rule("[bold red]Booting...[/]", style="bold red")
 
   send_heartbeat(

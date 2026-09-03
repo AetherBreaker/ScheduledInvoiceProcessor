@@ -1,4 +1,6 @@
 # pyright: reportPrivateUsage=false
+"""Google Sheets-backed cache of the schedule and processing-log tabs, with batched, queued writes."""
+
 # Standard library imports
 from abc import ABC
 from asyncio import get_running_loop, sleep, to_thread
@@ -58,6 +60,15 @@ DEFAULT_SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.g
 
 
 class DatabaseCache(metaclass=SingletonType):
+  """Singleton Google Sheets cache for the schedule and processing-log tabs.
+
+  Reads go through `_read_write_lock`; Sheets writes are never issued directly but queued into four
+  batch bodies (before-write structural, RAW values, USER_ENTERED values, after-write formatting) that
+  `api_write` flushes in that order. `_api_write_lock` serialises API traffic, `_db_write_queue_lock`
+  guards the queue bodies, the client is re-authorised every `reauth_interval` seconds and calls are
+  spaced at least `api_call_min_interval` seconds apart.
+  """
+
   _database_id = SETTINGS.database_id
 
   _tab_id_schedule_base_sheet = SETTINGS.database_base_schedule_id
@@ -104,6 +115,7 @@ class DatabaseCache(metaclass=SingletonType):
   order_log: CacheViewOrderLog
 
   def __init__(self) -> None:
+    """Create the locks and empty write queues, then push the header row to every tab."""
     self.schedule: CacheViewSchedule
     self.prev_week_schedule: CacheViewSchedule
     self.order_log: CacheViewOrderLog
@@ -131,6 +143,7 @@ class DatabaseCache(metaclass=SingletonType):
 
   @property
   def client(self) -> Client:
+    """Authorised gspread client, re-created once `reauth_interval` seconds have passed since the last auth."""
     now = self.loop.time()
     if self._client is None or self._client_last_auth_time is None or ((self._client_last_auth_time + self.reauth_interval) < now):
       self._client = authorize(self._creds, http_client=BackOffHTTPClient)
@@ -139,58 +152,68 @@ class DatabaseCache(metaclass=SingletonType):
 
   @property
   def queued_values_raw_updates(self) -> list[ValueRange]:
+    """Pending RAW-input value ranges, creating the batch body on first access."""
     if self._values_batch_update_raw_body is None:
       self._values_batch_update_raw_body = deepcopy(self._db_values_batch_update_body_base)
     return self._values_batch_update_raw_body["data"]
 
   @property
   def queued_values_user_entered_updates(self) -> list[ValueRange]:
+    """Pending USER_ENTERED value ranges, creating the batch body on first access."""
     if self._values_batch_update_user_entered_body is None:
       self._values_batch_update_user_entered_body = deepcopy(self._db_values_batch_update_body_base_userentered)
     return self._values_batch_update_user_entered_body["data"]
 
   @property
   def queued_before_write_update_requests(self) -> list[Request]:
+    """Pending structural requests flushed before the value writes, creating the batch body on first access."""
     if self._before_write_update_body is None:
       self._before_write_update_body = deepcopy(self._db_batch_update_body_base)
     return self._before_write_update_body["requests"]
 
   @property
   def queued_after_write_update_requests(self) -> list[Request]:
+    """Pending formatting requests flushed after the value writes, creating the batch body on first access."""
     if self._after_write_update_body is None:
       self._after_write_update_body = deepcopy(self._db_batch_update_body_base)
     return self._after_write_update_body["requests"]
 
   @property
   def get_week_ending_name(self) -> str:
+    """Tab title naming the second most recent Saturday (today inclusive) as the week-ending date."""
     last_saturday = today(tzinfo=SETTINGS.tz) + relativedelta(weekday=SA(-2))
     return f"Week Ending {last_saturday.year:0>4}/{last_saturday.month:0>2}/{last_saturday.day:0>2}"
 
   async def queue_db_api_values_raw_update(self, value: ValueRange) -> None:
+    """Append a RAW-input value range to the write queue."""
     async with self._db_write_queue_lock:
       if self._values_batch_update_raw_body is None:
         self._values_batch_update_raw_body = deepcopy(self._db_values_batch_update_body_base)
       self._values_batch_update_raw_body["data"].append(value)
 
   async def queue_db_api_values_user_entered_update(self, value: ValueRange) -> None:
+    """Append a USER_ENTERED value range to the write queue."""
     async with self._db_write_queue_lock:
       if self._values_batch_update_user_entered_body is None:
         self._values_batch_update_user_entered_body = deepcopy(self._db_values_batch_update_body_base_userentered)
       self._values_batch_update_user_entered_body["data"].append(value)
 
   async def queue_db_api_before_write_update(self, request: Request) -> None:
+    """Queue a structural request to run before the queued value writes."""
     async with self._db_write_queue_lock:
       if self._before_write_update_body is None:
         self._before_write_update_body = deepcopy(self._db_batch_update_body_base)
       self._before_write_update_body["requests"].append(request)
 
   async def queue_db_api_after_write_update(self, format_request: Request) -> None:
+    """Queue a formatting request to run after the queued value writes."""
     async with self._db_write_queue_lock:
       if self._after_write_update_body is None:
         self._after_write_update_body = deepcopy(self._db_batch_update_body_base)
       self._after_write_update_body["requests"].append(format_request)
 
   def update_db_header(self) -> None:
+    """Synchronously write the column header row to all three tabs."""
     body = deepcopy(self._db_values_batch_update_body_base)
 
     body["data"].append(
@@ -218,6 +241,7 @@ class DatabaseCache(metaclass=SingletonType):
     self.client.http_client.values_batch_update(id=self._database_id, body=body)
 
   async def wait_for_api(self) -> None:
+    """Sleep until at least `api_call_min_interval` seconds have passed since the last recorded API call."""
     if self._api_last_call_time is None:
       self._api_last_call_time = self.loop.time()
       return
@@ -232,6 +256,12 @@ class DatabaseCache(metaclass=SingletonType):
     return
 
   async def refresh_cache(self) -> None:
+    """Re-read all three tabs and rebuild the cache views.
+
+    Held under both the API write lock and the writer lock so neither a flush nor a reader can observe a
+    half-built cache. Previous Week dropoff/pickup times are shifted back one week. A Processing Log with
+    no data rows omits `values` from the response, which yields an empty view.
+    """
     async with self._api_write_lock, self._read_write_lock.writer_lock:
       await self.wait_for_api()
 
@@ -295,6 +325,7 @@ class DatabaseCache(metaclass=SingletonType):
       # pass
 
   async def submit_queued_writes_to_pool(self) -> None:
+    """Flush queued writes on a worker thread if any queue is non-empty."""
     if (
       self.queued_values_raw_updates
       or self.queued_values_user_entered_updates
@@ -304,6 +335,7 @@ class DatabaseCache(metaclass=SingletonType):
       await to_thread(self.api_write)
 
   async def has_pending_writes(self) -> bool:
+    """Whether any write queue holds entries, checked under the queue lock."""
     async with self._db_write_queue_lock:
       has_raw = self._values_batch_update_raw_body is not None and bool(self._values_batch_update_raw_body["data"])
       has_user_entered = self._values_batch_update_user_entered_body is not None and bool(
@@ -314,6 +346,11 @@ class DatabaseCache(metaclass=SingletonType):
       return has_raw or has_user_entered or has_before or has_after
 
   def api_write(self):
+    """Flush the queues in order: before-write structural, RAW values, USER_ENTERED values, after-write formatting.
+
+    Blocking; runs under both locks so queueing pauses until the flush completes, and each body is reset only
+    after its call succeeds. Exceptions are logged here because this runs off the main thread.
+    """
     try:
       with self._api_write_lock, self._db_write_queue_lock:
         if self.queued_before_write_update_requests:
@@ -353,6 +390,12 @@ class DatabaseCache(metaclass=SingletonType):
       raise
 
   async def flip_to_new_week(self):
+    """Rotate the schedule tabs at week end.
+
+    Flushes pending writes, hides Previous Week under its week-ending name, renames Current Week to Previous
+    Week, duplicates the base template as the new protected Current Week, then refreshes the cache. A no-op
+    (with a warning) when a tab already carries this week's ending name.
+    """
     await self.submit_queued_writes_to_pool()
 
     async with self._api_write_lock, self._db_write_queue_lock:
@@ -433,6 +476,12 @@ class DatabaseCache(metaclass=SingletonType):
 
 
 class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[Any, ...] | Any](ABC):
+  """Typed DataFrame view over one tab, sharing the core's reader/writer lock.
+
+  Entering as an async context manager holds the reader lock and yields the raw DataFrame. Writes update
+  the cache under the writer lock and queue the matching Sheets update on the core.
+  """
+
   _range_format: str
   _range_format_single: str
   _field_type_adapters: dict[str, TypeAdapter[Any]]
@@ -440,6 +489,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
   model: type[ModelT]
 
   def __init__(self, raw_data: list[list[str | int | float]], cache_core: DatabaseCache, sheet_id: int | None) -> None:
+    """Build the typed DataFrame from raw tab rows."""
     self._cache = build_typed_dataframe(data=raw_data, columns=self.columns, types_model=self.model)
     self._cache_index = self.columns.__index_items__
     self._core = cache_core
@@ -447,21 +497,25 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     super().__init__()
 
   async def __aenter__(self) -> DataFrame:
+    """Acquire the shared reader lock and return the cached DataFrame."""
     await self._core._read_write_lock.reader_lock.acquire()
     return self._cache
 
   async def __aexit__(
     self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None
   ) -> None:
+    """Release the shared reader lock."""
     self._core._read_write_lock.reader_lock.release()
 
   async def read_typed_row(self, index: IndexT, re_validate: bool = False) -> ModelT:
+    """Return the row at `index` as a model, validating only when `re_validate` is set."""
     async with self._core._read_write_lock.reader_lock:
       row = self._cache.iloc[await self.get_rownum(index)]
 
     return self.model(**row) if re_validate else self.model.model_construct(**row)
 
   async def walk_typed_rows(self, re_validate: bool = False) -> AsyncIterator[ModelT]:
+    """Yield every cached row as a model while holding the reader lock."""
     async with self._core._read_write_lock.reader_lock:
       for _, row in self._cache.iterrows():
         if re_validate:
@@ -476,6 +530,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
   async def read_value(self, index: IndexT, col: ColsT, validate: Literal[True]) -> tuple[TypeAdapter[Any], Any]: ...
 
   async def read_value(self, index: IndexT, col: ColsT, validate: bool = False) -> tuple[TypeAdapter[Any], Any] | Any:
+    """Read one cell, paired with its column's type adapter when `validate` is set."""
     async with self._core._read_write_lock.reader_lock:
       value = self._cache.iat[await self.get_rownum(index), self._cache.columns.get_loc(col)]  # type: ignore
       if validate:
@@ -486,9 +541,11 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
       return value
 
   async def process_index(self, index: IndexT) -> IndexT:
+    """Hook for subclasses to normalise an index before lookup; identity by default."""
     return index
 
   async def get_rownum(self, index: IndexT) -> int:
+    """Resolve `index` to a single positional row number, raising IndexError for partial or multi-row matches."""
     # default process index. Assume single index
     async with self._core._read_write_lock.reader_lock:
       # locate the row number of index
@@ -502,6 +559,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     return row_number
 
   async def write_value(self, index: IndexT, column: ColsT, value: Any, ta: TypeAdapter[Any]) -> None:
+    """Write one cell to the cache and queue the RAW Sheets update for it."""
     row_number = await self.get_rownum(index)
 
     value = ta.dump_python(value)
@@ -523,6 +581,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
     )
 
   async def update_row(self, index: IndexT, values: Sequence[Any] | ModelT, raw: bool = True) -> None:
+    """Replace a whole row from a sequence or model and queue the Sheets update as RAW or USER_ENTERED."""
     row_number = await self.get_rownum(index)
 
     if isinstance(values, self.model):
@@ -553,6 +612,7 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
       await self._core.queue_db_api_values_user_entered_update(update_data)
 
   async def append_row(self, values: ModelT, raw: bool = True) -> None:
+    """Add a row to the cache and queue an appendDimension followed by the row write; requires a sheet id."""
     if self._sheet_id is None:
       raise RuntimeError("This cache view does not support appending rows")
     assert len(self._cache_index) > 0, "Cache view must have at least one column in index to append rows"
@@ -593,11 +653,14 @@ class CacheViewBase[ModelT: CustomBaseModel, ColsT: ColNameEnum, IndexT: tuple[A
       await self._core.queue_db_api_values_user_entered_update(update_data)
 
   async def check_exists(self, index: IndexT) -> bool:
+    """Whether `index` is present in the cache."""
     async with self._core._read_write_lock.reader_lock:
       return index in self._cache.index
 
 
 class CacheViewSchedule(CacheViewBase["ScheduledOrderDBEntryModel", "DatabaseScheduleColumns", "DatabaseScheduleIndex"]):
+  """View over the Current Week schedule tab."""
+
   _range_format_single = "Current Week!{cell}"
   _range_format = "Current Week!{start}:{end}"
   _field_type_adapters = SCHEDULE_TYPE_ADAPTERS
@@ -607,11 +670,13 @@ class CacheViewSchedule(CacheViewBase["ScheduledOrderDBEntryModel", "DatabaseSch
   async def check_box(
     self, idx: DatabaseScheduleIndex, col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied]
   ) -> None:
+    """Set a checkbox column to True for the row at `idx`."""
     await self.write_value(index=idx, column=col, value=True, ta=self._field_type_adapters[col])
 
   async def uncheck_box(
     self, idx: DatabaseScheduleIndex, col: Literal[DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied]
   ) -> None:
+    """Set a checkbox column to False for the row at `idx`."""
     await self.write_value(index=idx, column=col, value=False, ta=self._field_type_adapters[col])
 
   async def check_toggled(
@@ -621,10 +686,13 @@ class CacheViewSchedule(CacheViewBase["ScheduledOrderDBEntryModel", "DatabaseSch
       DatabaseScheduleColumns.invoice_grabbed, DatabaseScheduleColumns.invoice_applied, DatabaseScheduleColumns.manually_moved
     ],
   ) -> bool:
+    """Return the current state of a checkbox column for the row at `idx`."""
     return await self.read_value(idx, col)
 
 
 class CacheViewOrderLog(CacheViewBase["OrderLogDBEntryModel", "DatabaseOrderLogColumns", "DatabaseOrderLogIndex"]):
+  """View over the Processing Log tab; supports appending rows and fixing their formatting."""
+
   _range_format_single = "'Processing Log'!{cell}"
   _range_format = "'Processing Log'!{start}:{end}"
   _field_type_adapters = ORDER_LOG_TYPE_ADAPTERS
@@ -643,6 +711,11 @@ class CacheViewOrderLog(CacheViewBase["OrderLogDBEntryModel", "DatabaseOrderLogC
     week_end_date: datetime | None,
     note: str | None = None,
   ) -> None:
+    """Validate and append a processing-log entry, then queue its format fixes.
+
+    A missing invoice number is replaced with a unique negative one below the lowest existing; a duplicate
+    index raises IndexError.
+    """
     if invoice_num is None:
       invoice_num = str(min(int(to_numeric(self._cache.loc[:, self.columns.invoice_number], errors="coerce").min()), 0) - 1)
     new_entry = {
@@ -672,6 +745,7 @@ class CacheViewOrderLog(CacheViewBase["OrderLogDBEntryModel", "DatabaseOrderLogC
     await self.correct_format()
 
   async def correct_format(self):
+    """Queue after-write requests restoring number formats on the store, invoice/customer and datetime columns and re-applying the basic filter."""
     if self._sheet_id is None:
       raise RuntimeError("This cache view does not support format updates")
     storenum_format = {

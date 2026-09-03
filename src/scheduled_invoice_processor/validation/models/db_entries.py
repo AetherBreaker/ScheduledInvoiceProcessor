@@ -1,6 +1,8 @@
 # ruff: noqa: TRY004
 # pyright: reportUnnecessaryIsInstance=false
 # pyright: reportUnreachable=false
+"""Row models for the schedule and order-log sheets, plus per-field TypeAdapters."""
+
 # Standard library imports
 from datetime import datetime
 from inspect import get_annotations
@@ -50,6 +52,10 @@ TIMESTAMP_PATTERN = compile(r"(?P<Weekday>\w*?) (?P<Hour>\d{1,2}):(?P<Minute>\d{
 
 
 def process_formatted_time_pattern_str(target_time: str) -> datetime:
+  """Resolve a `Weekday HH:MM(AM|PM)` string to that weekday's datetime in the current week.
+
+  A result landing on or after the coming Sunday is pulled back seven days.
+  """
   if isinstance(target_time, (datetime, int, float)):
     raise ValueError(f"Expected a string for time pattern, got {type(target_time).__name__}")
   match = TIMESTAMP_PATTERN.match(target_time) if target_time else None
@@ -81,10 +87,12 @@ def process_formatted_time_pattern_str(target_time: str) -> datetime:
 
 
 class ScheduleValidationError(ValueError):
-  pass
+  """A schedule row failed model validation."""
 
 
 class ScheduledOrderDBEntryModel(CustomBaseModel):
+  """One row of the weekly schedule sheet."""
+
   supplier: SuppliersEnum
   store: StoreNum
   customer: CustomerID
@@ -98,6 +106,7 @@ class ScheduledOrderDBEntryModel(CustomBaseModel):
 
 
 def remove_tz_info_if_aware(dt: datetime) -> datetime:
+  """Strip tzinfo from an aware datetime; reject non-datetimes."""
   if not isinstance(dt, datetime):
     raise ValueError("Expected a datetime object")
   if dt.tzinfo is not None:
@@ -106,6 +115,7 @@ def remove_tz_info_if_aware(dt: datetime) -> datetime:
 
 
 def init_generic_datetime_str(dt: str) -> datetime:
+  """Parse a naive `MM/DD/YYYY HH:MM:SS` string."""
   if not isinstance(dt, str):
     raise ValueError(f"Expected a string for datetime initialization, got {type(dt).__name__}")
   try:
@@ -115,6 +125,8 @@ def init_generic_datetime_str(dt: str) -> datetime:
 
 
 class OrderLogDBEntryModel(CustomBaseModel):
+  """One row of the order log sheet; every field is nullable."""
+
   supplier: SuppliersEnum | None
   store: StoreNum | None
   invoice_number: InvoiceNum | None = None

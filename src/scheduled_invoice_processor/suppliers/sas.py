@@ -1,3 +1,8 @@
+"""SAS: SFTP vendor (Files.com) whose timestamped `EF<customer>_...TXT` exports date each pickup candidate.
+
+No preprocessing override: the base moves each entry's files through the holding FTP unmerged.
+"""
+
 # Standard library imports
 from contextvars import ContextVar
 from datetime import datetime
@@ -32,6 +37,8 @@ logger = getLogger(__name__)
 
 
 class SASProcessor(SupplierProcessorBase):
+  """Pickup and dropoff for SAS invoices."""
+
   # Keep the parsed plaintext only while constructing the redacting credentials object.
   _raw = loads(SETTINGS.sas_ftp_creds_file.read_bytes())
   try:
@@ -80,6 +87,7 @@ class SASProcessor(SupplierProcessorBase):
   ctx_var_log_loc = ContextVar("sas_log_loc", default=log_file_loc)
 
   def __post_init__(self) -> None:
+    """Create the local pre/post-processing folders under the job holding folder."""
     self.local_pre_processing_folder = self.job_holding_folder / "SAS_files" / "pre_processing"
     self.local_post_processing_folder = self.job_holding_folder / "SAS_files" / "post_processing"
     self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
@@ -136,6 +144,7 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 
 async def main():
+  """Manual end-to-end run for SAS: register, pick up, register dropoff and drop off every scheduled order."""
   # Third party imports
   from rich import get_console
 

@@ -1,3 +1,5 @@
+"""Validate raw sheet rows through pydantic models into typed DataFrames."""
+
 # Standard library imports
 from logging import getLogger
 from typing import TYPE_CHECKING
@@ -30,6 +32,7 @@ NULL_VALUES = ["NULL", "", " ", float("nan")]
 def build_typed_dataframe(
   data: Sequence[Sequence[str | int | float | None]], columns: type[ColNameEnum], types_model: type[CustomBaseModel]
 ) -> DataFrame:
+  """Pad *data* to the column set, validate each row through *types_model*, and index by `__index_items__`."""
   # pad the data with columns of None to match the number of expected columns
   data = [[row[idx] if idx < len(row) else nan for idx in range(len(columns.all_columns()))] for row in data]
 
@@ -68,6 +71,11 @@ def build_typed_dataframe(
 
 
 def apply_model(row: Series, types_model: type[CustomBaseModel], typed_rows: list[Series]) -> Series:
+  """Validate one row through *types_model* and append the typed result to *typed_rows*.
+
+  Only `ScheduledOrderDBEntryModel` can validate to None (missing fields are tolerated upstream); that case is
+  logged and raised as `ScheduleValidationError`.
+  """
   row_dict = {k: v for k, v in row.to_dict().items() if not isna(v) or v is None}
   model = types_model.model_validate(row_dict)
 

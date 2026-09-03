@@ -1,3 +1,8 @@
+"""RYO: SFTP vendor (Bitvise, 18-connection cap) whose timestamped filenames date each pickup candidate.
+
+Preprocessing merges an entry's files into one, uploading the merged file before committing the queue move.
+"""
+
 # Standard library imports
 from asyncio import as_completed, to_thread
 from contextvars import ContextVar
@@ -44,6 +49,8 @@ logger = getLogger(__name__)
 
 
 class RYOProcessor(SupplierProcessorBase):
+  """Pickup, merge-preprocess and dropoff for RYO invoices."""
+
   # Keep the parsed plaintext only while constructing the redacting credentials object.
   _raw = loads(SETTINGS.ryo_ftp_creds_file.read_bytes())
   try:
@@ -92,6 +99,7 @@ class RYOProcessor(SupplierProcessorBase):
   ctx_var_log_loc = ContextVar("ryo_log_loc", default=log_file_loc)
 
   def __post_init__(self) -> None:
+    """Create the local pre/post-processing folders under the job holding folder."""
     self.local_pre_processing_folder = self.job_holding_folder / "RYO_files" / "pre_processing"
     self.local_post_processing_folder = self.job_holding_folder / "RYO_files" / "post_processing"
     self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
@@ -448,6 +456,7 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 
 async def main():
+  """Manual end-to-end run for RYO: register, pick up, register dropoff and drop off every scheduled order."""
   # Third party imports
   from rich import get_console
 

@@ -1,3 +1,5 @@
+"""Entry point; stays import-light so `initialize()` runs as early as possible."""
+
 # Standard library imports
 from sys import platform
 

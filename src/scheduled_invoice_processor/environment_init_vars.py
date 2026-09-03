@@ -1,3 +1,5 @@
+"""Process-wide settings and paths resolved once at import."""
+
 # Standard library imports
 import os
 from logging import getLogger

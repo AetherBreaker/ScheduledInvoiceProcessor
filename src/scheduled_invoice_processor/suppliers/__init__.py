@@ -1,5 +1,7 @@
 # pyright: reportImportCycles=false
 # pyright: reportUninitializedInstanceVariable=false
+"""Supplier processors: the pickup -> waiting -> preprocess -> dropoff queue pipeline and its per-supplier subclasses."""
+
 # Standard library imports
 from asyncio import gather, to_thread
 from atexit import register as register_at_exit
@@ -65,6 +67,13 @@ HOLDING_FOLDER = CWD / "file_holding"
 
 
 class SupplierProcessorBase(metaclass=SingletonType):
+  """Moves each schedule entry's invoice files from the vendor FTP through the holding FTP to the destination folder.
+
+  One singleton per subclass. Entries advance through four queues (pickup -> waiting -> preprocess -> dropoff) that
+  are persisted together in one ledger file (`_persist_queues`). `errored` is set by `log_actions` when any job
+  raises, and every public operation then refuses to run for the rest of the process.
+  """
+
   _file_pickup_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_preprocess_queue: dict[SupplierQueueKey, FileRegisterData]
   _file_waiting_queue: dict[SupplierQueueKey, FileRegisterData]
@@ -131,6 +140,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   errored: bool
 
   def __init__(self, pbar: Progress = None) -> None:  # pyright: ignore[reportArgumentType]
+    """Create the queues, holding folders and ledger path, then load the persisted queues."""
     self._file_pickup_queue = {}
     self._file_preprocess_queue = {}
     self._file_waiting_queue = {}
@@ -163,6 +173,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     self.__post_init__()
 
   def __post_init__(self) -> None:
+    """Subclass hook run at the end of `__init__`; the base does nothing."""
     pass
 
   def _queues_by_name(self) -> dict[str, dict[SupplierQueueKey, FileRegisterData]]:
@@ -174,8 +185,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
     }
 
   def _persist_queues(self) -> bool:
-    """Write all four queues to the single ledger file in one atomic replace. Returns whether the ledger was
-    written; callers that gate a destructive cleanup on a durable ledger check the result.
+    """Write all four queues to the single ledger file in one atomic replace.
+
+    Returns whether the ledger was written; callers that gate a destructive cleanup on a durable ledger check the
+    result.
 
     One file, not one per queue, so a transition (pickup -> waiting, preprocess -> dropoff) can never be half
     on disk: with separate files a crash between "removed from A" and "added to B" reloaded the entry in no
@@ -203,9 +216,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
     return True
 
   def _persist_queues_at_exit(self) -> None:
-    """Final save at interpreter exit. Waits up to 1 s for the queue lock; if it is still held (a transfer was
-    mid-flight when the process was told to exit) the snapshot is written anyway — a possibly mid-mutation but
-    always parseable file beats losing the last change.
+    """Final save at interpreter exit.
+
+    Waits up to 1 s for the queue lock; if it is still held (a transfer was mid-flight when the process was told to
+    exit) the snapshot is written anyway — a possibly mid-mutation but always parseable file beats losing the last
+    change.
     """
     acquired = self._lock.green_acquire(timeout=1.0)
     if not acquired:
@@ -276,6 +291,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       return None
 
   async def clean_stale_queue_entries(self) -> None:
+    """Drop stale or already-applied entries from every queue, persisting only if something changed; no-op when errored."""
     if self.errored:
       logger.warning("%s: Disabled due to error state. Skipping cleanup of stale queue entries", self.__class__.__name__)
       return
@@ -336,6 +352,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   @classmethod
   def check_connections(cls) -> bool:
+    """True when both the holding and vendor FTP servers answer; logs whichever is offline."""
     waiting_ftp_online = cls.waiting_ftp.test_connection()
     vendor_ftp_online = cls.vendor_ftp.test_connection()
 
@@ -354,6 +371,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     dropoff_date: datetime,
     current_week: bool = True,
   ) -> None:
+    """Queue a schedule entry for pickup unless the processor is in the error state."""
     if self.errored:
       logger.warning(
         "%s: Disabled due to error state. Skipping registration of pickup for %s, %s",
@@ -372,6 +390,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
     dropoff_date: datetime,
     current_week: bool,
   ) -> None:
+    """Move a picked-up entry from the waiting queue to the preprocess queue unless the processor is in the error state."""
     if self.errored:
       logger.warning(
         "%s: Disabled due to error state. Skipping registration of dropoff for %s, %s",
@@ -383,12 +402,14 @@ class SupplierProcessorBase(metaclass=SingletonType):
     await self._register_dropoff(storenum, customer_id, pickup_date, dropoff_date, current_week)
 
   async def pickup_files(self) -> None:
+    """Run the pickup wave unless the processor is in the error state."""
     if self.errored:
       logger.warning("%s: Disabled due to error state. Skipping pickup of files", self.__class__.__name__)
       return
     await self._pickup_files()
 
   async def dropoff_files(self) -> None:
+    """Run the preprocess wave and then the dropoff wave unless the processor is in the error state."""
     if self.errored:
       logger.warning("%s: Disabled due to error state. Skipping dropoff of files", self.__class__.__name__)
       return
@@ -609,9 +630,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
         raise
 
   def _advance_progress(self, move_files_task: TaskID) -> None:
-    """Advance the file-move task by one. Every outcome of a move (success, failure, skipped-because-errored)
-    consumes exactly one slot in the task total, so the bar can reach 100 % on a partial wave. Never raises: a
-    progress-bar failure must not turn a completed move into a logged failure.
+    """Advance the file-move task by one.
+
+    Every outcome of a move (success, failure, skipped-because-errored) consumes exactly one slot in the task total,
+    so the bar can reach 100 % on a partial wave. Never raises: a progress-bar failure must not turn a completed
+    move into a logged failure.
     """
     try:
       self.pbar.update(move_files_task, advance=1, refresh=True)
@@ -642,6 +665,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def extract_invoice_num(
     self, bytestream: BytesIO, file_meta: FileRegisterData, idx: int, adapted_logger: LoggerAdapter[Any] | None = None
   ):
+    """Read the invoice number from the first line of *bytestream* into `file_meta.invoice_nums[idx]`; a miss is logged, never raised."""
     # convert transient file to string
     # extract first line from transient file and apply regex pattern to extract invoice number, then store in file_meta.invoice_nums[idx]
     local_logger = adapted_logger or logger
@@ -674,9 +698,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
     adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
   ):
-    """Move a file within the holding FTP. Idempotent: if the rename fails because it already happened (a stop
-    mid-wave lets the rename thread finish but never runs the bookkeeping that records it), the move is reported
-    as a success so the re-run can advance the queue instead of stranding the entry.
+    """Move a file within the holding FTP.
+
+    Idempotent: if the rename fails because it already happened (a stop mid-wave lets the rename thread finish but
+    never runs the bookkeeping that records it), the move is reported as a success so the re-run can advance the
+    queue instead of stranding the entry.
     """
     local_logger = adapted_logger or logger
     if self.errored:
@@ -746,8 +772,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
     recv_path: PurePosixPath,
     adapted_logger: LoggerAdapter[Any] | Logger | None = None,
   ) -> bool:
-    """True only when the destination holds a non-empty file *and* the source is gone. A destination beside a
-    still-present source is a genuine conflict and is never treated as done (nothing here ever overwrites).
+    """True only when the destination holds a non-empty file *and* the source is gone.
+
+    A destination beside a still-present source is a genuine conflict and is never treated as done (nothing here
+    ever overwrites).
     """
     local_logger = adapted_logger or logger
     try:
@@ -767,7 +795,9 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
-  ) -> Pattern[str]: ...
+  ) -> Pattern[str]:
+    """Regex admitting this supplier's invoice files for *customer_id* within the entry's week; every subclass defines it."""
+    ...
 
   @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
   @log_actions(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP)
@@ -973,6 +1003,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
       self._persist_queues()
 
   def assemble_queue_key(self, storenum: StoreNum, customer_id: CustomerID, pickup_date: datetime) -> SupplierQueueKey:
+    """Queue key for an entry: store, customer and ISO pickup date."""
     return f"{storenum}-{customer_id}-{pickup_date.isoformat()}"
 
   def _handle_existing_archive(  # noqa: PLR0917
@@ -1190,9 +1221,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
     filename: str,
     local_logger: LoggerAdapter[Any] | Logger,
   ) -> bool:
-    """Log-only probe: warn when an *accepted* file is dated outside the strict one-week window (Sunday 00:00 of
-    the pickup week through Saturday 23:59:59 of the dropoff week). The accepting windows are currently two weeks
-    wide for the mtime branch and SAS; this measures how often that extra week is actually used.
+    """Log-only probe: warn when an *accepted* file is dated outside the strict one-week window.
+
+    That window is Sunday 00:00 of the pickup week through Saturday 23:59:59 of the dropoff week. The accepting
+    windows are currently two weeks wide for the mtime branch and SAS; this measures how often that extra week is
+    actually used.
     """
     if file_date is None:
       return False

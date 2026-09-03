@@ -1,3 +1,5 @@
+"""APScheduler subclasses and patched job runners with pattern-filtered job logging."""
+
 # Standard library imports
 from datetime import timedelta
 from logging import getLogger
@@ -44,9 +46,9 @@ DO_NOT_LOG_PATTERNS = [
 
 
 def run_job(job: Job, jobstore_alias: str, run_times: list[datetime], logger_name: str):
-  """Called by executors to run the job. Returns a list of scheduler events to be dispatched by the
-  scheduler.
+  """Called by executors to run the job.
 
+  Returns a list of scheduler events to be dispatched by the scheduler.
   """
   events = []
   local_logger = getLogger(logger_name)
@@ -116,6 +118,8 @@ exec_base.run_coroutine_job = run_coroutine_job
 
 
 class CustomAsyncIOExecutor(AsyncIOExecutor):
+  """AsyncIOExecutor whose completion callback runs under `handle_fatal_exc_sync`, not APScheduler's error path."""
+
   @override
   def _do_submit_job(self, job: Job, run_times: list[datetime]):
     @handle_fatal_exc_sync
@@ -140,10 +144,14 @@ class CustomAsyncIOExecutor(AsyncIOExecutor):
 
 
 class OrderProcessingScheduler(AsyncIOScheduler):
+  """AsyncIOScheduler with in-memory `default`/`order_processing` stores and the custom executor."""
+
   def in_flight_jobs(self) -> set[AsyncFuture[Any]]:
-    """The futures of every job currently running on the default executor. `shutdown(wait=False)` cancels these
-    but cannot wait for them (APScheduler's own limitation); `startup.main()` snapshots them first and awaits the
-    snapshot after the shutdown so no job is still mid-commit when the final Sheets flush runs.
+    """The futures of every job currently running on the default executor.
+
+    `shutdown(wait=False)` cancels these but cannot wait for them (APScheduler's own limitation); `startup.main()`
+    snapshots them first and awaits the snapshot after the shutdown so no job is still mid-commit when the final
+    Sheets flush runs.
     """
     executor = self._lookup_executor("default")
     # `CustomAsyncIOExecutor` only ever stores loop-bound futures (`create_task` / `run_in_executor`).
@@ -151,6 +159,7 @@ class OrderProcessingScheduler(AsyncIOScheduler):
 
   @classmethod
   def init_scheduler(cls) -> OrderProcessingScheduler:
+    """Build the scheduler with in-memory stores, 60 s misfire grace, coalescing, and the custom executor."""
     # engine = create_engine(r"sqlite:///scheduler.db")
 
     job_stores = {
@@ -178,10 +187,11 @@ class OrderProcessingScheduler(AsyncIOScheduler):
 
   @override
   def _real_add_job(self, job: Job, jobstore_alias: str, replace_existing: bool):
-    """:param Job job: the job to add
+    """Add *job* to the *jobstore_alias* store, computing its first run time when none is set.
+
+    :param Job job: the job to add
     :param bool replace_existing: ``True`` to use update_job() in case the job already exists
         in the store
-
     """
     replacements = {key: value for key, value in self._job_defaults.items() if not hasattr(job, key)}
     # Calculate the next run time if there is none defined
@@ -218,7 +228,7 @@ class OrderProcessingScheduler(AsyncIOScheduler):
 
   @override
   def print_jobs(self, jobstore: str | None = None, out: TextIO | None = None):
-    """print_jobs(jobstore=None, out=sys.stdout)
+    """Log (at debug level, rather than print to *out*) a listing of the currently scheduled jobs.
 
     Prints out a textual listing of all jobs currently scheduled on either all job stores or
     just a specific one.
@@ -226,7 +236,6 @@ class OrderProcessingScheduler(AsyncIOScheduler):
     :param str|unicode jobstore: alias of the job store, ``None`` to list jobs from all stores
     :param file out: a file-like object to print to (defaults to  **sys.stdout** if nothing is
         given)
-
     """
     lines = []
     with self._jobstores_lock:

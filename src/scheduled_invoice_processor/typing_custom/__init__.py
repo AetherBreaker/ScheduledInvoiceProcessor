@@ -1,3 +1,5 @@
+"""Type aliases and TypedDicts for Google Sheets API payloads."""
+
 # Standard library imports
 from logging import getLogger
 from typing import TYPE_CHECKING, TypedDict
@@ -27,12 +29,16 @@ type Request = "AppendDimension" | Mapping[str, Any]
 
 
 class ValueRange(TypedDict):
+  """Sheets API `ValueRange` body."""
+
   range: NotRequired[SheetsRangeName]
   majorDimension: Dimension
   values: SheetsRangeUpdateValues
 
 
 class ValuesBatchUpdateBody(TypedDict):
+  """Body of a `values.batchUpdate` request."""
+
   valueInputOption: ValueInputOption
   includeValuesInResponse: bool
   responseValueRenderOption: ValueRenderOption
@@ -41,16 +47,22 @@ class ValuesBatchUpdateBody(TypedDict):
 
 
 class BatchUpdateBody(TypedDict):
+  """Body of a `spreadsheets.batchUpdate` request."""
+
   requests: list[Request]
 
 
 class AppendDimension(TypedDict):
+  """`appendDimension` request payload."""
+
   sheetId: int
   dimension: Dimension
   length: int
 
 
 class GridRange(TypedDict):
+  """Sheets API `GridRange`; a missing index means the range is unbounded on that side."""
+
   sheetId: int
   startRowIndex: NotRequired[int]
   endRowIndex: NotRequired[int]
@@ -59,5 +71,7 @@ class GridRange(TypedDict):
 
 
 class CellFormat(TypedDict):
+  """A range plus the cell format to apply to it."""
+
   range: GridRange
   format: Mapping[str, Any]

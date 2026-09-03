@@ -1,3 +1,9 @@
+"""Coremark: IIS FTP vendor with no pickup archive and no timestamp in the filename, so pickup dates candidates by mtime.
+
+Preprocessing merges an entry's files into one, committing the queue move before the merged file is uploaded (RYO and
+SFT upload first).
+"""
+
 # Standard library imports
 from asyncio import as_completed, to_thread
 from contextvars import ContextVar
@@ -51,6 +57,8 @@ def load_credentials() -> FTPCredentials:
 
 
 class CoremarkProcessor(SupplierProcessorBase):
+  """Pickup, merge-preprocess and dropoff for Coremark invoices."""
+
   vendor_ftp = create_ftp_adapter(load_credentials(), container_cls="CoremarkProcessor")
 
   queue_backup_prefix: str = "coremark"
@@ -82,6 +90,7 @@ class CoremarkProcessor(SupplierProcessorBase):
   ctx_var_log_loc = ContextVar("coremark_log_loc", default=log_file_loc)
 
   def __post_init__(self) -> None:
+    """Create the local pre/post-processing folders under the job holding folder."""
     self.local_pre_processing_folder = self.job_holding_folder / "Coremark_files" / "pre_processing"
     self.local_post_processing_folder = self.job_holding_folder / "Coremark_files" / "post_processing"
     self.local_pre_processing_folder.mkdir(exist_ok=True, parents=True)
@@ -385,6 +394,7 @@ if __debug__ and SETTINGS.use_testing_folders:
 
 
 async def main():
+  """Manual end-to-end run for Coremark: register, pick up, register dropoff and drop off every scheduled order."""
   # Third party imports
   from rich import get_console
 

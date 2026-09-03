@@ -1,3 +1,5 @@
+"""Column-name enums for the schedule and order-log sheets, with the index columns each uses."""
+
 # Standard library imports
 from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
@@ -19,22 +21,27 @@ logger = getLogger(__name__)
 
 
 class ColNameEnum(StrEnum):
+  """Base for column enums; `__exclude__`, `__init_include__` and `__index_items__` tune the column views below."""
+
   __exclude__: ClassVar[list[str]] = []
   __init_include__: ClassVar[list[str]] = []
   __index_items__: ClassVar[list[str]] = []
 
   @classmethod
   def ordered_column_names(cls, *columns: str) -> list[str]:
+    """Filter *columns* down to enum members, in enum order."""
     columns_list = [str(column) for column in columns]
     return [str(column) for column in cls if str(column) in columns_list]
 
   @classmethod
   def all_columns(cls) -> list[str]:
+    """Columns neither excluded nor underscore-prefixed."""
     return [str(column) for column in cls if str(column) not in cls.__exclude__ and not str(column).startswith("_")]
 
   @classmethod
   def err_reporting_columns(cls) -> list[str]:
-    """Return all columns that are not excluded and do not start with an underscore.
+    """Return `all_columns()` prefixed with the `err_field_name` and `err_reason` columns.
+
     This is used for error reporting.
     """
     return [
@@ -45,24 +52,30 @@ class ColNameEnum(StrEnum):
 
   @classmethod
   def init_columns(cls) -> list[str]:
+    """`__init_include__` members (underscore-prefixed skipped), or `all_columns()` when none are listed."""
     if not cls.__init_include__:
       return cls.all_columns()
     return [str(column) for column in cls if str(column) in cls.__init_include__ and not str(column).startswith("_")]
 
   @classmethod
   def testing_columns(cls) -> list[str]:
+    """Columns not excluded, underscore-prefixed ones included."""
     return [str(column) for column in cls if str(column) not in cls.__exclude__]
 
   @classmethod
   def true_all_columns(cls) -> list[str]:
+    """Every member, ignoring exclusions."""
     return [str(column) for column in cls]
 
   @classmethod
   def get_enum_index(cls, value: Self) -> int:
+    """Position of *value* in definition order."""
     return list(cls).index(value)
 
 
 class DatabaseScheduleColumns(ColNameEnum):
+  """Columns of the weekly schedule sheet, indexed by supplier and store."""
+
   __index_items__: ClassVar[list[str]] = ["supplier", "store"]
 
   supplier = "supplier"
@@ -81,6 +94,8 @@ type DatabaseScheduleIndex = tuple[SuppliersEnum, StoreNum]
 
 
 class DatabaseOrderLogColumns(ColNameEnum):
+  """Columns of the order log sheet."""
+
   __index_items__: ClassVar[list[str]] = ["supplier", "store", "invoice_number", "customer", "action", "status", "action_datetime"]
 
   supplier = "supplier"
