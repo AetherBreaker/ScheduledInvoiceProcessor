@@ -23,7 +23,7 @@
 
 [dependency-groups]
   dev = [
-    "aeth-devkit>=8.2.0",
+    "aeth-devkit>=8.2.1",
     "apscheduler-stubs>=0.1.0.dev2",
     "mypy>=2.1.0",
     "pandas-stubs>=3.0.0.260204",
