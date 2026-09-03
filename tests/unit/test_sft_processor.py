@@ -1,5 +1,3 @@
-"""Unit tests for the SFT warehouse supplier (same-server pickup, filename-dated window, RYO-style merge)."""
-
 # This file tests private methods by design.
 # pyright: reportPrivateUsage=false
 
@@ -75,7 +73,6 @@ def processor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[SFTP
 
 @pytest.fixture
 def frozen_now(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
-  """Freeze datetime.now() to a time within the 2025-06-08 to 2025-06-22 window."""
   mock_now = datetime(2025, 6, 19, 12, 0, tzinfo=SETTINGS.tz)
   with patch("scheduled_invoice_processor.suppliers.file_register_data.datetime") as mock_dt:
     mock_dt.now.return_value = mock_now
@@ -85,9 +82,6 @@ def frozen_now(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
 
 
 def _pattern(start: datetime, end: datetime, current_week: bool = True) -> Pattern[str]:
-  """The real pattern, exactly as `register_pickup` builds it. With `checks_date_in_filename` the pattern *is*
-  the pickup window, so nothing in this suite hand-rolls one.
-  """
   return SFTProcessor.assemble_filename_pattern(cast("Any", None), "SFT017", start, end, current_week)
 
 
@@ -117,7 +111,6 @@ def test_header_pattern_rejects_garbage() -> None:
 
 
 def test_filename_pattern_carries_the_date_groups_the_base_reads() -> None:
-  """`_date_from_filename_match` wants `year`/`month`/`day` (and optionally the time); the pattern supplies them."""
   match = _pattern(PICKUP_DATE, DROPOFF_DATE).match(FILE_A)
 
   assert match is not None
@@ -154,7 +147,6 @@ def test_filename_pattern(name: str, expected: bool) -> None:
 
 
 def test_filename_pattern_shifts_back_a_week_for_a_previous_week_entry() -> None:
-  """A previous-week entry gets the week before -- Sun 06-08 .. Sat 06-14 -- still exactly one week wide."""
   pattern = _pattern(PICKUP_DATE, DROPOFF_DATE, current_week=False)
 
   assert pattern.match(LAST_WEEK_FILE) is not None
@@ -167,10 +159,6 @@ def test_filename_pattern_shifts_back_a_week_for_a_previous_week_entry() -> None
 def test_month_straddling_week_admits_cross_products_that_the_diagnostic_reports(
   processor: SFTProcessor, caplog: pytest.LogCaptureFixture
 ) -> None:
-  """The year/month/day alternations match independently. For Sun 2025-08-31 .. Sat 2025-09-06 that is
-  `(08|09)` x `(31|01|...|06)`, which also admits 08-01 .. 08-06 and 09-31. Those strays are *accepted* by the
-  pickup, and are exactly what the `[OUTSIDE_WEEK_PICKUP]` probe is there to report.
-  """
   wednesday = datetime(2025, 9, 3, 12, 0, tzinfo=SETTINGS.tz)
   pattern = _pattern(wednesday, wednesday)
 
@@ -209,10 +197,6 @@ def _meta(pickup: datetime, dropoff: datetime, current_week: bool = True, names:
 
 
 class _FakeClient:
-  """`files` is the remote filesystem: path -> bytes. `transfer_file` copies an entry, `download_file` streams
-  one to `callback`, `rename` moves one, and `listdir` yields the entries whose parent is the queried folder.
-  """
-
   def __init__(
     self,
     files: dict[str, bytes],
@@ -247,9 +231,6 @@ class _FakeClient:
     task_msg: str = "",
     mem_stream: BytesIO | None = None,
   ) -> bool:
-    """The base pickup's transfer: stream source -> destination. For SFT `other` is this same fake, because
-    `vendor_ftp` and `waiting_ftp` are one pool.
-    """
     self.transfers.append((source_remote_path, dest_remote_path))
     if source_remote_path in self.fail_transfer_paths:
       raise OSError("transfer failed")
@@ -323,9 +304,6 @@ class _FakeSchedule:
 
 
 def _stub_cache(processor: SFTProcessor) -> _FakeSchedule:
-  """`processor.cache` stand-in. `order_log`: the base `_pickup_files` is wrapped by `@log_actions`, which logs
-  every outcome through `self.cache.order_log.log_action` regardless of what the test cares about.
-  """
   schedule = _FakeSchedule()
   processor.cache = SimpleNamespace(  # pyright: ignore[reportAttributeAccessIssue]
     schedule=schedule, prev_week_schedule=schedule, order_log=SimpleNamespace(log_action=AsyncMock())
@@ -340,9 +318,6 @@ def _register(processor: SFTProcessor, meta: FileRegisterData) -> str:
 
 
 def _record_archives(monkeypatch: pytest.MonkeyPatch) -> list[tuple[PurePosixPath, str, PurePosixPath]]:
-  """`_vendor_archive_file` is base-class code and skips the move entirely under `__debug__`; record the calls
-  the pickup makes instead, which is the part SFT is responsible for wiring up.
-  """
   archived: list[tuple[PurePosixPath, str, PurePosixPath]] = []
   monkeypatch.setattr(
     SFTProcessor,
@@ -353,14 +328,6 @@ def _record_archives(monkeypatch: pytest.MonkeyPatch) -> list[tuple[PurePosixPat
 
 
 def test_testing_folders_leave_the_vendor_side_alone() -> None:
-  """`tests/unit/conftest.py` forces USE_TESTING_FOLDERS=True, so this asserts the live prefixing.
-
-  The pickup folder is the vendor side of the transfer, and `/Testing` is only ever about not writing into
-  production holding folders -- SAS and RYO prefix exactly the four holding-side paths and read the vendor's real
-  pickup folder. SFT's vendor happens to share the server, which does not make its pickup folder a holding
-  folder: prefixing it just points the listing at a directory nobody created, and the run dies on
-  `550 Can't check for file existence`.
-  """
   assert SFTProcessor.pickup_ftp_folder == PurePosixPath("/SFT_Invoice_Pickup")
   assert SFTProcessor.pickup_archive_ftp_folder == PurePosixPath("/SFT_Invoice_Pickup/Archive")
   # The holding-side folders are still redirected, which is the whole point of the flag.
@@ -374,10 +341,6 @@ def test_testing_folders_leave_the_vendor_side_alone() -> None:
 
 
 def test_pickup_is_the_base_implementation() -> None:
-  """SFT adds no pickup logic of its own: `vendor_ftp` being the holding pool is the whole trick, and the date
-  gate is the base's filename branch, fed by `assemble_filename_pattern`. The mtime branch -- and with it
-  `_mtime_pickup_window` -- is never reached, so SFT no longer overrides it.
-  """
   assert SFTProcessor._pickup_files is SupplierProcessorBase._pickup_files
   assert SFTProcessor.checks_date_in_filename is True
   assert "_mtime_pickup_window" not in SFTProcessor.__dict__
@@ -387,7 +350,6 @@ def test_pickup_is_the_base_implementation() -> None:
 async def test_pickup_transfers_the_files_whose_filename_date_is_in_window(
   processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None
 ) -> None:
-  """End to end through the inherited `_pickup_files`: pickup folder -> waiting folder on the one pool."""
   # `processor.pickup_ftp_folder`, not a literal: `tests/unit/conftest.py` forces USE_TESTING_FOLDERS=True, so
   # the class attributes carry a "/Testing" prefix.
   pickup_folder = processor.pickup_ftp_folder
@@ -453,13 +415,6 @@ async def test_pickup_with_no_in_window_files_leaves_queue_untouched(
 async def test_pickup_partial_failure_is_recovered_on_the_next_run(
   processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None
 ) -> None:
-  """One file of an entry copies, the other fails: the entry must not advance, and a re-run must finish it.
-
-  Pickup copies rather than moves, so both sources are still in the pickup folder for run two and the re-copy
-  overwrites what run one already wrote. Note the shape of run one: a non-transient transfer error is re-raised
-  by `_transfer_file_vend_to_main` and `_pickup_files` gathers without `return_exceptions`, so the whole wave
-  aborts and `@log_actions` latches `errored`. That is the base's behaviour for every supplier.
-  """
   pickup_folder = processor.pickup_ftp_folder
   waiting_folder = processor.pre_processing_waiting_folder
   a_pickup = (pickup_folder / FILE_A).as_posix()
@@ -565,9 +520,6 @@ def test_sft_is_an_expected_supplier(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_pickup_accepts_only_the_current_weeks_filenames(
   processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None, timestamp: str, accepted: bool
 ) -> None:
-  """End to end through the inherited `_pickup_files`, one candidate at a time, at each window edge. Every
-  candidate carries an in-week mtime, which must not rescue an out-of-week name.
-  """
   pickup_folder = processor.pickup_ftp_folder
   waiting_folder = processor.pre_processing_waiting_folder
   candidate = (pickup_folder / f"SFT017_13842_{timestamp}.edi").as_posix()
@@ -597,9 +549,6 @@ async def test_pickup_accepts_only_the_current_weeks_filenames(
 async def test_pickup_dates_by_filename_not_mtime(
   processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None, *, name: str, mtime: datetime, accepted: bool
 ) -> None:
-  """The reason for the filename timestamp: an mtime on the warehouse server is whatever the last person to touch
-  the file left it as, so it must carry no weight at all.
-  """
   pickup_folder = processor.pickup_ftp_folder
   candidate = (pickup_folder / name).as_posix()
 
@@ -620,7 +569,6 @@ async def test_pickup_dates_by_filename_not_mtime(
 async def test_pickup_leaves_last_weeks_file_in_the_vendor_folder(
   processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None
 ) -> None:
-  """The regression: a file the warehouse exported last week must not be collected, copied, or archived."""
   pickup_folder = processor.pickup_ftp_folder
   waiting_folder = processor.pre_processing_waiting_folder
   this_week = (pickup_folder / FILE_A).as_posix()
@@ -645,7 +593,6 @@ async def test_pickup_leaves_last_weeks_file_in_the_vendor_folder(
 async def test_pickup_never_warns_about_an_outside_week_file(
   processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, frozen_now: None, caplog: pytest.LogCaptureFixture
 ) -> None:
-  """The probe only reports *accepted* files, and an out-of-week name is never accepted -- it never matches."""
   pickup_folder = processor.pickup_ftp_folder
   last_week = (pickup_folder / LAST_WEEK_FILE).as_posix()
 

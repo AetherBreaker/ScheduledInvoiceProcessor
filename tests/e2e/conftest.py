@@ -1,16 +1,3 @@
-"""Bootstraps the e2e environment.
-
-Top-level code here runs when pytest imports this conftest, i.e. before any test module under tests/e2e is
-imported. That ordering is load-bearing: scheduled_invoice_processor reads SETTINGS, the credential JSON files and
-applies USE_TESTING_FOLDERS at import time.
-
-Required environment (CI secrets, or exported locally):
-  E2E_DB_KEY_JSON                 - full contents of the Google service-account key JSON
-  E2E_DATABASE_ID                 - spreadsheet id of the TESTING sheet
-  E2E_DATABASE_BASE_SCHEDULE_ID   - gid of the base schedule tab in that sheet
-  E2E_DATABASE_ORDER_LOG_ID       - gid of the 'Processing Log' tab in that sheet
-"""
-
 # Standard library imports
 import json
 import os
@@ -81,14 +68,6 @@ _MISSING_E2E_ENV = any(not os.environ.get(name) for name in _REQUIRED_E2E_VARS)
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-  """Skip every collected item when the E2E_* env isn't set, instead of raising at import time.
-
-  Raising `pytest.skip(..., allow_module_level=True)` directly in this conftest at module level (or
-  from `pytest_configure`) crashes pytest with an uncaught `Skipped`/INTERNALERROR when `tests/e2e` is
-  passed explicitly on the command line: pytest imports that directory's conftest during its early,
-  pre-collection arg processing, which does not catch `Skipped` the way the later collection/runtest
-  machinery does. Marking items here runs well after that early phase, so the skip is reported cleanly.
-  """
   del config
   if not _MISSING_E2E_ENV:
     return
@@ -111,9 +90,6 @@ def e2e_env() -> Path:
 
 @pytest.fixture(scope="session", autouse=True)
 def app_monkey_patches(e2e_env: Path) -> None:
-  """Production installs the app's monkey patches via aeth_ext.initialize() in __main__; the e2e
-  process must install the same ones. Only the app-owned patch is applied here (no aeth_ext import).
-  """
   # First party imports
   from scheduled_invoice_processor.monkey_patches import Patches
 
@@ -170,11 +146,6 @@ def clean_remote(remote_dirs: None) -> Iterator[None]:
 
 @pytest.fixture
 def reset_processor_singletons() -> Iterator[None]:
-  """Each scenario should build its processors fresh, as a new process would.
-
-  SupplierProcessorBase uses aeth_ext's SingletonType metaclass, which caches the instance on the class as
-  `__shared_instance__`. Deleting that attribute is the documented reset for that metaclass on both v6 and v8.
-  """
   # First party imports
   from scheduled_invoice_processor.suppliers.ryo import RYOProcessor
   from scheduled_invoice_processor.suppliers.sas import SASProcessor

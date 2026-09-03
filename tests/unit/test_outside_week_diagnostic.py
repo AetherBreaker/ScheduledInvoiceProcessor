@@ -1,5 +1,3 @@
-"""The pickup accept windows are two weeks wide in places; this log-only probe reports when the extra week is used."""
-
 # This file tests private methods by design.
 # pyright: reportPrivateUsage=false
 
@@ -40,7 +38,9 @@ def _probe(file_date: datetime | None, caplog: pytest.LogCaptureFixture) -> bool
   # Only `self.__class__.__name__` and the class attribute are used; a bare namespace stands in for a processor.
   fake_self = SimpleNamespace(OUTSIDE_WEEK_LOG_TAG=SupplierProcessorBase.OUTSIDE_WEEK_LOG_TAG)
   with caplog.at_level(logging.WARNING):
-    return SupplierProcessorBase._warn_if_outside_week(cast("Any", fake_self), _meta(), file_date, "inv.txt", logging.getLogger("probe"))
+    return SupplierProcessorBase._warn_if_outside_week(
+      cast("Any", fake_self), _meta(), file_date, "inv.txt", logging.getLogger("probe")
+    )
 
 
 @pytest.mark.parametrize(
@@ -75,7 +75,9 @@ def test_unknown_date_is_silent(caplog: pytest.LogCaptureFixture) -> None:
 
 
 def test_date_from_filename_match_uses_year_month_day_groups() -> None:
-  sas_like = re.compile(r"^EF\d+_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})\d{6}\.TXT$")
+  sas_like = re.compile(
+    r"^EF\d+_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})\d{6}\.TXT$"
+  )
   match = sas_like.match("EF900100_20250619094646123456.TXT")
   assert match is not None
   assert SupplierProcessorBase._date_from_filename_match(match) == datetime(2025, 6, 19, 9, 46, 46, tzinfo=SETTINGS.tz)

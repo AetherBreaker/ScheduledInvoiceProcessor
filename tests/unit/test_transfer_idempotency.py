@@ -1,5 +1,3 @@
-"""A holding-FTP rename that already happened (e.g. before a stop mid-wave) is reported as success on re-run."""
-
 # This file tests a private method by design.
 # pyright: reportPrivateUsage=false
 
@@ -31,15 +29,6 @@ if TYPE_CHECKING:
 
 
 class _FakeClient:
-  """`sizes` is the remote filesystem: `get_size` answers from it and raises FileNotFoundError for anything else;
-  `listdir(folder)` yields the entries whose parent is `folder`.
-
-  A `sizes` value may be an exception instance, which `get_size` raises instead of returning. `fail_listdir`
-  makes every listing raise, to drive the source-probe error path of `_already_moved`.
-
-  `rename` raises OSError unless `fail_rename` is False, in which case it succeeds and is merely recorded.
-  """
-
   def __init__(self, sizes: dict[str, int | BaseException], fail_rename: bool = True, fail_listdir: bool = False) -> None:
     self.sizes = sizes
     self.fail_rename = fail_rename
@@ -213,9 +202,6 @@ def test_empty_destination_is_a_failure(processor: SASProcessor) -> None:
 
 
 def test_source_listing_failure_is_not_absence(processor: SASProcessor) -> None:
-  """A folder we cannot list says nothing about whether the source is gone (FTP's 550 covers both "no such
-  file" and "permission denied"), so the move is not treated as done.
-  """
   original_pool = SASProcessor.waiting_ftp
   try:
     meta, client, result = _run(processor, {RECV.as_posix(): 128}, fail_listdir=True)
@@ -236,7 +222,6 @@ def test_source_listing_failure_is_not_absence(processor: SASProcessor) -> None:
 def test_progress_advances_exactly_once_per_move_even_if_the_bar_raises(
   processor: SASProcessor, sizes: dict[str, int | BaseException], fail_rename: bool, expected: bool
 ) -> None:
-  """A progress-bar failure must neither flip a successful move to failure nor double-advance the bar."""
   pbar = _FakePbar(raise_on_update=True)
   processor.pbar = pbar  # type: ignore[assignment]
   original_pool = SASProcessor.waiting_ftp

@@ -1,5 +1,3 @@
-"""SFT warehouse cycle. Blocked on the real FTP folder paths (see the TODO_SFT banner in suppliers/sft.py)."""
-
 # Third party imports
 import pytest
 

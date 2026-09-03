@@ -1,5 +1,3 @@
-"""Shutdown callbacks: freeze the scheduler, flush queued sheet writes, skip the flush on a database-origin fatal."""
-
 # Standard library imports
 import logging
 from types import SimpleNamespace
@@ -31,12 +29,10 @@ class _Scheduler:
 
 
 def _as_scheduler(stub: object) -> OrderProcessingScheduler:
-  """The hooks only call `.pause()`; the stubs satisfy that structurally."""
   return cast("OrderProcessingScheduler", stub)
 
 
 def _as_cache(stub: object) -> DatabaseCache:
-  """The hooks only read the four `queued_*` flags and call `.api_write()`."""
   return cast("DatabaseCache", stub)
 
 

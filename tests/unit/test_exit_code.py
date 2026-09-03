@@ -1,5 +1,3 @@
-"""Process exit code follows the shutdown kind: 0 for running/graceful, 1 for fatal/forced."""
-
 # Third party imports
 import pytest
 

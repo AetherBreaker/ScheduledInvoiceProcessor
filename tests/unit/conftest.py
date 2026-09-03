@@ -1,15 +1,3 @@
-"""Bootstraps a network-free environment for the unit tests.
-
-Top-level code runs when pytest imports this conftest, before any test module under tests/unit. That ordering
-is load-bearing: scheduled_invoice_processor reads SETTINGS and the credential JSON files at import time (the
-supplier modules build their FTP pools at class level from those files).
-
-When tests/e2e/conftest.py has already bootstrapped this process (PERSISTED_DIR_LOC pointing at the e2e suite's
-own temp dir), that environment is reused untouched; the unit tests never assume specific credential values, they
-read the JSON back. A developer's real PERSISTED_DIR_LOC is never reused by the unit tests -- it is always
-overwritten with a fresh dummy environment.
-"""
-
 # Standard library imports
 import json
 import os
@@ -22,12 +10,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 
 def _dummy_service_account_key() -> str:
-  """A structurally-valid (but not connectable) Google service-account key.
-
-  `scheduled_invoice_processor.database.DatabaseCache` builds `google.oauth2.service_account.Credentials`
-  from this file as a class-body side effect at import time -- `suppliers/__init__.py` imports `DatabaseCache`
-  -- so the file must exist and parse, even though nothing in the unit tests talks to Google Sheets.
-  """
   private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
   pem = private_key.private_bytes(
     encoding=serialization.Encoding.PEM,

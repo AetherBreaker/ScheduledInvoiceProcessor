@@ -1,5 +1,3 @@
-"""gspread access to the TESTING spreadsheet. Only touches rows whose store number is in the reserved e2e set."""
-
 # Standard library imports
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -23,11 +21,6 @@ _SHEETS_SERIAL_EPOCH = datetime(1899, 12, 30)  # noqa: DTZ001
 
 
 def _serial_to_datetime(value: str) -> datetime | None:
-  """Google Sheets' UNFORMATTED_VALUE returns a bare serial day-number (days since 1899-12-30, tz-naive
-  wall-clock) for any cell it auto-detected as a date/time -- including `action_datetime`, even though the
-  app writes it as an ISO-8601 string: Sheets silently reinterprets the ISO text on write. Assume the
-  wall-clock reading is in TZ, matching the app's own SETTINGS.tz.
-  """
   try:
     serial = float(value)
   except ValueError:
@@ -36,7 +29,6 @@ def _serial_to_datetime(value: str) -> datetime | None:
 
 
 def _at_or_after(value: object, since: datetime) -> bool:
-  """True if `value` parses to a datetime >= since; not-parseable values do not match."""
   if value is None:
     return False
   text = str(value)
@@ -51,7 +43,6 @@ def _at_or_after(value: object, since: datetime) -> bool:
 
 
 def _store_of(row: list[object]) -> int | None:
-  """Store number from a raw row, or None if the cell is blank / not numeric."""
   if len(row) < STORE_COL:
     return None
   try:

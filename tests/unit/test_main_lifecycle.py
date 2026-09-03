@@ -1,7 +1,3 @@
-"""`startup.main()` shutdown tail: the catch-up Sheets flush runs only after every in-flight job has stopped *and*
-aeth_ext's threaded shutdown pass (`SHUTDOWN_COMPLETE`) has finished (PR #10 review, startup.py ordering).
-"""
-
 # Standard library imports
 from asyncio import CancelledError, Event, Future, Task, create_task, get_running_loop, sleep
 from contextlib import nullcontext, suppress
@@ -17,8 +13,6 @@ if TYPE_CHECKING:
 
 
 class _Shutdown:
-  """Stand-in for aeth_ext's `ShutdownState`: awaitable, exposes `.kind`."""
-
   def __init__(self, future: Future[None]) -> None:
     self._future = future
     self.kind = ShutdownKind.GRACEFUL
@@ -63,7 +57,6 @@ class _Cache:
 
 
 async def _commit_block(gate: Event, events: list[str]) -> None:
-  """A job mid-commit: cancellation is absorbed and the job only finishes once `gate` is released."""
   try:
     await sleep(3600)
   except CancelledError:

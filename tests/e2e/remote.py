@@ -1,7 +1,3 @@
-"""Direct ftplib/paramiko access to the e2e servers. Deliberately independent of aeth_ext so the
-suite behaves identically across aeth_ext versions.
-"""
-
 # Standard library imports
 from ftplib import FTP, error_perm
 from io import BytesIO

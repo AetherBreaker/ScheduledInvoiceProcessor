@@ -1,9 +1,3 @@
-"""Builds vendor invoice files that the app's filename patterns and header regexes accept.
-
-Filenames carry the timestamp the app matches on (both SAS and RYO set checks_date_in_filename = True), so
-`at` must be a US/Eastern datetime inside the current Sun-Sat week; now_eastern() always is.
-"""
-
 # Standard library imports
 from datetime import datetime
 from pathlib import Path

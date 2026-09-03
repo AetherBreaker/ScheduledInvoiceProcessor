@@ -1,5 +1,3 @@
-"""Runs the production cycle exactly as each supplier module's main() does, and shared log assertions."""
-
 EXPECTED_ACTIONS = ("registered_pickup", "file_picked_up", "registered_dropoff", "file_preprocessed", "file_dropped_off")
 
 

@@ -1,10 +1,3 @@
-"""Single source of truth for the e2e environment: hosts, ports, users, remote folders, reserved ids.
-
-The Docker services in tests/docker/compose.yaml publish onto 127.0.0.1 with these ports and users.
-The app's own folder layout (see suppliers/sas.py and suppliers/ryo.py) with USE_TESTING_FOLDERS=True
-prefixes the SFT-side folders with /Testing; vendor-side folders are unchanged.
-"""
-
 # --- SFT holding server (Pure-FTPd, plain FTP) ---
 SFT_HOST = "127.0.0.1"
 SFT_PORT = 21

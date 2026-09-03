@@ -1,5 +1,3 @@
-"""The shutdown flush skips Google Sheets when the fatal error came from the database layer itself."""
-
 # Standard library imports
 from typing import TYPE_CHECKING
 
@@ -18,8 +16,6 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def fresh_database_singleton() -> Iterator[None]:
-  """DatabaseCache is a SingletonType; a constructor that raised must not leave a cached instance behind."""
-
   def _drop() -> None:
     if "__shared_instance__" in database.DatabaseCache.__dict__:
       delattr(database.DatabaseCache, "__shared_instance__")

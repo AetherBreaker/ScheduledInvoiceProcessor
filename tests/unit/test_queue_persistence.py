@@ -1,5 +1,3 @@
-"""The queue ledger is written atomically, as one file, on every change, and once more at interpreter exit."""
-
 # This file drives the private queues, locks and persistence hooks by design.
 # pyright: reportPrivateUsage=false
 
@@ -40,7 +38,6 @@ def backup_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def processor(tmp_path: Path, backup_dir: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[SASProcessor]:
-  """A real SASProcessor with its filesystem redirected to tmp_path and its DatabaseCache stubbed (no network)."""
   monkeypatch.setattr(suppliers_mod, "DatabaseCache", SimpleNamespace)
   monkeypatch.setattr(suppliers_mod, "HOLDING_FOLDER", tmp_path / "file_holding")
   monkeypatch.setattr(SASProcessor, "_file_queue_backup_folder", backup_dir)
@@ -93,9 +90,6 @@ def test_persist_writes_all_four_queues_to_one_ledger_and_leaves_no_tmp(processo
 def test_queue_transition_is_all_or_nothing_on_disk(
   processor: SASProcessor, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-  """A pickup -> waiting move either lands in the ledger as a whole or not at all: there is no state in which
-  the entry has left one queue on disk without arriving in the other (the per-queue-file layout had that gap).
-  """
   processor._file_pickup_queue["k"] = _entry()
   assert processor._persist_queues() is True
 
@@ -244,9 +238,6 @@ async def test_clean_stale_entries_persists_under_lock(processor: SASProcessor) 
 
 
 def test_concurrent_off_thread_persists_are_serialised(processor: SASProcessor) -> None:
-  """`_persist_lock` must serialise concurrent OS-thread mutation-plus-persist, the way `_preprocess_off_thread`
-  workers do, against sibling workers and against plain `_persist_queues()` callers alike.
-  """
   errors: list[BaseException] = []
 
   def _mutate_and_persist(key: str) -> None:

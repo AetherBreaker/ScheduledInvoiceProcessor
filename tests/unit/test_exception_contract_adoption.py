@@ -1,11 +1,3 @@
-"""The consumer side of `aeth_ext.ftp.session.AdapterBase`'s exception contract.
-
-Every adapter method raises stdlib `OSError` types only, so the processor classifies transfer failures and
-archive refusals by type alone -- no `ftplib`/`paramiko` imports, no reply-code substrings. These pin the two
-places that depended on the old protocol-specific types: the transient-transfer retry classifier and the
-archive path's permission-denied branch.
-"""
-
 # This file tests private methods by design.
 # pyright: reportPrivateUsage=false
 
@@ -30,8 +22,6 @@ if TYPE_CHECKING:
 
 
 class _FakeClient:
-  """`get_size` raises `size_error` if set, else answers 1; `rename` records and succeeds."""
-
   def __init__(self, size_error: BaseException | None = None) -> None:
     self.size_error = size_error
     self.renames: list[tuple[str, str]] = []
@@ -77,7 +67,6 @@ def processor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[SASP
 
 
 def _chained(outer: BaseException, cause: BaseException) -> BaseException:
-  """What `raise outer from cause` leaves behind -- the shape an adapter's `_translate_*_errors` produces."""
   outer.__cause__ = cause
   outer.__suppress_context__ = True
   return outer
@@ -116,14 +105,10 @@ class TestTransientTransferClassifier:
     assert processor._is_transient_transfer_error(exc) is False
 
   def test_a_425_inside_a_path_or_size_does_not_trigger_a_retry(self, processor: SASProcessor) -> None:
-    """The reply code is carried by the exception *type* now; the digits in a message mean nothing."""
     assert processor._is_transient_transfer_error(OSError("'/inv_425.txt': 500 Syntax error")) is False
     assert processor._is_transient_transfer_error(FileNotFoundError("size 425 mismatch")) is False
 
   def test_dial_time_ssh_rejection_is_not_retried(self, processor: SASProcessor) -> None:
-    """An `SSHException` can only reach the classifier from a rejected credential or host key at dial time
-    (mid-session the adapter translates it to `ConnectionError`), and retrying either is pointless.
-    """
     # Third party imports
     from paramiko import AuthenticationException, SSHException
 
@@ -136,8 +121,6 @@ class TestTransientTransferClassifier:
 
 
 class TestArchivePermissionDenied:
-  """A `PermissionError` while archiving is logged and swallowed regardless of which adapter raised it."""
-
   @pytest.mark.parametrize(
     "denied",
     [
