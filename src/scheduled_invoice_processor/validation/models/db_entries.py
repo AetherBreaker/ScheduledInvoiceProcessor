@@ -155,7 +155,7 @@ for field, fieldinf in get_annotations(ScheduledOrderDBEntryModel).items():
       if issubclass(fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel))
       else PYDANTIC_CONFIG,
     )
-  except Exception:
+  except TypeError:  # issubclass() on a non-class annotation (unions, Annotated, Literal)
     SCHEDULE_TYPE_ADAPTERS[field] = TypeAdapter(fieldinf, config=PYDANTIC_CONFIG)
 
 ORDER_LOG_TYPE_ADAPTERS = {}
@@ -167,5 +167,5 @@ for field, fieldinf in get_annotations(OrderLogDBEntryModel).items():
       if issubclass(fieldinf.__value__ if type(fieldinf) is TypeAliasType else fieldinf, (CustomBaseModel, CustomRootModel))
       else PYDANTIC_CONFIG,
     )
-  except Exception:
+  except TypeError:  # issubclass() on a non-class annotation (unions, Annotated, Literal)
     ORDER_LOG_TYPE_ADAPTERS[field] = TypeAdapter(fieldinf, config=PYDANTIC_CONFIG)
