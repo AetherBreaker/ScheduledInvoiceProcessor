@@ -195,7 +195,7 @@
       ]
 
     [tool.ruff.lint.per-file-ignores]
-      "tests/**" = ["N812", "PLR2004", "FBT003"]
+      "tests/**" = ["N812", "PLR2004", "FBT003", "D1"]  # setup-project added: "D1"
 
     [tool.ruff.lint.isort]
       combine-as-imports = true
