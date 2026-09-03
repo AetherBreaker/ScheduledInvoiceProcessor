@@ -19,6 +19,8 @@ from gspread import Client, authorize
 from gspread.http_client import BackOffHTTPClient
 from gspread.utils import DateTimeOption, Dimension, ValueInputOption, ValueRenderOption, finditem
 from pandas import Series, to_numeric
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # First party imports
 from aeth_ext.types.abc import SingletonType
@@ -110,6 +112,15 @@ class DatabaseCache(metaclass=SingletonType):
   reauth_interval = 2700
   api_call_min_interval = 1.1
 
+  # Sheets calls run inline on the event loop, so an unbounded wait would stall every job; (connect, read) seconds.
+  api_timeout = (10, 60)
+  # Socket-level failures (ECONNRESET, refused, timeouts) never reach gspread's `BackOffHTTPClient`, which only backs
+  # off on HTTP status codes -- an idle keep-alive connection reset mid-request crashed the 02:30 refresh on 2026-09-03.
+  # `read` retries only apply to urllib3's idempotent method set (GET/PUT, not POST), so a `spreadsheets:batchUpdate`
+  # whose response was lost is never replayed; `connect` retries are safe for every method since nothing was sent.
+  # `status=0` leaves HTTP-status backoff to `BackOffHTTPClient`.
+  api_retry = Retry(connect=3, read=3, status=0, backoff_factor=1, raise_on_status=False)
+
   schedule: CacheViewSchedule
   prev_week_schedule: CacheViewSchedule
   order_log: CacheViewOrderLog
@@ -147,6 +158,8 @@ class DatabaseCache(metaclass=SingletonType):
     now = self.loop.time()
     if self._client is None or self._client_last_auth_time is None or ((self._client_last_auth_time + self.reauth_interval) < now):
       self._client = authorize(self._creds, http_client=BackOffHTTPClient)
+      self._client.http_client.set_timeout(self.api_timeout)
+      self._client.http_client.session.mount("https://", HTTPAdapter(max_retries=self.api_retry))
       self._client_last_auth_time = self.loop.time()
     return self._client
 

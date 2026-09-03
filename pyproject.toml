@@ -14,9 +14,11 @@
     "pydantic>=2.12.5",
     "pydantic-settings>=2.14.1",
     "python-dateutil>=2.9.0",
+    "requests>=2.34.2",
     "rich>=15.0.0",
     "tzdata>=2026.2",
-  ]
+    "urllib3>=2.7.0",
+]
 
   [project.scripts]
     run-app-scheduled-invoice-processor = "scheduled_invoice_processor.__main__:run_app"
