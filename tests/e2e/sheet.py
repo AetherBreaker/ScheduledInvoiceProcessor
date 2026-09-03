@@ -26,7 +26,8 @@ def _serial_to_datetime(value: str) -> datetime | None:
   """Google Sheets' UNFORMATTED_VALUE returns a bare serial day-number (days since 1899-12-30, tz-naive
   wall-clock) for any cell it auto-detected as a date/time -- including `action_datetime`, even though the
   app writes it as an ISO-8601 string: Sheets silently reinterprets the ISO text on write. Assume the
-  wall-clock reading is in TZ, matching the app's own SETTINGS.tz."""
+  wall-clock reading is in TZ, matching the app's own SETTINGS.tz.
+  """
   try:
     serial = float(value)
   except ValueError:

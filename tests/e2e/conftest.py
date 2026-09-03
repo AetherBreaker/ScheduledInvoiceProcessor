@@ -112,7 +112,8 @@ def e2e_env() -> Path:
 @pytest.fixture(scope="session", autouse=True)
 def app_monkey_patches(e2e_env: Path) -> None:
   """Production installs the app's monkey patches via aeth_ext.initialize() in __main__; the e2e
-  process must install the same ones. Only the app-owned patch is applied here (no aeth_ext import)."""
+  process must install the same ones. Only the app-owned patch is applied here (no aeth_ext import).
+  """
   # First party imports
   from scheduled_invoice_processor.monkey_patches import Patches
 

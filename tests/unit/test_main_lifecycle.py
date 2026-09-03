@@ -1,5 +1,6 @@
 """`startup.main()` shutdown tail: the catch-up Sheets flush runs only after every in-flight job has stopped *and*
-aeth_ext's threaded shutdown pass (`SHUTDOWN_COMPLETE`) has finished (PR #10 review, startup.py ordering)."""
+aeth_ext's threaded shutdown pass (`SHUTDOWN_COMPLETE`) has finished (PR #10 review, startup.py ordering).
+"""
 
 # Standard library imports
 from asyncio import CancelledError, Event, Future, Task, create_task, get_running_loop, sleep

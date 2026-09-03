@@ -271,7 +271,8 @@ async def flip_week():
 
 def exit_code_for_shutdown(kind: ShutdownKind) -> int:
   """0 for RUNNING (never requested) or GRACEFUL, 1 for FATAL or FORCED. `ShutdownKind` is an IntEnum ordered by
-  severity. Kept out of `main()` so it is testable and so `main()` never calls `sys.exit` itself."""
+  severity. Kept out of `main()` so it is testable and so `main()` never calls `sys.exit` itself.
+  """
   return 1 if kind >= ShutdownKind.FATAL else 0
 
 
@@ -280,7 +281,8 @@ def run_until_shutdown() -> None:
 
   Interim owner of the exit code: aeth_ext knows `SHUTDOWN.kind` and already owns the exit path, so mapping kind
   to exit status belongs upstream (tracked in aeth_ext's TODO); until that lands it lives here rather than in
-  `__main__`, which stays import-light so `initialize()` runs as early as possible."""
+  `__main__`, which stays import-light so `initialize()` runs as early as possible.
+  """
   try:
     run(main())
   except KeyboardInterrupt:

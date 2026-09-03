@@ -205,7 +205,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def _persist_queues_at_exit(self) -> None:
     """Final save at interpreter exit. Waits up to 1 s for the queue lock; if it is still held (a transfer was
     mid-flight when the process was told to exit) the snapshot is written anyway — a possibly mid-mutation but
-    always parseable file beats losing the last change."""
+    always parseable file beats losing the last change.
+    """
     acquired = self._lock.green_acquire(timeout=1.0)
     if not acquired:
       logger.warning(
@@ -610,7 +611,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def _advance_progress(self, move_files_task: TaskID) -> None:
     """Advance the file-move task by one. Every outcome of a move (success, failure, skipped-because-errored)
     consumes exactly one slot in the task total, so the bar can reach 100 % on a partial wave. Never raises: a
-    progress-bar failure must not turn a completed move into a logged failure."""
+    progress-bar failure must not turn a completed move into a logged failure.
+    """
     try:
       self.pbar.update(move_files_task, advance=1, refresh=True)
     except Exception:
@@ -674,7 +676,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ):
     """Move a file within the holding FTP. Idempotent: if the rename fails because it already happened (a stop
     mid-wave lets the rename thread finish but never runs the bookkeeping that records it), the move is reported
-    as a success so the re-run can advance the queue instead of stranding the entry."""
+    as a success so the re-run can advance the queue instead of stranding the entry.
+    """
     local_logger = adapted_logger or logger
     if self.errored:
       local_logger.warning("%s: Disabled due to error state. Skipping transfer of files within main FTP", self.__class__.__name__)
@@ -744,7 +747,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
     adapted_logger: LoggerAdapter[Any] | Logger | None = None,
   ) -> bool:
     """True only when the destination holds a non-empty file *and* the source is gone. A destination beside a
-    still-present source is a genuine conflict and is never treated as done (nothing here ever overwrites)."""
+    still-present source is a genuine conflict and is never treated as done (nothing here ever overwrites).
+    """
     local_logger = adapted_logger or logger
     try:
       recv_size = client.get_size(recv_path.as_posix())
@@ -1188,7 +1192,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ) -> bool:
     """Log-only probe: warn when an *accepted* file is dated outside the strict one-week window (Sunday 00:00 of
     the pickup week through Saturday 23:59:59 of the dropoff week). The accepting windows are currently two weeks
-    wide for the mtime branch and SAS; this measures how often that extra week is actually used."""
+    wide for the mtime branch and SAS; this measures how often that extra week is actually used.
+    """
     if file_date is None:
       return False
     week_start = file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)

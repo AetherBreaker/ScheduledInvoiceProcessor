@@ -1,5 +1,6 @@
 """Each pool is built straight from its JSON secrets file, with the password wrapped in a `SecretStr` and no
-plaintext copy left on any processor class."""
+plaintext copy left on any processor class.
+"""
 
 # The pools keep their credentials on a private connector; reading them back is the point of these tests.
 # pyright: reportPrivateUsage=false

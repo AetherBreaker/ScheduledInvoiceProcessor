@@ -34,8 +34,7 @@ class ColNameEnum(StrEnum):
 
   @classmethod
   def err_reporting_columns(cls) -> list[str]:
-    """
-    Return all columns that are not excluded and do not start with an underscore.
+    """Return all columns that are not excluded and do not start with an underscore.
     This is used for error reporting.
     """
     return [

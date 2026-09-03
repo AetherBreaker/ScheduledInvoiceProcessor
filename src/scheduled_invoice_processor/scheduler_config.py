@@ -44,8 +44,7 @@ DO_NOT_LOG_PATTERNS = [
 
 
 def run_job(job: Job, jobstore_alias: str, run_times: list[datetime], logger_name: str):
-  """
-  Called by executors to run the job. Returns a list of scheduler events to be dispatched by the
+  """Called by executors to run the job. Returns a list of scheduler events to be dispatched by the
   scheduler.
 
   """
@@ -144,7 +143,8 @@ class OrderProcessingScheduler(AsyncIOScheduler):
   def in_flight_jobs(self) -> set[AsyncFuture[Any]]:
     """The futures of every job currently running on the default executor. `shutdown(wait=False)` cancels these
     but cannot wait for them (APScheduler's own limitation); `startup.main()` snapshots them first and awaits the
-    snapshot after the shutdown so no job is still mid-commit when the final Sheets flush runs."""
+    snapshot after the shutdown so no job is still mid-commit when the final Sheets flush runs.
+    """
     executor = self._lookup_executor("default")
     # `CustomAsyncIOExecutor` only ever stores loop-bound futures (`create_task` / `run_in_executor`).
     return cast("set[AsyncFuture[Any]]", set(getattr(executor, "_pending_futures", ())))
@@ -178,8 +178,7 @@ class OrderProcessingScheduler(AsyncIOScheduler):
 
   @override
   def _real_add_job(self, job: Job, jobstore_alias: str, replace_existing: bool):
-    """
-    :param Job job: the job to add
+    """:param Job job: the job to add
     :param bool replace_existing: ``True`` to use update_job() in case the job already exists
         in the store
 
@@ -219,8 +218,7 @@ class OrderProcessingScheduler(AsyncIOScheduler):
 
   @override
   def print_jobs(self, jobstore: str | None = None, out: TextIO | None = None):
-    """
-    print_jobs(jobstore=None, out=sys.stdout)
+    """print_jobs(jobstore=None, out=sys.stdout)
 
     Prints out a textual listing of all jobs currently scheduled on either all job stores or
     just a specific one.

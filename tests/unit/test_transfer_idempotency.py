@@ -214,7 +214,8 @@ def test_empty_destination_is_a_failure(processor: SASProcessor) -> None:
 
 def test_source_listing_failure_is_not_absence(processor: SASProcessor) -> None:
   """A folder we cannot list says nothing about whether the source is gone (FTP's 550 covers both "no such
-  file" and "permission denied"), so the move is not treated as done."""
+  file" and "permission denied"), so the move is not treated as done.
+  """
   original_pool = SASProcessor.waiting_ftp
   try:
     meta, client, result = _run(processor, {RECV.as_posix(): 128}, fail_listdir=True)

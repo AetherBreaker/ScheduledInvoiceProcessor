@@ -1,5 +1,6 @@
 """Queue transitions are committed after the remote side effect they describe and before any cleanup a re-run
-would need (spec §3, findings F1/F3/F7)."""
+would need (spec §3, findings F1/F3/F7).
+"""
 
 # This file drives the private job methods and queues by design.
 # pyright: reportPrivateUsage=false
@@ -79,7 +80,8 @@ def _drop_singleton(cls: type) -> None:
 
 def _client(proc: SupplierProcessorBase) -> _FakeClient:
   """The fixtures install one `_FakePool` (sharing one client) as both pools; the class attribute is typed as the
-  real adapter, so reach the fake through a cast."""
+  real adapter, so reach the fake through a cast.
+  """
   return cast("_FakePool", proc.waiting_ftp).client
 
 
@@ -303,7 +305,8 @@ def test_preprocess_skips_original_archive_when_persist_fails(
   ryo: RYOProcessor, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
   """Same gate as pickup: a queue backup that could not be written leaves the originals where the on-disk ledger
-  (still 'preprocess') would look for them on the next run."""
+  (still 'preprocess') would look for them on the next run.
+  """
   events: list[str] = []
   old = _meta("/Waiting/RYO", {0: "inv-a.txt"})
   ryo._file_preprocess_queue["k"] = old
@@ -366,7 +369,8 @@ async def test_dropoff_pops_and_persists_after_every_tick_with_no_await_between(
   sas: SASProcessor, monkeypatch: pytest.MonkeyPatch
 ) -> None:
   """All ticks are awaited first; then every popped entry and the ledger write happen in one synchronous stretch,
-  so a cancellation can never leave an in-memory pop unpersisted."""
+  so a cancellation can never leave an in-memory pop unpersisted.
+  """
   sas._file_dropoff_queue["a"] = _meta("/Waiting/SAS/Processed")
   sas._file_dropoff_queue["b"] = _meta("/Waiting/SAS/Processed")
   events: list[str] = []

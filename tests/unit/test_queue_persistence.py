@@ -94,7 +94,8 @@ def test_queue_transition_is_all_or_nothing_on_disk(
   processor: SASProcessor, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
   """A pickup -> waiting move either lands in the ledger as a whole or not at all: there is no state in which
-  the entry has left one queue on disk without arriving in the other (the per-queue-file layout had that gap)."""
+  the entry has left one queue on disk without arriving in the other (the per-queue-file layout had that gap).
+  """
   processor._file_pickup_queue["k"] = _entry()
   assert processor._persist_queues() is True
 
@@ -244,7 +245,8 @@ async def test_clean_stale_entries_persists_under_lock(processor: SASProcessor) 
 
 def test_concurrent_off_thread_persists_are_serialised(processor: SASProcessor) -> None:
   """`_persist_lock` must serialise concurrent OS-thread mutation-plus-persist, the way `_preprocess_off_thread`
-  workers do, against sibling workers and against plain `_persist_queues()` callers alike."""
+  workers do, against sibling workers and against plain `_persist_queues()` callers alike.
+  """
   errors: list[BaseException] = []
 
   def _mutate_and_persist(key: str) -> None:

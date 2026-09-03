@@ -122,7 +122,8 @@ class TestTransientTransferClassifier:
 
   def test_dial_time_ssh_rejection_is_not_retried(self, processor: SASProcessor) -> None:
     """An `SSHException` can only reach the classifier from a rejected credential or host key at dial time
-    (mid-session the adapter translates it to `ConnectionError`), and retrying either is pointless."""
+    (mid-session the adapter translates it to `ConnectionError`), and retrying either is pointless.
+    """
     # Third party imports
     from paramiko import AuthenticationException, SSHException
 
