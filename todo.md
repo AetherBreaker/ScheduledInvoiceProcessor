@@ -1,5 +1,12 @@
 # TODO
 
+- [ ] **HIGH PRIORITY — required before adopting the next aeth-devkit Docker standard.** `HOLDING_FOLDER`
+  (`suppliers/__init__.py`, `CWD / "file_holding"`) is an entirely ephemeral scratch directory but lives
+  beside the code under `/app`. The standardized image keeps `/app` root-owned and runs the app as
+  `nonroot`, and the entrypoint no longer honours `[tool.docker].mkdirs`, so `HOLDING_FOLDER.mkdir()` in
+  `startup.py` will raise `PermissionError` at container start. Move it to a temp directory
+  (`tempfile.mkdtemp()` / `Path(tempfile.gettempdir())`), then delete `mkdirs` from `[tool.docker]`.
+
 - [ ] **Filename date windows: stop matching year/month/day as a cross product.** `assemble_filename_pattern` in
   the SFT, RYO and SAS processors builds the date part of the regex as independent `(year)(month)(day)`
   alternations, so a week that straddles a month boundary admits dates outside it -- e.g. for Sun 2025-08-31 ..
