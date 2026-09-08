@@ -11,6 +11,8 @@ from datetime import datetime
 from io import BytesIO
 from logging import Logger, getLogger
 from os import replace
+from pathlib import Path
+from tempfile import gettempdir
 from threading import RLock
 from time import sleep
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -27,7 +29,7 @@ from aeth_ext.ftp import create_ftp_adapter
 from aeth_ext.ftp.credentials import FTPCredentials
 from aeth_ext.types.abc import SingletonType
 from scheduled_invoice_processor.database import DatabaseCache
-from scheduled_invoice_processor.environment_init_vars import CWD, SETTINGS
+from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.logging_config import add_log_context
 from scheduled_invoice_processor.suppliers.file_register_data import FileRegisterData
 from scheduled_invoice_processor.suppliers.log_action import log_actions
@@ -37,7 +39,7 @@ from scheduled_invoice_processor.typing_custom.enums import LogActionEnum, Statu
 if TYPE_CHECKING:
   # Standard library imports
   from logging import LoggerAdapter
-  from pathlib import Path, PurePosixPath
+  from pathlib import PurePosixPath
   from re import Match, Pattern
 
   # First party imports
@@ -63,7 +65,9 @@ TRANSIENT_TRANSFER_ERROR_STRINGS = (
 )
 
 
-HOLDING_FOLDER = CWD / "file_holding"
+# Per-run scratch for the local copies each processor stages between the vendor and holding FTPs. Lives outside
+# /app: the standard image runs as nonroot with /app root-owned, so anything created at startup must be in tmp.
+HOLDING_FOLDER = Path(gettempdir()) / "scheduled_invoice_processor" / "file_holding"
 
 
 class SupplierProcessorBase(metaclass=SingletonType):
