@@ -1602,7 +1602,7 @@ wheels = [
 
 [[package]]
 name = "scheduled-invoice-processor"
-version = "4.1.2"
+version = "4.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "aeth-ext", version = "8.0.8", source = { editable = "../aeth_ext" }, extra = ["async", "sftp"], marker = "sys_platform == 'win32'" },
