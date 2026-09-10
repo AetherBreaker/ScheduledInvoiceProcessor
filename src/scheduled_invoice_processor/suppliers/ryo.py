@@ -4,7 +4,7 @@ Preprocessing merges an entry's files into one, uploading the merged file before
 """
 
 # Standard library imports
-from asyncio import as_completed, to_thread
+from asyncio import as_completed, create_task, to_thread
 from contextvars import ContextVar
 from datetime import datetime
 from hashlib import file_digest
@@ -33,7 +33,7 @@ from .log_action import log_actions
 
 if TYPE_CHECKING:
   # Standard library imports
-  from collections.abc import Coroutine
+  from asyncio import Future
   from logging import LoggerAdapter
   from pathlib import Path
   from re import Pattern
@@ -154,7 +154,7 @@ class RYOProcessor(SupplierProcessorBase):
 
   @add_log_context(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED, log_subfolder=LogActionEnum.FILE_PREPROCESSED)
   @log_actions(action_identifier_prefix=LogActionEnum.FILE_PREPROCESSED)
-  async def _preprocess_files(  # noqa: C901
+  async def _preprocess_files(
     self,
     adapted_logger: LoggerAdapter[Any] | None = None,
     log_action_handler: LogActionHandlerType | None = None,
@@ -176,23 +176,20 @@ class RYOProcessor(SupplierProcessorBase):
 
       local_logger.info("%s: Beginning preprocessing for %s files", self.__class__.__name__, len(items_to_advance))
 
-      errors = []
-
       with self.pbar.add_task(
         f"{self.__class__.__name__}: Preprocessing files", total=len(items_to_advance)
       ) as files_preprocessing_task:
-        futures: dict[SupplierQueueKey, Coroutine[None, None, tuple[SupplierQueueKey, FileRegisterData]]] = {}
+        # Keyed by Task, not by entry: `as_completed` yields a Task it was given back as itself, but wraps a bare coroutine
+        # in a new Task, so a failed result could never be matched back to its entry.
+        futures: dict[Future[tuple[SupplierQueueKey, FileRegisterData]], SupplierQueueKey] = {}
         for key, file_meta in tuple(self._file_preprocess_queue.items()):
-          # for idx, (key, file_meta) in enumerate(tuple(self._file_preprocess_queue.items())):
-          # if idx > 0:
-          #   continue
-          future = to_thread(self._preprocess_off_thread, key=key, old_file_meta=file_meta, adapted_logger=adapted_logger)
-          futures[key] = future
+          task = create_task(to_thread(self._preprocess_off_thread, key=key, old_file_meta=file_meta, adapted_logger=adapted_logger))
+          futures[task] = key
 
           if log_action_handler is not None:
             log_action_handler(key, StatusCode.UNKNOWN, file_meta)
 
-        async for result in as_completed(futures.values()):
+        async for result in as_completed(futures.keys()):
           try:
             key, file_meta = await result
 
@@ -202,22 +199,16 @@ class RYOProcessor(SupplierProcessorBase):
               log_action_handler(key, StatusCode.SUCCESS, file_meta)
             self.pbar.update(files_preprocessing_task, advance=1, refresh=True)
 
-          except Exception as e:
-            matched_results = [k for k, v in futures.items() if result is v]  # pyright: ignore[reportUnnecessaryComparison]
-            if not matched_results:
-              local_logger.error("%s: Could not find matching key for result %s in futures", self.__class__.__name__, result)
-              raise RuntimeError(f"Could not find matching key for result {result} in futures") from e
-
-            key = matched_results[0]
+          except Exception:
+            # Deliberately fatal: a preprocess failure needs a person to investigate and repair, so record which entry
+            # failed and let the exception take the processor down through the `log_actions` wrapper.
+            key = futures[result]
 
             local_logger.exception("%s: %s: Error preprocessing files", self.__class__.__name__, key)
-            errors.append((key, e))
 
             if log_action_handler is not None:
               log_action_handler(key, StatusCode.FAILURE, items_to_advance[key])
-
-      if errors:
-        local_logger.error("%s: Completed preprocessing with %s errors", self.__class__.__name__, len(errors))
+            raise
 
   def _preprocess_off_thread(
     self,

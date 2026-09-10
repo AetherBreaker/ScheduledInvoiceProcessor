@@ -176,6 +176,18 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
     self.__post_init__()
 
+    # `_local_copy_folder` is persisted verbatim, so a ledger written under an earlier HOLDING_FOLDER (`/app/file_holding`
+    # before v4.1.2) restores absolute paths that do not exist in this container and the download in
+    # `_create_new_merged_file` fails with FileNotFoundError. The folder belongs to this processor's runtime, not to
+    # the entry, so rebind it to the current pre/post-processing folder, matched by leaf name.
+    for queue in self._queues_by_name().values():
+      for entry in queue.values():
+        entry._local_copy_folder = (  # pyright: ignore[reportPrivateUsage]
+          self.local_post_processing_folder
+          if entry._local_copy_folder.name == self.local_post_processing_folder.name  # pyright: ignore[reportPrivateUsage]
+          else self.local_pre_processing_folder
+        )
+
   def __post_init__(self) -> None:
     """Subclass hook run at the end of `__init__`; the base does nothing."""
     pass
