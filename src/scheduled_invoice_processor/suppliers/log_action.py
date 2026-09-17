@@ -90,14 +90,15 @@ def log_actions[**TP, TR](
       for status, file_meta in items_to_log.values():
         if status == StatusCode.SKIPPED:
           continue  # Skip logging for items marked as SKIPPED
+        action_dt = datetime.now(SETTINGS.tz)
         params = {
           "supplier": self_obj.supplier_name,
           "store": file_meta.storenum,
-          "invoice_num": "Not yet known",
+          "invoice_num": f"Not yet known {action_dt:%Y/%m/%d %H:%M:%S}",
           "customer": file_meta.customer_id,
           "action": action_identifier_prefix,
           "status": status,
-          "action_datetime": datetime.now(SETTINGS.tz),
+          "action_datetime": action_dt,
           "week_end_date": (get_next_sat(file_meta.pickup_date) if file_meta.current_week else get_last_sat(file_meta.pickup_date)),
           "note": note if log_file_loc is not None and log_file_loc.exists() else "Nothing logged",
         }

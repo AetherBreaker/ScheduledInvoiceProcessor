@@ -96,7 +96,7 @@ type DatabaseScheduleIndex = tuple[SuppliersEnum, StoreNum]
 class DatabaseOrderLogColumns(ColNameEnum):
   """Columns of the order log sheet."""
 
-  __index_items__: ClassVar[list[str]] = ["supplier", "store", "invoice_number", "customer", "action", "status", "action_datetime"]
+  __index_items__: ClassVar[list[str]] = ["supplier", "store", "invoice_number", "customer", "action"]
 
   supplier = "supplier"
   store = "store"

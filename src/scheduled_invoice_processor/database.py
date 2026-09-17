@@ -726,8 +726,9 @@ class CacheViewOrderLog(CacheViewBase["OrderLogDBEntryModel", "DatabaseOrderLogC
   ) -> None:
     """Validate and append a processing-log entry, then queue its format fixes.
 
-    A missing invoice number is replaced with a unique negative one below the lowest existing; a duplicate
-    index raises IndexError.
+    A missing invoice number is replaced with a unique negative one below the lowest existing. Re-logging an
+    action already recorded against the same supplier/store/invoice/customer raises IndexError -- the guard
+    stopping an invoice from being processed twice.
     """
     if invoice_num is None:
       invoice_num = str(min(int(to_numeric(self._cache.loc[:, self.columns.invoice_number], errors="coerce").min()), 0) - 1)
@@ -752,7 +753,9 @@ class CacheViewOrderLog(CacheViewBase["OrderLogDBEntryModel", "DatabaseOrderLogC
     result = await self.check_exists(idx)
 
     if result:
-      raise IndexError(f"Error appending new log to processing logs: Index already exists! {idx}", idx, validated_entry)
+      raise IndexError(
+        f"Error appending new log to processing logs: {action} already logged for invoice {invoice_num}!", idx, validated_entry
+      )
 
     await self.append_row(validated_entry, raw=False)
     await self.correct_format()
