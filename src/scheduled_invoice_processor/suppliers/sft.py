@@ -10,10 +10,6 @@ from pathlib import PurePosixPath
 from re import compile
 from typing import TYPE_CHECKING, override
 
-# Third party imports
-from dateutil.relativedelta import SA, SU, relativedelta
-from dateutil.rrule import DAILY, rrule
-
 # First party imports
 from scheduled_invoice_processor.environment_init_vars import SETTINGS
 from scheduled_invoice_processor.logging_config import add_log_context
@@ -50,13 +46,10 @@ class SFTProcessor(SupplierProcessorBase):
 
   The warehouse export names each file with a timestamp -- `SFT010_26709_20260902101623.edi` -- so the pickup
   dates a candidate from its filename (`checks_date_in_filename`), never from an mtime that anyone touching the
-  file on the way past could rewrite. `assemble_filename_pattern` only admits timestamps inside the entry's own
-  Sunday-Saturday week, which is what used to need an `_mtime_pickup_window` override; the base's mtime branch is
-  no longer reached for SFT. The year/month/day alternations are matched independently, so a week that straddles
-  a month boundary also admits a few cross-product dates outside it -- those are the cases the
-  `[OUTSIDE_WEEK_PICKUP]` diagnostic still reports.
+  file on the way past could rewrite. The base's `_pickup_window` limits that date to the entry's own week.
 
-  The invoice format is RYO's, so preprocessing merges an entry's files the same way RYO does.
+  The invoice format is RYO's, so preprocessing merges an entry's files the same way RYO does, and the merged file
+  carries the latest source timestamp in its name like RYO's.
   """
 
   # Same server as the holding FTP: one adapter, no separate credentials.
@@ -76,7 +69,7 @@ class SFTProcessor(SupplierProcessorBase):
   header_date_format = "%m/%d/%Y %I:%M:%S %p"
 
   header_format = "{customer_num}|{invoice_num}|{po_num}|{invoice_date}"
-  file_name_format = "{customer_id}_{invoice_num}.edi"
+  file_name_format = "{customer_id}_{invoice_num}_{timestamp}.edi"
 
   checks_date_in_filename: bool = True
 
@@ -105,26 +98,13 @@ class SFTProcessor(SupplierProcessorBase):
   ) -> Pattern[str]:
     # SFT010_26709_20260902101623.edi -- timestamp is YYYYMMDDHHMMSS, no microseconds (unlike RYO/SAS).
     # `[\d\-]+` on invoice_num so a merged `SFT017_13842-13843_...` still matches.
-    rng_start = (start_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - relativedelta(
-      weeks=1 if not current_week else 0
-    )
-    rng_end = (end_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)) - relativedelta(
-      weeks=1 if not current_week else 0
-    )
-
-    dates = list(rrule(DAILY, dtstart=rng_start, until=rng_end))
-
-    years_part = "|".join({str(date.year) for date in dates})
-    months_part = "|".join({f"{date.month:02d}" for date in dates})
-    days_part = "|".join({f"{date.day:02d}" for date in dates})
-
     pattern = (
       rf"^{customer_id}_"
       r"(?P<invoice_num>[\d\-]+)_"
       r"(?P<timestamp>"
-      rf"(?P<year>{years_part})"
-      rf"(?P<month>{months_part})"
-      rf"(?P<day>{days_part})"
+      r"(?P<year>\d{4})"
+      r"(?P<month>\d{2})"
+      r"(?P<day>\d{2})"
       r"(?P<hour>\d{2})"
       r"(?P<minute>\d{2})"
       r"(?P<second>\d{2})"
@@ -292,6 +272,8 @@ class SFTProcessor(SupplierProcessorBase):
     body_lines: list[bytes] = []
 
     found_invoice_nums = set()
+    # Raw `YYYYMMDDHHMMSS` strings: fixed-width, so the string max is the latest time without parsing.
+    found_timestamps: set[str] = set()
     file_hashes = set()
 
     for file in original_invoice_files:
@@ -339,6 +321,9 @@ class SFTProcessor(SupplierProcessorBase):
             found_invoice_nums.add(attrs["invoice_num"])
 
         first_lines.append(attrs)
+        filename_match = old_file_meta.file_pattern.match(file.name)
+        assert filename_match is not None
+        found_timestamps.add(filename_match.group("timestamp"))
 
         body_lines.extend(f.readlines())
 
@@ -373,6 +358,7 @@ class SFTProcessor(SupplierProcessorBase):
     new_file_name = self.file_name_format.format(
       customer_id=found_values["customer_num"] or "unknown_customer",
       invoice_num=invoice_num_result,
+      timestamp=max(found_timestamps),
     )
 
     new_file_loc = self.local_post_processing_folder / new_file_name

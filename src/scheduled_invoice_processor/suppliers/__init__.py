@@ -126,6 +126,10 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   checks_date_in_filename: bool = False
 
+  pickup_window_weeks: ClassVar[int] = 1
+  """How many Sunday-Saturday weeks a candidate's date may fall in, ending with the entry's own week. See
+  `_pickup_window`."""
+
   pickup_ftp_folder: PurePosixPath
   pickup_archive_ftp_folder: PurePosixPath | None
   pre_processing_waiting_folder: PurePosixPath
@@ -812,7 +816,11 @@ class SupplierProcessorBase(metaclass=SingletonType):
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern[str]:
-    """Regex admitting this supplier's invoice files for *customer_id* within the entry's week; every subclass defines it."""
+    """Regex admitting this supplier's invoice filenames for *customer_id*; every subclass defines it.
+
+    A filename-dated supplier's pattern exposes the date as `year`/`month`/`day` (and optional time) groups but
+    matches any digits there: the date window is `_pickup_window`'s job, not the pattern's.
+    """
     ...
 
   @add_log_context(action_identifier_prefix=LogActionEnum.REGISTERED_PICKUP, log_subfolder=LogActionEnum.REGISTERED_PICKUP)
@@ -1192,7 +1200,7 @@ class SupplierProcessorBase(metaclass=SingletonType):
 
   OUTSIDE_WEEK_LOG_TAG: ClassVar[str] = "[OUTSIDE_WEEK_PICKUP]"
   """Grep-able signature of the diagnostic emitted when a pickup accepts a file dated outside the strict
-  Sunday-Saturday week of its schedule entry. Diagnostic only: the accept/reject decision is unchanged."""
+  Sunday-Saturday week of its schedule entry. Diagnostic only: `_pickup_window` makes the accept/reject decision."""
 
   @staticmethod
   def _date_from_filename_match(match: Match[str]) -> datetime | None:
@@ -1213,21 +1221,23 @@ class SupplierProcessorBase(metaclass=SingletonType):
     except TypeError, ValueError:
       return None
 
-  def _mtime_pickup_window(self, file_meta: FileRegisterData) -> tuple[datetime, datetime]:
-    """The half-open `[start, end)` window an mtime-dated candidate must fall in to be picked up.
+  def _pickup_window(self, file_meta: FileRegisterData) -> tuple[datetime, datetime]:
+    """The half-open `[start, end)` window a candidate's date (filename or mtime) must fall in to be picked up.
 
-    Two weeks wide: the strict Sunday-Saturday week either side of the entry, which is what the
-    `[OUTSIDE_WEEK_PICKUP]` diagnostic measures the use of. Override to narrow it for a supplier whose exports
-    must not be re-collected a week late. Only the mtime branch of `_pickup_files` consults it: a
-    `checks_date_in_filename` supplier's window is whatever its `assemble_filename_pattern` admits. (SFT
-    overrode this while its export had no timestamp in the filename; it is filename-dated now.)
+    Ends Saturday 23:59:59.999999 of the dropoff week and reaches back `pickup_window_weeks` Sunday-Saturday weeks.
+    A previous-week entry shifts both bounds back one week together. That is the registration-time `_current_week`,
+    not the `current_week` property, which turns False once the week has passed and would slide a not-yet-cleaned
+    entry's window onto the week before it. The date is compared as a date here, never inside the filename regex:
+    the old per-part year/month/day alternations admitted cross-product dates (9/2 in a 9/27-10/3 week).
     """
-    start_date = (file_meta.pickup_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)) - relativedelta(
-      weeks=1 if file_meta.current_week else 0
+    weeks_back = relativedelta(weeks=0 if file_meta._current_week else 1)  # pyright: ignore[reportPrivateUsage]
+    start_date = (
+      file_meta.pickup_date
+      - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0)
+      - relativedelta(weeks=self.pickup_window_weeks - 1)
+      - weeks_back
     )
-    end_date = (
-      file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999)
-    ) - relativedelta(weeks=0 if file_meta.current_week else 1)
+    end_date = file_meta.dropoff_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999) - weeks_back
     return start_date, end_date
 
   def _warn_if_outside_week(
@@ -1239,9 +1249,8 @@ class SupplierProcessorBase(metaclass=SingletonType):
   ) -> bool:
     """Log-only probe: warn when an *accepted* file is dated outside the strict one-week window.
 
-    That window is Sunday 00:00 of the pickup week through Saturday 23:59:59 of the dropoff week. The accepting
-    windows are currently two weeks wide for the mtime branch and SAS; this measures how often that extra week is
-    actually used.
+    That window is Sunday 00:00 of the pickup week through Saturday 23:59:59 of the dropoff week. Only a supplier
+    with `pickup_window_weeks > 1` (SAS) can trip it; this measures how often that extra week is actually used.
     """
     if file_date is None:
       return False
@@ -1282,18 +1291,24 @@ class SupplierProcessorBase(metaclass=SingletonType):
       items_to_dl: dict[str, FileRegisterData] = {}
       for key, file_meta in self._file_pickup_queue.items():
         matched_files: list[Match[str]] = []
+        window_start_date, window_end_date = self._pickup_window(file_meta)
 
         for remote_file in remote_files:
           if match := file_meta.file_pattern.match(remote_file.filename):
-            if self.checks_date_in_filename:
+            file_date = self._date_from_filename_match(match) if self.checks_date_in_filename else remote_file.modified_time
+            if file_date is not None and window_start_date <= file_date < window_end_date:
               matched_files.append(match)
-              self._warn_if_outside_week(file_meta, self._date_from_filename_match(match), remote_file.filename, local_logger)
+              self._warn_if_outside_week(file_meta, file_date, remote_file.filename, local_logger)
             else:
-              file_date = remote_file.modified_time
-              start_date, end_date = self._mtime_pickup_window(file_meta)
-              if start_date <= file_date < end_date:
-                matched_files.append(match)
-                self._warn_if_outside_week(file_meta, file_date, remote_file.filename, local_logger)
+              local_logger.info(
+                "%s: %s: Skipped %s dated %s outside the pickup window %s -> %s",
+                self.__class__.__name__,
+                key,
+                remote_file.filename,
+                file_date.isoformat() if file_date is not None else "unparseable",
+                window_start_date.isoformat(),
+                window_end_date.isoformat(),
+              )
 
         if matched_files:
           file_meta.file_names = {idx: m.string for idx, m in enumerate(matched_files)}

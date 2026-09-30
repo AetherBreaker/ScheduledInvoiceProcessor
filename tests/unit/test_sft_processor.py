@@ -3,7 +3,6 @@
 
 # Standard library imports
 import atexit
-import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -134,8 +133,9 @@ def test_filename_pattern_carries_the_date_groups_the_base_reads() -> None:
     (f"SFT017_13842-13843_{IN_WEEK_TS}.edi", True),  # merged-style invoice numbers still match
     ("SFT017_13842_20250615000000.edi", True),  # Sunday 00:00:00, the first accepted instant
     ("SFT017_13842_20250621235959.edi", True),  # Saturday 23:59:59, the last accepted instant
-    ("SFT017_13842_20250614235959.edi", False),  # Saturday of the week before
-    ("SFT017_13842_20250622000000.edi", False),  # Sunday of the week after
+    # Out-of-week names still match: the pattern only checks shape, `_pickup_window` rejects the date.
+    ("SFT017_13842_20250614235959.edi", True),
+    ("SFT017_13842_20250622000000.edi", True),
     ("SFT017_13842.edi", False),  # the export's pre-timestamp shape
     ("SFT017_13842_20250619094646000000.edi", False),  # RYO/SAS-style microseconds
     (f"SFT017_13842_{IN_WEEK_TS}.txt", False),
@@ -146,40 +146,47 @@ def test_filename_pattern(name: str, expected: bool) -> None:
   assert (_pattern(PICKUP_DATE, DROPOFF_DATE).match(name) is not None) is expected
 
 
-def test_filename_pattern_shifts_back_a_week_for_a_previous_week_entry() -> None:
-  pattern = _pattern(PICKUP_DATE, DROPOFF_DATE, current_week=False)
-
-  assert pattern.match(LAST_WEEK_FILE) is not None
-  assert pattern.match("SFT017_13800_20250608000000.edi") is not None
-  assert pattern.match("SFT017_13800_20250614235959.edi") is not None
-  assert pattern.match("SFT017_13800_20250607235959.edi") is None
-  assert pattern.match(FILE_A) is None
+def test_pickup_window_shifts_back_a_week_for_a_previous_week_entry(processor: SFTProcessor) -> None:
+  assert processor._pickup_window(_meta(PICKUP_DATE, DROPOFF_DATE, current_week=False)) == (
+    datetime(2025, 6, 8, tzinfo=SETTINGS.tz),
+    datetime(2025, 6, 14, 23, 59, 59, 999999, tzinfo=SETTINGS.tz),
+  )
 
 
-def test_month_straddling_week_admits_cross_products_that_the_diagnostic_reports(
-  processor: SFTProcessor, caplog: pytest.LogCaptureFixture
+async def test_pickup_rejects_a_month_straddling_cross_product_date(
+  processor: SFTProcessor, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-  wednesday = datetime(2025, 9, 3, 12, 0, tzinfo=SETTINGS.tz)
-  pattern = _pattern(wednesday, wednesday)
+  # The 2026-09-29 incident: a Tue 9/29 pickup (week Sun 9/27 .. Sat 10/3) collected SFT030_26688_20260902142853.edi,
+  # because month 09 and day 02 were each in the week's per-part alternations.
+  tuesday = datetime(2026, 9, 29, 18, 0, tzinfo=SETTINGS.tz)
+  pickup_folder = processor.pickup_ftp_folder
+  waiting_folder = processor.pre_processing_waiting_folder
+  in_week = (pickup_folder / "SFT017_27210_20261001120000.edi").as_posix()
+  cross_products = [
+    (pickup_folder / f"SFT017_{n}_{ts}.edi").as_posix() for n, ts in ((26688, "20260902142853"), (27999, "20261030120000"))
+  ]
 
-  assert pattern.match("SFT017_1_20250831120000.edi") is not None
-  assert pattern.match("SFT017_1_20250906235959.edi") is not None
-  assert pattern.match("SFT017_1_20250807120000.edi") is None
-  stray = pattern.match("SFT017_1_20250801120000.edi")
-  assert stray is not None
+  client = _FakeClient(dict.fromkeys([in_week, *cross_products], SAMPLE_FILE))
+  _wire(processor, client, monkeypatch)
+  _stub_cache(processor)
+  _record_archives(monkeypatch)
+  meta = _meta(tuesday, tuesday)
+  meta._waiting_folder = waiting_folder
+  _register(processor, meta)
 
-  meta = _meta(wednesday, wednesday)
-  with caplog.at_level("WARNING"):
-    flagged = processor._warn_if_outside_week(
-      meta, SupplierProcessorBase._date_from_filename_match(stray), stray.string, logging.getLogger(__name__)
-    )
+  with caplog.at_level("INFO"):
+    await processor._pickup_files()
 
-  assert flagged is True
-  assert SupplierProcessorBase.OUTSIDE_WEEK_LOG_TAG in caplog.text
+  assert [src for src, _ in client.transfers] == [in_week]
+  assert "Skipped SFT017_26688_20260902142853.edi dated 2026-09-02T14:28:53" in caplog.text
+  assert SupplierProcessorBase.OUTSIDE_WEEK_LOG_TAG not in caplog.text
 
 
 def test_merged_filename_format() -> None:
-  assert SFTProcessor.file_name_format.format(customer_id="SFT017", invoice_num="13842-13843") == "SFT017_13842-13843.edi"
+  assert (
+    SFTProcessor.file_name_format.format(customer_id="SFT017", invoice_num="13842-13843", timestamp=IN_WEEK_TS)
+    == f"SFT017_13842-13843_{IN_WEEK_TS}.edi"
+  )
 
 
 def _meta(pickup: datetime, dropoff: datetime, current_week: bool = True, names: dict[int, str] | None = None) -> FileRegisterData:
@@ -481,11 +488,10 @@ def test_create_new_merged_file(processor: SFTProcessor, monkeypatch: pytest.Mon
 
   new_meta = processor._create_new_merged_file("k", meta)
 
-  # The merged name keeps `file_name_format`'s timestamp-less shape. Nothing re-matches it against the pickup
-  # pattern -- that only ever runs over the vendor pickup folder -- so it does not need to carry a timestamp.
-  assert new_meta.file_names == {0: "SFT017_13842-13843.edi"}
+  # The merged name carries the latest source timestamp, the same way RYO's does.
+  assert new_meta.file_names == {0: f"SFT017_13842-13843_{IN_WEEK_TS}.edi"}
   assert new_meta.invoice_nums == {0: "13842-13843"}
-  merged = (processor.local_post_processing_folder / "SFT017_13842-13843.edi").read_bytes()
+  merged = (processor.local_post_processing_folder / f"SFT017_13842-13843_{IN_WEEK_TS}.edi").read_bytes()
   lines = merged.split(b"\r\n")
   # Header keeps the earliest invoice date, verbatim in the source's unpadded format (not re-serialised through
   # strftime, which would emit "06/19/2025 09:46:46 AM"); body is the concatenation of both bodies.

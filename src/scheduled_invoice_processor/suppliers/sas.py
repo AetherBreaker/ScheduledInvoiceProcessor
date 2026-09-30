@@ -12,8 +12,6 @@ from re import compile
 from typing import TYPE_CHECKING, override
 
 # Third party imports
-from dateutil.relativedelta import SA, SU, relativedelta
-from dateutil.rrule import DAILY, rrule
 from orjson import loads
 from pydantic import SecretStr
 
@@ -74,6 +72,9 @@ class SASProcessor(SupplierProcessorBase):
 
   checks_date_in_filename = True
 
+  # The outlier: collects the entry's own week and the one before it.
+  pickup_window_weeks = 2
+
   pickup_ftp_folder: PurePosixPath = PurePosixPath("/Fastrax Invoices")
   pickup_archive_ftp_folder = PurePosixPath("/Fastrax Invoices/Archive")
   pre_processing_waiting_folder = PurePosixPath("/Waiting/SAS")
@@ -97,30 +98,12 @@ class SASProcessor(SupplierProcessorBase):
   def assemble_filename_pattern(
     self, customer_id: CustomerID, start_date: datetime, end_date: datetime, current_week: bool
   ) -> Pattern[str]:
-    dates = list(
-      rrule(
-        DAILY,
-        dtstart=(start_date - relativedelta(weekday=SU(-1), hour=0, minute=0, second=0, microsecond=0))
-        - relativedelta(weeks=1 if current_week else 0),
-        until=(end_date + relativedelta(weekday=SA(+1), hour=23, minute=59, second=59, microsecond=999999))
-        - relativedelta(weeks=0 if current_week else 1),
-      )
-    )
-
-    years = {str(date.year) for date in dates}
-    months = {f"{date.month:02d}" for date in dates}
-    days = {f"{date.day:02d}" for date in dates}
-
-    years_part = "|".join(years)
-    months_part = "|".join(months)
-    days_part = "|".join(days)
-
     pattern = (
       rf"^EF{customer_id}_"
       r"(?P<timestamp>"
-      rf"(?P<year>{years_part})"
-      rf"(?P<month>{months_part})"
-      rf"(?P<day>{days_part})"
+      r"(?P<year>\d{4})"
+      r"(?P<month>\d{2})"
+      r"(?P<day>\d{2})"
       r"(?P<hour>\d{2})"
       r"(?P<minute>\d{2})"
       r"(?P<second>\d{2})"

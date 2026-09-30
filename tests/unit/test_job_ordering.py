@@ -109,6 +109,10 @@ def sas(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[SASProcess
   _drop_singleton(SASProcessor)
 
 
+_TODAYS_INVOICE = f"inv_{datetime.now(SETTINGS.tz):%Y%m%d}.txt"
+"""A pickup candidate dated inside `_meta`'s window: SAS is filename-dated, so an undated name is never picked up."""
+
+
 def _meta(waiting_folder: str, file_names: dict[int, str] | None = None) -> FileRegisterData:
   now = datetime.now(SETTINGS.tz)
   return FileRegisterData(
@@ -116,7 +120,7 @@ def _meta(waiting_folder: str, file_names: dict[int, str] | None = None) -> File
     customer_id="900100",
     pickup_date=now,
     dropoff_date=now + timedelta(days=1),
-    file_pattern=re.compile(r"^inv.*\.txt$"),
+    file_pattern=re.compile(r"^inv(?:_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2}))?\.txt$"),
     _current_week=True,
     _waiting_folder=PurePosixPath(waiting_folder),
     _local_copy_folder=Path("unit-test-local"),
@@ -155,7 +159,7 @@ async def test_pickup_persists_queue_move_before_vendor_archive(sas: SASProcesso
   meta = _meta("/Waiting/SAS")
   meta.pickup_success = {0: True, 1: True}  # stale flags from an earlier partial run (F6)
   sas._file_pickup_queue["k"] = meta
-  _client(sas).listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
+  _client(sas).listing = [SimpleNamespace(filename=_TODAYS_INVOICE, modified_time=datetime.now(SETTINGS.tz))]
 
   def fake_copy(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
     events.append("copy")
@@ -189,7 +193,7 @@ async def test_pickup_does_not_advance_when_no_transfer_recorded_a_result(sas: S
   meta = _meta("/Waiting/SAS")
   meta.pickup_success = {0: True, 1: True}  # stale flags from an earlier partial run (F6)
   sas._file_pickup_queue["k"] = meta
-  _client(sas).listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
+  _client(sas).listing = [SimpleNamespace(filename=_TODAYS_INVOICE, modified_time=datetime.now(SETTINGS.tz))]
 
   def fake_copy(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
     # Simulates the `self.errored` early return in `_transfer_file_vend_to_main`: no flag is written.
@@ -396,7 +400,7 @@ async def test_pickup_skips_vendor_archive_when_persist_fails(sas: SASProcessor,
   events: list[str] = []
   meta = _meta("/Waiting/SAS")
   sas._file_pickup_queue["k"] = meta
-  _client(sas).listing = [SimpleNamespace(filename="inv.txt", modified_time=datetime.now(SETTINGS.tz))]
+  _client(sas).listing = [SimpleNamespace(filename=_TODAYS_INVOICE, modified_time=datetime.now(SETTINGS.tz))]
 
   def fake_copy(*, file_meta: FileRegisterData, idx: int, success_attr: str, **kwargs: object) -> bool:
     getattr(file_meta, success_attr)[idx] = True
